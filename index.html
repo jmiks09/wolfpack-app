@@ -13,6 +13,62 @@
 </style>
 </head>
 <body>
+  
+  <div id="debug-overlay" style="position:fixed;inset:0;background:#0a0a0f;z-index:999999;padding:24px;overflow-y:auto;font-family:monospace;">
+    <div style="color:#7c5cbf;font-size:20px;font-weight:bold;margin-bottom:16px;">🐺 WOLFPACK DEBUG</div>
+    <div id="debug-log" style="font-size:12px;line-height:1.8;"></div>
+  </div>
+  <script>
+    var log = document.getElementById('debug-log');
+    var overlay = document.getElementById('debug-overlay');
+    
+    function addLog(msg, color) {
+      var el = document.createElement('div');
+      el.style.color = color || '#888';
+      el.style.marginBottom = '4px';
+      el.textContent = new Date().toLocaleTimeString() + ' — ' + msg;
+      log.appendChild(el);
+    }
+    
+    addLog('Page loaded', '#4ade80');
+    addLog('User agent: ' + navigator.userAgent.slice(0,80), '#888');
+    
+    window.onerror = function(msg, src, line, col, err) {
+      addLog('ERROR: ' + msg + ' (line ' + line + ')', '#ff6b35');
+      if (err && err.stack) addLog('Stack: ' + err.stack.slice(0,200), '#ff4444');
+    };
+    
+    window.addEventListener('unhandledrejection', function(e) {
+      var reason = e.reason;
+      var msg = reason ? (reason.message || reason.code || String(reason)) : 'unknown';
+      addLog('PROMISE ERROR: ' + msg, '#ff6b35');
+      if (reason && reason.stack) addLog('Stack: ' + reason.stack.slice(0,300), '#ff4444');
+      e.preventDefault();
+    });
+    
+    // Check capabilities
+    addLog('ServiceWorker: ' + ('serviceWorker' in navigator), '#888');
+    addLog('Notification: ' + ('Notification' in window), '#888');
+    addLog('IndexedDB: ' + ('indexedDB' in window), '#888');
+    addLog('Fetch: ' + ('fetch' in window), '#888');
+    
+    // Watch for React mounting
+    var attempts = 0;
+    var check = setInterval(function() {
+      attempts++;
+      var root = document.getElementById('root');
+      if (root && root.children.length > 0) {
+        clearInterval(check);
+        addLog('React mounted successfully!', '#4ade80');
+        setTimeout(function() { overlay.style.display = 'none'; }, 2000);
+      } else if (attempts > 60) {
+        clearInterval(check);
+        addLog('React never mounted after 6 seconds', '#ff6b35');
+      }
+    }, 100);
+    
+    addLog('Starting JS bundle...', '#7c5cbf');
+  </script>
   <div id="root"></div>
   <div id="toast" onclick="this.style.display='none'" style="position:fixed;top:16px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#7c5cbf,#ff6b35);color:#fff;padding:12px 24px;border-radius:40px;font-family:'Bebas Neue',cursive;font-size:14px;letter-spacing:1px;z-index:1000;box-shadow:0 8px 32px rgba(124,92,191,0.4);cursor:pointer;max-width:90vw;text-align:center;display:none;"></div>
   <div id="milestone" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2000;background:linear-gradient(135deg,#7c5cbf,#ff6b35);color:#fff;padding:16px 28px;border-radius:0 0 20px 20px;text-align:center;min-width:280px;box-shadow:0 8px 40px rgba(124,92,191,0.5);display:none;"></div>
