@@ -167,7 +167,7 @@ function Onboarding({onJoin}){
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
           {WOLF_AVATARS.map(a=><button key={a} onClick={()=>{setAvatar(a);setUsePhoto(false);}} style={{padding:14,fontSize:28,borderRadius:14,cursor:"pointer",background:!usePhoto&&avatar===a?"rgba(124,92,191,0.25)":"var(--bg3)",border:!usePhoto&&avatar===a?"2px solid var(--accent)":"2px solid var(--border)",transition:"all 0.15s"}}>{a}</button>)}
         </div></>}
-        <button className="btn-primary" onClick={()=>setStep("pin")}>CONTINUE →</button>
+        <button className="btn-primary" onClick={()=>setStep("pin")} style={{marginTop:8,marginBottom:24}}>CONTINUE →</button>
       </div>}
 
       {step==="pin"&&<div style={{width:"100%",display:"flex",flexDirection:"column",gap:12,marginTop:16}}>
