@@ -112,6 +112,26 @@ function Toast({msg}){return msg?<div className="toast">{msg}</div>:null;}
 
 function readFileAsDataURL(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});}
 
+// Compress image to max ~80KB for Firestore compatibility
+function compressImage(dataUrl, maxSize=200){
+  return new Promise((res)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement("canvas");
+      let w=img.width, h=img.height;
+      if(w>maxSize||h>maxSize){
+        if(w>h){h=Math.round(h*(maxSize/w));w=maxSize;}
+        else{w=Math.round(w*(maxSize/h));h=maxSize;}
+      }
+      canvas.width=w; canvas.height=h;
+      canvas.getContext("2d").drawImage(img,0,0,w,h);
+      res(canvas.toDataURL("image/jpeg",0.7));
+    };
+    img.onerror=()=>res(dataUrl);
+    img.src=dataUrl;
+  });
+}
+
 function AvatarDisplay({profile,size=40}){
   if(profile?.avatarImg)return<img src={profile.avatarImg} alt="avatar" style={{width:size,height:size,borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>;
   return<div className="avatar" style={{width:size,height:size,background:"var(--bg2)",fontSize:size*0.55,flexShrink:0}}>{profile?.avatar||"🐺"}</div>;
@@ -132,8 +152,9 @@ function Onboarding({onJoin}){
 
   const handleInvite=()=>{if(invite.trim().toUpperCase()!==INVITE_CODE)return setError("Wrong invite code. Ask your pack leader.");setError("");setStep("name");};
   const handleName=()=>{if(!name.trim())return setError("Enter your name");setError("");setStep("avatar");};
-  const handlePhoto=async(e)=>{const file=e.target.files?.[0];if(!file)return;const data=await readFileAsDataURL(file);setAvatarImg(data);setUsePhoto(true);};
-  const handlePin=()=>{if(pin.length!==4)return setError("PIN must be exactly 4 digits");if(pin!==pin2)return setError("PINs don't match");setError("");onJoin(name.trim(),usePhoto?null:avatar,pin,avatarImg);};
+  const handlePhoto=async(e)=>{const file=e.target.files?.[0];if(!file)return;const data=await readFileAsDataURL(file);const compressed=await compressImage(data);setAvatarImg(compressed);setUsePhoto(true);};
+  const [joining,setJoining]=useState(false);
+  const handlePin=async()=>{if(pin.length!==4)return setError("PIN must be exactly 4 digits");if(pin!==pin2)return setError("PINs don't match");setError("");setJoining(true);try{await onJoin(name.trim(),usePhoto?null:avatar,pin,avatarImg);}catch(e){setError("Something went wrong. Try again.");setJoining(false);}};
 
   return(
     <div className="onboard" style={{overflowY:"auto",justifyContent:"flex-start",paddingTop:40}}>
@@ -155,27 +176,38 @@ function Onboarding({onJoin}){
         <button className="btn-primary" onClick={handleName}>CONTINUE →</button>
       </div>}
 
-      {step==="avatar"&&<div style={{width:"100%",display:"flex",flexDirection:"column",gap:12,marginTop:16}}>
-        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:3,color:"var(--muted)"}}>PICK YOUR LOOK</div>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,padding:"14px",background:"var(--bg3)",borderRadius:14,border:"1px solid var(--border)"}}>
-          {avatarImg?<img src={avatarImg} alt="avatar" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",border:"2px solid var(--accent)"}}/>:<div style={{width:72,height:72,borderRadius:"50%",background:"var(--bg2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,border:"2px dashed var(--border)"}}>📷</div>}
-          <button className="btn-ghost" onClick={()=>fileRef.current.click()} style={{fontSize:13}}>{avatarImg?"Change Photo":"Upload Photo"}</button>
-          <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handlePhoto}/>
-          {avatarImg&&<button className="btn-ghost" onClick={()=>{setAvatarImg(null);setUsePhoto(false);}} style={{fontSize:12,color:"var(--muted)"}}>Remove photo</button>}
+      {step==="avatar" && (
+        <div style={{width:"100%",display:"flex",flexDirection:"column",gap:12,marginTop:16}}>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:3,color:"var(--muted)"}}>PICK YOUR LOOK</div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,padding:"14px",background:"var(--bg3)",borderRadius:14,border:"1px solid var(--border)"}}>
+            {avatarImg
+              ? <img src={avatarImg} alt="avatar" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",border:"2px solid var(--accent)"}}/>
+              : <div style={{width:72,height:72,borderRadius:"50%",background:"var(--bg2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,border:"2px dashed var(--border)"}}>📷</div>
+            }
+            <button className="btn-ghost" onClick={()=>fileRef.current.click()} style={{fontSize:13}}>{avatarImg?"Change Photo":"Upload Photo"}</button>
+            <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handlePhoto}/>
+            {avatarImg && <button className="btn-ghost" onClick={()=>{setAvatarImg(null);setUsePhoto(false);}} style={{fontSize:12,color:"var(--muted)"}}>Remove photo</button>}
+          </div>
+          {!avatarImg && (
+            <div>
+              <div style={{textAlign:"center",fontSize:12,color:"var(--muted)",marginBottom:10}}>— or pick an emoji —</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+                {WOLF_AVATARS.map(a=>(
+                  <button key={a} onClick={()=>{setAvatar(a);setUsePhoto(false);}} style={{padding:14,fontSize:28,borderRadius:14,cursor:"pointer",background:!usePhoto&&avatar===a?"rgba(124,92,191,0.25)":"var(--bg3)",border:!usePhoto&&avatar===a?"2px solid var(--accent)":"2px solid var(--border)",transition:"all 0.15s"}}>{a}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button className="btn-primary" onClick={()=>setStep("pin")} style={{marginTop:4,marginBottom:24}}>CONTINUE →</button>
         </div>
-        {!avatarImg&&<><div style={{textAlign:"center",fontSize:12,color:"var(--muted)"}}>— or pick an emoji —</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-          {WOLF_AVATARS.map(a=><button key={a} onClick={()=>{setAvatar(a);setUsePhoto(false);}} style={{padding:14,fontSize:28,borderRadius:14,cursor:"pointer",background:!usePhoto&&avatar===a?"rgba(124,92,191,0.25)":"var(--bg3)",border:!usePhoto&&avatar===a?"2px solid var(--accent)":"2px solid var(--border)",transition:"all 0.15s"}}>{a}</button>)}
-        </div></>}
-        <button className="btn-primary" onClick={()=>setStep("pin")} style={{marginTop:8,marginBottom:24}}>CONTINUE →</button>
-      </div>}
+      )}
 
       {step==="pin"&&<div style={{width:"100%",display:"flex",flexDirection:"column",gap:12,marginTop:16}}>
         <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:3,color:"var(--muted)"}}>SET YOUR 4-DIGIT PIN</div>
         <input className="input" type="password" inputMode="numeric" placeholder="4-digit PIN" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} autoFocus style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
         <input className="input" type="password" inputMode="numeric" placeholder="Confirm PIN" value={pin2} onChange={e=>setPin2(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} onKeyDown={e=>e.key==="Enter"&&handlePin()} style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
         {error&&<div style={{color:"var(--red)",fontSize:13}}>{error}</div>}
-        <button className="btn-primary" onClick={handlePin}>JOIN THE PACK 🐺</button>
+        <button className="btn-primary" onClick={handlePin} disabled={joining}>{joining?"JOINING...":"JOIN THE PACK 🐺"}</button>
       </div>}
     </div>
   );
