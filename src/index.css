@@ -294,12 +294,15 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 100dvh;
-  padding: 32px 24px;
+  padding: 32px 24px 60px;
   gap: 20px;
   text-align: center;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
+.onboard::-webkit-scrollbar { display: none; }
 
 /* Member row */
 .member-row {
@@ -331,6 +334,7 @@ html, body, #root {
   gap: 8px;
 }
 .workout-tile {
+  position: relative;
   padding: 12px 8px;
   border-radius: 12px;
   background: var(--bg3);

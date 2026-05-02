@@ -35,17 +35,37 @@ const NAV=[{id:"pack",icon:"🐺",label:"PACK"},{id:"feed",icon:"💬",label:"FE
 
 const todayStr=()=>new Date().toISOString().split("T")[0];
 const isWeekend=d=>{const x=new Date(d+"T00:00:00");return x.getDay()===0||x.getDay()===6;};
+const DAY_NAMES=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const getRestDays=profile=>profile?.restDays||[0,6]; // default Sat/Sun
+const isRestDay=(d,profile)=>{const x=new Date(d+"T00:00:00");return getRestDays(profile).includes(x.getDay());};
 const next7Days=()=>Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return d.toISOString().split("T")[0];});
 const fmtDate=d=>new Date(d+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
 const fmtTime=ts=>new Date(ts).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
 const getWeekStart=d=>{const x=new Date(d+"T00:00:00");x.setDate(x.getDate()-x.getDay());return x.toISOString().split("T")[0];};
 const getDateRange=(s,e)=>{const dates=[];const sd=new Date(s+"T00:00:00"),ed=new Date(e+"T00:00:00");for(let d=new Date(sd);d<=ed;d.setDate(d.getDate()+1))dates.push(d.toISOString().split("T")[0]);return dates;};
 const getWeekdays=(s,e)=>getDateRange(s,e).filter(d=>!isWeekend(d));
-function getStreak(h,n){let s=0;const b=new Date();for(let i=0;i<365;i++){const d=new Date(b);d.setDate(b.getDate()-i);const k=d.toISOString().split("T")[0];if(isWeekend(k))continue;if(h[k]?.[n]?.done)s++;else if(i>0)break;}return s;}
+// Get workout days for a member based on their personal rest days
+const getWorkoutDays=(s,e,profile)=>getDateRange(s,e).filter(d=>!isRestDay(d,profile));
+function getStreak(h,n,profile){let s=0;const b=new Date();for(let i=0;i<365;i++){const d=new Date(b);d.setDate(b.getDate()-i);const k=d.toISOString().split("T")[0];if(isRestDay(k,profile))continue;if(h[k]?.[n]?.done)s++;else if(i>0)break;}return s;}
 function getTotalWorkouts(h,n){return Object.values(h).filter(d=>d?.[n]?.done).length;}
 function getQuote(){return QUOTES[new Date().getDate()%QUOTES.length];}
-function calcPenalties(c,h){if(!c.penaltyAmt||c.penaltyAmt<=0||!c.startDate||!c.endDate)return{};const parts=Object.keys(c.participants||{});const cap=todayStr()<c.endDate?todayStr():c.endDate;const days=getWeekdays(c.startDate,cap);const r={};parts.forEach(m=>{const missed=days.filter(d=>!h[d]?.[m]?.done);const totalOwed=missed.length*c.penaltyAmt;const byWeek={};missed.forEach(d=>{const w=getWeekStart(d);byWeek[w]=(byWeek[w]||0)+c.penaltyAmt;});r[m]={totalOwed,byWeek};});return r;}
-function computeBadges(n,h,feed,ch){const e=[];const t=getTotalWorkouts(h,n),s=getStreak(h,n),p=feed.filter(x=>x.author===n).length;const cc=ch.filter(c=>c.participants?.[n]?.done||(c.goalType==="dateRange"&&c.startDate&&c.endDate&&getWeekdays(c.startDate,c.endDate).filter(d=>h[d]?.[n]?.done).length>=c.goal)).length;if(t>=1)e.push("first_blood");if(s>=7)e.push("week_warrior");if(s>=21)e.push("consistent");if(s>=30)e.push("monthly");if(t>=100)e.push("centurion");if(p>=10)e.push("social");if(cc>=1)e.push("challenger");return e;}
+function calcPenalties(c,h,profiles){
+  if(!c.penaltyAmt||c.penaltyAmt<=0||!c.startDate||!c.endDate)return{};
+  const parts=Object.keys(c.participants||{});
+  const cap=todayStr()<c.endDate?todayStr():c.endDate;
+  const r={};
+  parts.forEach(m=>{
+    const profile=profiles?.[m];
+    const days=getWorkoutDays(c.startDate,cap,profile);
+    const missed=days.filter(d=>!h[d]?.[m]?.done);
+    const totalOwed=missed.length*c.penaltyAmt;
+    const byWeek={};
+    missed.forEach(d=>{const w=getWeekStart(d);byWeek[w]=(byWeek[w]||0)+c.penaltyAmt;});
+    r[m]={totalOwed,byWeek};
+  });
+  return r;
+}
+function computeBadges(n,h,feed,ch,profile){const e=[];const t=getTotalWorkouts(h,n),s=getStreak(h,n,profile),p=feed.filter(x=>x.author===n).length;const cc=ch.filter(c=>c.participants?.[n]?.done||(c.goalType==="dateRange"&&c.startDate&&c.endDate&&getWorkoutDays(c.startDate,c.endDate,profile).filter(d=>h[d]?.[n]?.done).length>=c.goal)).length;if(t>=1)e.push("first_blood");if(s>=7)e.push("week_warrior");if(s>=21)e.push("consistent");if(s>=30)e.push("monthly");if(t>=100)e.push("centurion");if(p>=10)e.push("social");if(cc>=1)e.push("challenger");return e;}
 
 function launchConfetti(){const cv=document.getElementById("confetti-canvas");if(!cv)return;const ctx=cv.getContext("2d");cv.width=window.innerWidth;cv.height=window.innerHeight;const ps=Array.from({length:80},()=>({x:Math.random()*cv.width,y:-10,r:Math.random()*6+4,c:["#7c5cbf","#ff6b35","#f1c40f","#2ecc71","#e74c3c"][Math.floor(Math.random()*5)],vx:(Math.random()-.5)*4,vy:Math.random()*4+2,life:1}));let fr;const draw=()=>{ctx.clearRect(0,0,cv.width,cv.height);let alive=false;ps.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life-=.008;if(p.y<cv.height&&p.life>0)alive=true;ctx.globalAlpha=p.life;ctx.fillStyle=p.c;ctx.fillRect(p.x,p.y,p.r,p.r);});ctx.globalAlpha=1;if(alive)fr=requestAnimationFrame(draw);else ctx.clearRect(0,0,cv.width,cv.height);};draw();setTimeout(()=>{cancelAnimationFrame(fr);ctx.clearRect(0,0,cv.width,cv.height);},4000);}
 function Toast({msg}){return msg?<div className="toast">{msg}</div>:null;}
@@ -287,7 +307,7 @@ function PackGoals({currentUser,packGoals,onAddGoal,onCheer,onDeleteGoal}){
 }
 
 function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile}){
-  const key=todayStr(),td=sharedData[key]||{},my=td[currentUser],str=getStreak(history,currentUser),tot=getTotalWorkouts(history,currentUser),we=isWeekend(key);
+  const key=todayStr(),td=sharedData[key]||{},my=td[currentUser],str=getStreak(history,currentUser,profiles[currentUser]),tot=getTotalWorkouts(history,currentUser),we=isRestDay(key,profiles[currentUser]);
   const sorted=[...members].sort((a,b)=>{const sa=getStreak(history,a),sb=getStreak(history,b);if(sb!==sa)return sb-sa;return b===currentUser?1:a===currentUser?-1:0;});
 
   return(
@@ -325,43 +345,52 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,a
         {currentUser===adminName&&<button onClick={onOpenAdmin} style={{padding:"5px 12px",borderRadius:20,background:"rgba(124,92,191,0.2)",border:"1px solid rgba(124,92,191,0.3)",color:"var(--accent2)",fontSize:12,cursor:"pointer"}}>⚙️ Admin</button>}
       </div>
 
-      {/* ── 2x2 GRID ── */}
+      {/* ── SINGLE COLUMN MEMBER CARDS ── */}
       <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:3,color:"var(--muted)",padding:"6px 16px 8px"}}>THE PACK</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,padding:"0 16px 16px"}}>
-        {sorted.map(m=>{
-          const done=!!td[m]?.done,isMe=m===currentUser,ms=getStreak(history,m);
+      <div style={{display:"flex",flexDirection:"column",gap:10,padding:"0 16px 16px"}}>
+        {sorted.map((m,i)=>{
+          const done=!!td[m]?.done,isMe=m===currentUser;
+          const ms=getStreak(history,m,profiles[m]);
           const wt=td[m]?.workoutIcon||"";
+          const restToday=isRestDay(key,profiles[m]);
           return(
             <div key={m} onClick={isMe?onOpenProfile:undefined} style={{
-              position:"relative",borderRadius:20,overflow:"hidden",
-              aspectRatio:"1",cursor:isMe?"pointer":"default",
+              position:"relative",borderRadius:18,overflow:"hidden",
+              cursor:isMe?"pointer":"default",
               background:done
-                ?"linear-gradient(145deg,rgba(46,204,113,0.18),rgba(46,204,113,0.05))"
-                :isMe?"rgba(124,92,191,0.12)":"var(--card)",
-              border:done?"1px solid rgba(46,204,113,0.35)":isMe?"1px solid rgba(124,92,191,0.4)":"1px solid var(--border)",
-              display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,
-              transition:"transform 0.15s",
+                ?"linear-gradient(135deg,rgba(46,204,113,0.12),rgba(46,204,113,0.04))"
+                :restToday?"rgba(255,255,255,0.03)"
+                :isMe?"rgba(124,92,191,0.1)":"var(--card)",
+              border:done?"1px solid rgba(46,204,113,0.3)":isMe?"1px solid rgba(124,92,191,0.35)":"1px solid var(--border)",
+              padding:"14px 16px",
+              display:"flex",alignItems:"center",gap:14,
             }}>
-              {/* status glow top bar */}
-              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:done?"linear-gradient(90deg,#2ecc71,#27ae60)":isMe?"linear-gradient(90deg,var(--accent),var(--orange))":"transparent"}}/>
+              {/* left accent bar */}
+              <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:done?"linear-gradient(180deg,#2ecc71,#27ae60)":isMe?"linear-gradient(180deg,var(--accent),var(--orange))":"transparent",borderRadius:"18px 0 0 18px"}}/>
+              {/* rank */}
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,color:"var(--muted)",width:20,textAlign:"center",flexShrink:0}}>{i+1}</div>
               {/* avatar */}
-              <AvatarDisplay profile={profiles[m]} size={56}/>
-              {/* name */}
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2,color:isMe?"var(--accent2)":"var(--text)",textAlign:"center",lineHeight:1}}>{m}</div>
-              {/* streak */}
-              <div style={{fontSize:11,color:"var(--muted)"}}>🔥 {ms} streak</div>
-              {/* status badge */}
-              <div style={{
-                padding:"4px 12px",borderRadius:20,
-                background:done?"rgba(46,204,113,0.2)":"rgba(255,255,255,0.05)",
-                border:done?"1px solid rgba(46,204,113,0.4)":"1px solid var(--border)",
-                fontSize:12,color:done?"var(--green)":"var(--muted)",
-                fontFamily:"'Bebas Neue',cursive",letterSpacing:1,
-                display:"flex",alignItems:"center",gap:4,
-              }}>
-                {done?<>{wt||"✓"} DONE</>:<>○ REST</>}
+              <AvatarDisplay profile={profiles[m]} size={48}/>
+              {/* info */}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                  <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2,color:isMe?"var(--accent2)":"var(--text)"}}>{m}</span>
+                  {isMe&&<span style={{fontSize:10,color:"var(--accent2)",background:"rgba(124,92,191,0.2)",padding:"1px 5px",borderRadius:4}}>YOU</span>}
+                </div>
+                <div style={{fontSize:12,color:"var(--muted)"}}>🔥 {ms} day streak</div>
+                {done&&wt&&<div style={{fontSize:12,color:"var(--green)",marginTop:2}}>{wt}</div>}
               </div>
-              {isMe&&<div style={{position:"absolute",top:10,right:10,fontSize:11,color:"var(--muted)"}}>👤</div>}
+              {/* status */}
+              <div style={{
+                flexShrink:0,padding:"6px 14px",borderRadius:20,
+                background:done?"rgba(46,204,113,0.15)":restToday?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.04)",
+                border:done?"1px solid rgba(46,204,113,0.4)":"1px solid var(--border)",
+                fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,
+                color:done?"var(--green)":restToday?"var(--muted)":"var(--muted)",
+              }}>
+                {done?"✓ DONE":restToday?"😴 REST":"○ PENDING"}
+              </div>
+              {isMe&&<div style={{position:"absolute",top:10,right:12,fontSize:11,color:"var(--muted)"}}>👤</div>}
             </div>
           );
         })}
@@ -482,7 +511,7 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
 }
 
 function PenaltyTracker({challenge:c,history,profiles}){
-  const penalties=calcPenalties(c,history);
+  const penalties=calcPenalties(c,history,profiles);
   const parts=Object.keys(c.participants||{});
   if(!c.penaltyAmt||c.penaltyAmt<=0||!c.startDate||!c.endDate)return null;
   if(!parts.some(m=>(penalties[m]?.totalOwed||0)>0))return null;
@@ -509,7 +538,7 @@ function PenaltyTracker({challenge:c,history,profiles}){
   );
 }
 
-function ChallengeCard({challenge:c,currentUser,members,onLog,onDelete,onEdit,history,completed}){
+function ChallengeCard({challenge:c,currentUser,members,profiles,onLog,onDelete,onEdit,history,completed}){
   const [logOpen,setLogOpen]=useState(false);
   const [editOpen,setEditOpen]=useState(false);
   const [amt,setAmt]=useState("");
@@ -518,10 +547,11 @@ function ChallengeCard({challenge:c,currentUser,members,onLog,onDelete,onEdit,hi
   const isDR=c.goalType==="dateRange";
   const canEdit=c.createdBy===currentUser&&!completed;
   const myManual=c.participants?.[currentUser]?.progress||0;
-  const myAuto=isDR&&c.startDate&&c.endDate?getWeekdays(c.startDate,todayStr()<c.endDate?todayStr():c.endDate).filter(d=>history[d]?.[currentUser]?.done).length:null;
+  const myAuto=isDR&&c.startDate&&c.endDate?getWorkoutDays(c.startDate,todayStr()<c.endDate?todayStr():c.endDate,profiles?.[currentUser]).filter(d=>history[d]?.[currentUser]?.done).length:null;
   const myProg=myAuto!==null?myAuto:myManual;
-  const myPct=Math.min(100,Math.round((myProg/c.goal)*100));
-  const rows=parts.map(m=>({name:m,prog:isDR&&c.startDate&&c.endDate?getWeekdays(c.startDate,todayStr()<c.endDate?todayStr():c.endDate).filter(d=>history[d]?.[m]?.done).length:(c.participants[m]?.progress||0)})).map(r=>({...r,pct:Math.min(100,Math.round((r.prog/c.goal)*100))})).sort((a,b)=>b.pct-a.pct);
+  const myGoal=isDR&&c.startDate&&c.endDate?getWorkoutDays(c.startDate,c.endDate,profiles?.[currentUser]).length:c.goal;
+  const myPct=Math.min(100,Math.round((myProg/myGoal)*100));
+  const rows=parts.map(m=>{const mGoal=isDR&&c.startDate&&c.endDate?getWorkoutDays(c.startDate,c.endDate,profiles?.[m]).length:c.goal;const prog=isDR&&c.startDate&&c.endDate?getWorkoutDays(c.startDate,todayStr()<c.endDate?todayStr():c.endDate,profiles?.[m]).filter(d=>history[d]?.[m]?.done).length:(c.participants[m]?.progress||0);return{name:m,prog,goal:mGoal,pct:Math.min(100,Math.round((prog/mGoal)*100))};}).sort((a,b)=>b.pct-a.pct);
   const doLog=()=>{const n=Number(amt);if(!n||n<=0)return;const np=myManual+n;onLog(c.id,currentUser,np,np>=c.goal);setAmt("");setLogOpen(false);};
   const losers=completed?rows.filter(r=>r.pct<100):[];
   return(
@@ -530,7 +560,7 @@ function ChallengeCard({challenge:c,currentUser,members,onLog,onDelete,onEdit,hi
         <div style={{flex:1}}>
           <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2}}>{c.title}</div>
           <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>
-            {isDR?`📅 ${fmtDate(c.startDate)} → ${fmtDate(c.endDate)} (${c.goal} weekdays)`:`Goal: ${c.goal} ${c.unit}`}
+            {isDR?`📅 ${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`:`Goal: ${c.goal} ${c.unit}`}
             {c.penalty&&<span style={{color:"var(--orange)"}}> · {c.penalty}{c.penaltyAmt>0?` ($${c.penaltyAmt}/miss)`:""}</span>}
           </div>
         </div>
@@ -539,14 +569,14 @@ function ChallengeCard({challenge:c,currentUser,members,onLog,onDelete,onEdit,hi
           {c.createdBy===currentUser&&<button onClick={()=>onDelete(c.id)} style={{padding:"5px 9px",background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:20,lineHeight:1}}>×</button>}
         </div>
       </div>
-      {amI&&<div style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,color:"var(--accent2)"}}>You: {myProg}/{c.goal} {c.unit}</span><span style={{fontSize:13,color:myPct>=100?"var(--green)":"var(--muted)"}}>{myPct}%</span></div><div className="progress-bar"><div className="progress-fill" style={{width:`${myPct}%`}}/></div></div>}
+      {amI&&<div style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,color:"var(--accent2)"}}>You: {myProg}/{myGoal} {c.unit}</span><span style={{fontSize:13,color:myPct>=100?"var(--green)":"var(--muted)"}}>{myPct}%</span></div><div className="progress-bar"><div className="progress-fill" style={{width:`${myPct}%`}}/></div></div>}
       {rows.filter(r=>r.name!==currentUser).map(r=>(
         <div key={r.name} style={{marginBottom:6}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:12,color:"var(--muted)"}}>{r.name}: {r.prog}/{c.goal}</span><span style={{fontSize:12,color:r.pct>=100?"var(--green)":"var(--muted)"}}>{r.pct}%</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:12,color:"var(--muted)"}}>{r.name}: {r.prog}/{r.goal}</span><span style={{fontSize:12,color:r.pct>=100?"var(--green)":"var(--muted)"}}>{r.pct}%</span></div>
           <div className="progress-bar" style={{height:4}}><div className="progress-fill" style={{width:`${r.pct}%`,opacity:.6}}/></div>
         </div>
       ))}
-      <PenaltyTracker challenge={c} history={history} profiles={{}}/>
+      <PenaltyTracker challenge={c} history={history} profiles={profiles}/>
       {completed&&losers.length>0&&(
         <div style={{marginTop:10,padding:"10px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.25)",borderRadius:10}}>
           <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--red)",marginBottom:5}}>🚨 CHALLENGE FAILED</div>
@@ -563,7 +593,7 @@ function ChallengeCard({challenge:c,currentUser,members,onLog,onDelete,onEdit,hi
   );
 }
 
-function ChallengesTab({currentUser,members,challenges,history,onAdd,onLogProgress,onDelete,onEditChallenge}){
+function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,onLogProgress,onDelete,onEditChallenge}){
   const [open,setOpen]=useState(false);
   const defEnd=()=>{const e=new Date();e.setDate(e.getDate()+30);return e.toISOString().split("T")[0];};
   const [form,setForm]=useState({title:"",useDateRange:false,goal:30,unit:"reps",startDate:todayStr(),endDate:defEnd(),penalty:"",penaltyAmt:"",participants:[]});
@@ -572,7 +602,7 @@ function ChallengesTab({currentUser,members,challenges,history,onAdd,onLogProgre
   const sub=()=>{
     if(!form.title.trim())return;
     const parts=form.participants.length>0?form.participants:members;
-    const goal=form.useDateRange?getWeekdays(form.startDate,form.endDate).length:Number(form.goal);
+    const goal=form.useDateRange?getDateRange(form.startDate,form.endDate).length:Number(form.goal);
     onAdd({id:Date.now().toString(),title:form.title.trim(),goalType:form.useDateRange?"dateRange":"amount",goal,unit:form.useDateRange?"days":form.unit,startDate:form.useDateRange?form.startDate:null,endDate:form.useDateRange?form.endDate:null,penalty:form.penalty.trim(),penaltyAmt:form.penaltyAmt?Number(form.penaltyAmt):0,createdBy:currentUser,createdAt:Date.now(),participants:parts.reduce((a,m)=>({...a,[m]:{progress:0,done:false}}),{}),status:"active"});
     setOpen(false);
   };
@@ -582,9 +612,9 @@ function ChallengesTab({currentUser,members,challenges,history,onAdd,onLogProgre
       <div style={{padding:"12px 16px 8px"}}><button className="btn-primary" onClick={()=>setOpen(true)}>⚔️ CREATE CHALLENGE</button></div>
       {active.length===0&&done.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}><div style={{fontSize:40,marginBottom:12}}>⚔️</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2}}>NO ACTIVE CHALLENGES</div></div>}
       {active.length>0&&<div className="section-label">ACTIVE</div>}
-      {active.map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} members={members} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} history={history}/>)}
+      {active.map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} history={history}/>)}
       {done.length>0&&<div className="section-label" style={{marginTop:8}}>COMPLETED</div>}
-      {done.map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} members={members} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} history={history} completed/>)}
+      {done.map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} history={history} completed/>)}
       {open&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setOpen(false)}><div className="modal">
         <div className="modal-handle"/>
         <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:14}}>NEW CHALLENGE</div>
@@ -604,7 +634,7 @@ function ChallengesTab({currentUser,members,challenges,history,onAdd,onLogProgre
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Start</div><input className="input" type="date" value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})}/></div>
               <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>End</div><input className="input" type="date" value={form.endDate} onChange={e=>setForm({...form,endDate:e.target.value})}/></div>
-              {form.startDate&&form.endDate&&<div style={{gridColumn:"1/-1",fontSize:12,color:"var(--accent2)",background:"rgba(124,92,191,0.1)",padding:"8px 12px",borderRadius:8}}>📅 {getWeekdays(form.startDate,form.endDate).length} weekdays</div>}
+              {form.startDate&&form.endDate&&<div style={{gridColumn:"1/-1",fontSize:12,color:"var(--accent2)",background:"rgba(124,92,191,0.1)",padding:"8px 12px",borderRadius:8}}>📅 {getDateRange(form.startDate,form.endDate).length} total days · your workout days depend on your rest day settings</div>}
             </div>
           )}
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Participants</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{members.map(m=><button key={m} onClick={()=>toggleP(m)} style={{padding:"6px 12px",borderRadius:20,cursor:"pointer",fontSize:13,background:form.participants.includes(m)?"rgba(124,92,191,0.2)":"var(--bg3)",border:form.participants.includes(m)?"1px solid var(--accent)":"1px solid var(--border)",color:form.participants.includes(m)?"var(--accent2)":"var(--muted)"}}>{m}</button>)}</div></div>
@@ -619,7 +649,7 @@ function ChallengesTab({currentUser,members,challenges,history,onAdd,onLogProgre
 
 function StatsTab({currentUser,members,profiles,history,challenges,feed}){
   const last30=Array.from({length:30},(_,i)=>{const d=new Date();d.setDate(d.getDate()-29+i);return{date:d.toISOString().split("T")[0],day:d.getDate()};});
-  const mb=computeBadges(currentUser,history,feed,challenges);
+  const mb=computeBadges(currentUser,history,feed,challenges,profiles[currentUser]);
   return(
     <div>
       <div className="section-label" style={{marginTop:12}}>LAST 30 DAYS</div>
@@ -647,7 +677,7 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed}){
 }
 
 // ── PROFILE MODAL ────────────────────────────────────────────────────────────
-function ProfileModal({currentUser,profile,history,onClose,onSaveWeight,onSaveGoal,onChangePin}){
+function ProfileModal({currentUser,profile,profiles,history,onClose,onSaveWeight,onSaveGoal,onChangePin,onSaveProfile}){
   const [tab,setTab]=useState("stats");
   const [weight,setWeight]=useState("");
   const [weightUnit,setWeightUnit]=useState("lbs");
@@ -677,7 +707,40 @@ function ProfileModal({currentUser,profile,history,onClose,onSaveWeight,onSaveGo
     setPinErr("");await onChangePin(pin1);setPinDone(true);setPin1("");setPin2("");
   };
 
-  const tabs=[{id:"stats",label:"STATS"},{id:"weight",label:"WEIGHT"},{id:"goal",label:"GOAL"},{id:"pin",label:"PIN"}];
+  const [restDays,setRestDays]=useState(profile?.restDays||[0,6]);
+  const toggleRestDay=d=>{
+    if(restDays.includes(d)){if(restDays.length<=2)return;setRestDays(r=>r.filter(x=>x!==d));}
+    else setRestDays(r=>[...r,d]);
+  };
+  const saveRestDays=async()=>{
+    const np={...profiles,[currentUser]:{...profiles[currentUser],restDays}};
+    await fsSet("wolfpack/profiles",{users:np});if(onSaveProfile)onSaveProfile(np);
+    showRestSaved(true);setTimeout(()=>showRestSaved(false),2000);
+  };
+  const [restSaved,showRestSaved]=useState(false);
+
+  // Avatar editing
+  const [editingAvatar,setEditingAvatar]=useState(false);
+  const [newAvatar,setNewAvatar]=useState(profile?.avatar||"🐺");
+  const [newAvatarImg,setNewAvatarImg]=useState(profile?.avatarImg||null);
+  const avatarFileRef=useRef();
+
+  const handleAvatarPhoto=async e=>{
+    const f=e.target.files?.[0];if(!f)return;
+    const raw=await readFileAsDataURL(f);
+    const comp=await compressImage(raw);
+    setNewAvatarImg(comp);
+  };
+  const saveAvatar=async()=>{
+    const updated={...profiles[currentUser],avatar:newAvatarImg?null:newAvatar,...(newAvatarImg?{avatarImg:newAvatarImg}:{avatarImg:undefined})};
+    if(!newAvatarImg) delete updated.avatarImg;
+    const np={...profiles,[currentUser]:updated};
+    await fsSet("wolfpack/profiles",{users:np});
+    if(onSaveProfile)onSaveProfile(np);
+    setEditingAvatar(false);
+  };
+
+  const tabs=[{id:"stats",label:"STATS"},{id:"weight",label:"WEIGHT"},{id:"goal",label:"GOAL"},{id:"rest",label:"REST DAYS"},{id:"pin",label:"PIN"}];
 
   return(
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -685,12 +748,45 @@ function ProfileModal({currentUser,profile,history,onClose,onSaveWeight,onSaveGo
         <div className="modal-handle"/>
         {/* header */}
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-          <AvatarDisplay profile={profile} size={52}/>
+          <div style={{position:"relative",cursor:"pointer"}} onClick={()=>setEditingAvatar(true)}>
+            <AvatarDisplay profile={profile} size={52}/>
+            <div style={{position:"absolute",bottom:-2,right:-2,width:18,height:18,borderRadius:"50%",background:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",border:"2px solid var(--bg2)"}}>✏️</div>
+          </div>
           <div>
             <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3}}>{currentUser}</div>
             <div style={{fontSize:12,color:"var(--muted)"}}>🔥 {streak} streak · 💪 {total} workouts</div>
           </div>
         </div>
+
+        {/* avatar edit modal */}
+        {editingAvatar&&(
+          <div style={{marginBottom:16,padding:16,background:"var(--bg3)",borderRadius:14,border:"1px solid var(--border)"}}>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,marginBottom:12}}>CHANGE PROFILE PICTURE</div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,marginBottom:12}}>
+              {newAvatarImg
+                ?<img src={newAvatarImg} alt="av" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",border:"3px solid var(--accent)"}}/>
+                :<div style={{width:72,height:72,borderRadius:"50%",background:"var(--bg2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,border:"2px solid var(--border)"}}>{newAvatar}</div>
+              }
+              <button className="btn-ghost" onClick={()=>avatarFileRef.current.click()} style={{fontSize:13}}>{newAvatarImg?"Change Photo":"Upload Photo"}</button>
+              <input ref={avatarFileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleAvatarPhoto}/>
+              {newAvatarImg&&<button className="btn-ghost" onClick={()=>setNewAvatarImg(null)} style={{fontSize:12,color:"var(--muted)"}}>Remove photo</button>}
+            </div>
+            {!newAvatarImg&&(
+              <>
+                <div style={{textAlign:"center",fontSize:12,color:"var(--muted)",marginBottom:8}}>— or pick an emoji —</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:6,marginBottom:12}}>
+                  {WOLF_AVATARS.map(a=>(
+                    <button key={a} onClick={()=>setNewAvatar(a)} style={{padding:8,fontSize:22,borderRadius:10,cursor:"pointer",background:newAvatar===a?"rgba(124,92,191,0.25)":"var(--bg2)",border:newAvatar===a?"2px solid var(--accent)":"2px solid var(--border)"}}>{a}</button>
+                  ))}
+                </div>
+              </>
+            )}
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn-primary" onClick={saveAvatar} style={{flex:1}}>SAVE</button>
+              <button className="btn-ghost" onClick={()=>{setEditingAvatar(false);setNewAvatarImg(profile?.avatarImg||null);setNewAvatar(profile?.avatar||"🐺");}} style={{flex:1}}>Cancel</button>
+            </div>
+          </div>
+        )}
 
         {/* tabs */}
         <div style={{display:"flex",gap:6,marginBottom:16}}>
@@ -756,6 +852,34 @@ function ProfileModal({currentUser,profile,history,onClose,onSaveWeight,onSaveGo
           </div>
         )}
 
+        {/* REST DAYS tab */}
+        {tab==="rest"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6}}>Pick your personal rest days. Minimum 2 required. Your streak and challenges will skip these days.<br/><br/><span style={{color:"var(--orange)"}}>Note: the gym is always closed on weekends regardless of your rest days.</span></div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
+              {DAY_NAMES.map((name,i)=>{
+                const sel=restDays.includes(i);
+                const isWE=i===0||i===6;
+                return(
+                  <button key={i} onClick={()=>toggleRestDay(i)} style={{
+                    padding:"10px 4px",borderRadius:10,cursor:"pointer",textAlign:"center",
+                    background:sel?"rgba(124,92,191,0.25)":"var(--bg3)",
+                    border:sel?"1px solid var(--accent)":"1px solid var(--border)",
+                    color:sel?"var(--accent2)":isWE?"var(--muted)":"var(--text)",
+                    fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,
+                    opacity:!sel&&restDays.length>=2&&!restDays.includes(i)?0.6:1,
+                  }}>
+                    <div>{name}</div>
+                    {sel&&<div style={{fontSize:9,marginTop:2}}>REST</div>}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{fontSize:12,color:"var(--muted)"}}>Selected: {restDays.map(d=>DAY_NAMES[d]).join(", ")} ({restDays.length} days)</div>
+            <button className="btn-primary" onClick={saveRestDays}>{restSaved?"✓ SAVED!":"SAVE REST DAYS"}</button>
+          </div>
+        )}
+
         {/* PIN tab */}
         {tab==="pin"&&(
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -775,8 +899,37 @@ function ProfileModal({currentUser,profile,history,onClose,onSaveWeight,onSaveGo
 }
 
 function WorkoutModal({onClose,onSubmit}){
-  const [sel,setSel]=useState(null);const[note,setNote]=useState("");
-  return<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}><div className="modal"><div className="modal-handle"/><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:14}}>LOG WORKOUT</div><div className="workout-grid" style={{marginBottom:14}}>{WORKOUT_TYPES.map(w=><button key={w.id} className={`workout-tile ${sel?.id===w.id?"selected":""}`} onClick={()=>setSel(w)}><div style={{fontSize:24,marginBottom:4}}>{w.icon}</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:sel?.id===w.id?"var(--accent2)":"var(--muted)"}}>{w.label}</div></button>)}</div><input className="input" placeholder="Optional note..." value={note} onChange={e=>setNote(e.target.value)} style={{marginBottom:12}} maxLength={80}/><button className="btn-primary" disabled={!sel} onClick={()=>onSubmit(sel,note)}>LOG IT 💪</button></div></div>;
+  const [selected,setSelected]=useState([]);
+  const [note,setNote]=useState("");
+
+  const toggle=w=>setSelected(s=>s.find(x=>x.id===w.id)?s.filter(x=>x.id!==w.id):[...s,w]);
+  const isSelected=w=>!!selected.find(x=>x.id===w.id);
+
+  return(
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-handle"/>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:6}}>LOG WORKOUT</div>
+        <div style={{fontSize:12,color:"var(--muted)",marginBottom:12}}>Select one or more workout types</div>
+        <div className="workout-grid" style={{marginBottom:14}}>
+          {WORKOUT_TYPES.map(w=>(
+            <button key={w.id} className={`workout-tile ${isSelected(w)?"selected":""}`} onClick={()=>toggle(w)}>
+              <div style={{fontSize:24,marginBottom:4}}>{w.icon}</div>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:isSelected(w)?"var(--accent2)":"var(--muted)"}}>{w.label}</div>
+              {isSelected(w)&&<div style={{position:"absolute",top:4,right:4,width:14,height:14,borderRadius:"50%",background:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff"}}>✓</div>}
+            </button>
+          ))}
+        </div>
+        {selected.length>0&&(
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+            {selected.map(w=><span key={w.id} style={{padding:"4px 10px",background:"rgba(124,92,191,0.2)",border:"1px solid rgba(124,92,191,0.4)",borderRadius:20,fontSize:12,color:"var(--accent2)"}}>{w.icon} {w.label}</span>)}
+          </div>
+        )}
+        <input className="input" placeholder="Optional note..." value={note} onChange={e=>setNote(e.target.value)} style={{marginBottom:12}} maxLength={80}/>
+        <button className="btn-primary" disabled={selected.length===0} onClick={()=>onSubmit(selected,note)}>LOG IT 💪</button>
+      </div>
+    </div>
+  );
 }
 
 export default function App(){
@@ -863,11 +1016,17 @@ export default function App(){
     await fsSet(`wolfpack/pin_${currentUser}`,{pin:newPin});
   };
 
-  const handleLogWorkout=async(wt,note)=>{
+  const handleLogWorkout=async(workouts,note)=>{
     const key=todayStr(),time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
-    const entry={done:true,workoutType:wt.id,workoutIcon:wt.icon,workoutLabel:wt.label,note,time,ts:Date.now()};
+    // Support multiple workout types - merge with existing entries for today
+    const existing=history[key]?.[currentUser]||{};
+    const prevWorkouts=existing.workouts||[];
+    const newWorkouts=[...prevWorkouts,...workouts.map(w=>({id:w.id,icon:w.icon,label:w.label}))];
+    const icons=newWorkouts.map(w=>w.icon).join("");
+    const labels=newWorkouts.map(w=>w.label).join(" + ");
+    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:labels,note,time,ts:Date.now()};
     await fsSet("wolfpack/workouts",{byDate:{...history,[key]:{...(history[key]||{}),[currentUser]:entry}}});
-    setWorkoutOpen(false);launchConfetti();showToast(`${wt.icon} Logged! Keep grinding! 🐺`);
+    setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
   };
 
   const handlePost=async t=>{await fsSet("wolfpack/feed",{posts:[{id:Date.now().toString(),author:currentUser,text:t,ts:Date.now(),likes:[]},...feed]});showToast("Posted! 🐺");};
@@ -914,12 +1073,12 @@ export default function App(){
         {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)}/>}
         {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
-        {view==="challenges"&&<ChallengesTab currentUser={currentUser} members={members} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge}/>}
+        {view==="challenges"&&<ChallengesTab currentUser={currentUser} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge}/>}
         {view==="stats"&&<StatsTab currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed}/>}
       </div>
       <nav className="nav">{NAV.map(n=><button key={n.id} className={`nav-btn ${view===n.id?"active":""}`} onClick={()=>setView(n.id)}><span className="icon">{n.icon}</span><span>{n.label}</span></button>)}</nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout}/>}
-      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} history={history} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin}/>}
+      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onSaveProfile={np=>setProfiles(np)}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onClose={()=>setAdminOpen(false)}/>}
     </div>
   );
