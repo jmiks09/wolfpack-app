@@ -6,12 +6,12 @@ import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 // ── REPLACE WITH YOUR FIREBASE CONFIG ────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyCw-u1ghZgJfeXGjojHP1dHOfNu_SGrhc0",
+  authDomain: "wolfpack-app-a6e70.firebaseapp.com",
+  projectId: "wolfpack-app-a6e70",
+  storageBucket: "wolfpack-app-a6e70.firebasestorage.app",
+  messagingSenderId: "385988372173",
+  appId: "1:385988372173:web:785904dd2cfdae28042b84"
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
