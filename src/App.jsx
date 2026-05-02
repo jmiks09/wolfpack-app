@@ -47,7 +47,14 @@ const getWeekdays=(s,e)=>getDateRange(s,e).filter(d=>!isWeekend(d));
 // Get workout days for a member based on their personal rest days
 const getWorkoutDays=(s,e,profile)=>getDateRange(s,e).filter(d=>!isRestDay(d,profile));
 function getStreak(h,n,profile){let s=0;const b=new Date();for(let i=0;i<365;i++){const d=new Date(b);d.setDate(b.getDate()-i);const k=d.toISOString().split("T")[0];if(isRestDay(k,profile))continue;if(h[k]?.[n]?.done)s++;else if(i>0)break;}return s;}
-function getTotalWorkouts(h,n){return Object.values(h).filter(d=>d?.[n]?.done).length;}
+function getTotalWorkouts(h,n){
+  // Count total sessions — each workout type logged counts as 1 session
+  return Object.values(h).reduce((sum,d)=>{
+    if(!d?.[n]?.done)return sum;
+    const sessions=d[n]?.workouts?.length||1; // multi-type = multiple sessions
+    return sum+sessions;
+  },0);
+}
 function getQuote(){return QUOTES[new Date().getDate()%QUOTES.length];}
 function calcPenalties(c,h,profiles){
   if(!c.penaltyAmt||c.penaltyAmt<=0||!c.startDate||!c.endDate)return{};
@@ -344,7 +351,6 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,a
         <div style={{fontSize:14,color:"rgba(255,255,255,0.7)",fontStyle:"italic",lineHeight:1.5}}>"{getQuote()}"</div>
       </div>
 
-      <NotifBanner currentUser={currentUser}/>
 
       {/* Log workout / rest day */}
       <div style={{padding:"10px 16px 4px"}}>
@@ -364,12 +370,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,a
         )}
       </div>
 
-      {/* My stats + admin */}
-      <div style={{display:"flex",gap:8,padding:"10px 16px 6px",flexWrap:"wrap"}}>
-        <div className="pill pill-purple">🔥 {str} DAY STREAK</div>
-        <div className="pill pill-orange">💪 {tot} TOTAL</div>
-        {currentUser===adminName&&<button onClick={onOpenAdmin} style={{padding:"5px 12px",borderRadius:20,background:"rgba(124,92,191,0.2)",border:"1px solid rgba(124,92,191,0.3)",color:"var(--accent2)",fontSize:12,cursor:"pointer"}}>⚙️ Admin</button>}
-      </div>
+
 
       {/* ── SINGLE COLUMN MEMBER CARDS ── */}
       <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:3,color:"var(--muted)",padding:"6px 16px 8px"}}>THE PACK</div>
@@ -404,6 +405,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,a
                   {isMe&&<span style={{fontSize:10,color:"var(--accent2)",background:"rgba(124,92,191,0.2)",padding:"1px 5px",borderRadius:4}}>YOU</span>}
                 </div>
                 <div style={{fontSize:12,color:"var(--muted)"}}>🔥 {ms} day streak</div>
+              <div style={{fontSize:10,color:"var(--muted)",opacity:0.6}}>{getTotalWorkouts(history,m)} sessions</div>
                 {done&&wt&&<div style={{fontSize:12,color:"var(--green)",marginTop:2}}>{wt}</div>}
               </div>
               {/* status */}
@@ -1081,10 +1083,10 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 {[
-                  ["🔥","Current Streak",`${streak} days`],
-                  ["🏆","Longest Streak",`${longestStreak} days`],
-                  ["💪","Total Workouts",total],
-                  ["📅","This Month",Object.keys(history).filter(d=>{const m=new Date();return d.startsWith(`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,"0")}`)&&history[d]?.[currentUser]?.done}).length],
+                  ["🔥","Consecutive days logged",`${streak} day streak`],
+                  ["🏆","Best consecutive days",`${longestStreak} days`],
+                  ["💪","Total sessions logged",total],
+                  ["📅","Sessions this month",Object.keys(history).filter(d=>{const m=new Date();return d.startsWith(`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,"0")}`)&&history[d]?.[currentUser]?.done}).reduce((sum,d)=>{const s=history[d]?.[currentUser]?.workouts?.length||1;return sum+s;},0)],
                 ].map(([icon,label,val])=>(
                   <div key={label} style={{padding:"14px",background:"var(--bg3)",borderRadius:14,border:"1px solid var(--border)",textAlign:"center"}}>
                     <div style={{fontSize:24,marginBottom:4}}>{icon}</div>
@@ -1453,6 +1455,9 @@ export default function App(){
       <div className="header">
         <div><div className="header-title">WOLFPACK</div><div style={{fontSize:11,color:"var(--muted)",letterSpacing:1}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div></div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {currentUser===adminName&&(
+            <button onClick={()=>setAdminOpen(true)} style={{background:"none",border:"1px solid var(--border)",borderRadius:10,padding:"6px 8px",cursor:"pointer",color:"var(--muted)",fontSize:16,lineHeight:1}}>⚙️</button>
+          )}
           <div style={{textAlign:"right",marginRight:4}}><div style={{fontSize:11,color:"var(--muted)"}}>welcome back</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2,color:"var(--accent2)"}}>{currentUser}</div></div>
           <div onClick={()=>setProfileOpen(true)} style={{cursor:"pointer"}}><AvatarDisplay profile={profiles[currentUser]} size={40}/></div>
         </div>
