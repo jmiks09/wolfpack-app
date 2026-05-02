@@ -517,7 +517,7 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
             </div>
           )}
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Penalty</div><input className="input" placeholder='e.g. "Buys lunch"' value={penalty} onChange={e=>setPenalty(e.target.value)} maxLength={80}/></div>
-          <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout</div><input className="input" type="number" placeholder="e.g. 5" value={penaltyAmt} onChange={e=>setPenaltyAmt(e.target.value)} min={0}/></div>
+          <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout <span style={{fontSize:11}}>(optional)</span></div><input className="input" type="number" placeholder="optional — e.g. 5" value={penaltyAmt} onChange={e=>setPenaltyAmt(e.target.value)} min={0}/></div>
           <div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>Participants</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -537,29 +537,88 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
 }
 
 function PenaltyTracker({challenge:c,history,profiles}){
-  const penalties=calcPenalties(c,history,profiles);
-  const parts=Object.keys(c.participants||{});
-  if(!c.penaltyAmt||c.penaltyAmt<=0||!c.startDate||!c.endDate)return null;
-  if(!parts.some(m=>(penalties[m]?.totalOwed||0)>0))return null;
+  // Show tracker for date-range challenges always — with or without penalty amount
+  if(!c.startDate||!c.endDate)return null;
+  const acceptedParts=Object.keys(c.participants||{}).filter(m=>c.participants[m]?.status!=="pending");
+  if(acceptedParts.length===0)return null;
+  const hasPenalty=c.penaltyAmt>0;
+  const penalties=hasPenalty?calcPenalties(c,history,profiles):{};
   const cap=todayStr()<c.endDate?todayStr():c.endDate;
-  const wks=[...new Set(getWeekdays(c.startDate,cap).map(d=>getWeekStart(d)))].sort();
+  const wks=[...new Set(getDateRange(c.startDate,cap).map(d=>getWeekStart(d)))].sort();
+
   return(
-    <div style={{marginTop:12,background:"rgba(231,76,60,0.06)",border:"1px solid rgba(231,76,60,0.2)",borderRadius:12,overflow:"hidden"}}>
-      <div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",display:"flex",alignItems:"center",gap:6}}>
-        <span>💸</span><span style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--red)"}}>PENALTY — ${c.penaltyAmt}/MISSED WORKOUT</span>
+    <div style={{marginTop:12,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
+      {/* Header */}
+      <div style={{padding:"8px 12px",background:"rgba(255,255,255,0.03)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:6}}>
+        <span>📊</span>
+        <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--muted)"}}>
+          TRACKER{hasPenalty?` — $${c.penaltyAmt}/MISS`:""}
+        </span>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:`1fr repeat(${wks.length},60px) 60px`,borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+      {/* Column headers */}
+      <div style={{display:"grid",gridTemplateColumns:`1fr repeat(${wks.length},56px) 60px`,borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
         <div style={{padding:"5px 10px",fontSize:10,color:"var(--muted)"}}>Member</div>
-        {wks.map(w=><div key={w} style={{padding:"5px 4px",fontSize:9,color:"var(--muted)",textAlign:"center"}}>{new Date(w+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>)}
-        <div style={{padding:"5px 4px",fontSize:10,color:"var(--red)",textAlign:"center",fontWeight:700}}>TOTAL</div>
-      </div>
-      {parts.map(m=>{const p=penalties[m]||{totalOwed:0,byWeek:{}};return(
-        <div key={m} style={{display:"grid",gridTemplateColumns:`1fr repeat(${wks.length},60px) 60px`,borderBottom:"1px solid rgba(255,255,255,0.04)",alignItems:"center"}}>
-          <div style={{padding:"8px 10px",display:"flex",alignItems:"center",gap:6}}><AvatarDisplay profile={profiles[m]} size={20}/><span style={{fontSize:12,fontWeight:600}}>{m}</span></div>
-          {wks.map(w=>{const a=p.byWeek?.[w]||0;return<div key={w} style={{textAlign:"center",fontSize:12,color:a>0?"var(--red)":"var(--muted)",fontWeight:a>0?700:400}}>{a>0?`$${a}`:"—"}</div>;})}
-          <div style={{textAlign:"center",fontSize:13,fontWeight:700,color:p.totalOwed>0?"var(--red)":"var(--green)"}}>{p.totalOwed>0?`$${p.totalOwed}`:"✓"}</div>
+        {wks.map(w=>{
+          const d=new Date(w+"T00:00:00");
+          const isCurrentWk=getWeekStart(todayStr())===w;
+          return(
+            <div key={w} style={{padding:"5px 3px",fontSize:9,color:isCurrentWk?"var(--accent2)":"var(--muted)",textAlign:"center",fontWeight:isCurrentWk?700:400}}>
+              {d.toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+              {isCurrentWk&&<div style={{fontSize:8,color:"var(--accent2)"}}>NOW</div>}
+            </div>
+          );
+        })}
+        <div style={{padding:"5px 4px",fontSize:10,color:hasPenalty?"var(--red)":"var(--accent2)",textAlign:"center",fontWeight:700}}>
+          {hasPenalty?"OWES":"DONE"}
         </div>
-      );})}
+      </div>
+      {/* Member rows */}
+      {acceptedParts.map(m=>{
+        const p=penalties[m]||{totalOwed:0,byWeek:{},forfeited:false};
+        const forfeited=c.participants[m]?.forfeited||false;
+        // Per-week workout count
+        const wkWorkouts={};
+        wks.forEach(w=>{
+          const days=getDateRange(w,new Date(new Date(w+"T00:00:00").setDate(new Date(w+"T00:00:00").getDate()+6)).toISOString().split("T")[0]);
+          wkWorkouts[w]=days.filter(d=>d<=cap&&history[d]?.[m]?.done).length;
+        });
+        return(
+          <div key={m} style={{display:"grid",gridTemplateColumns:`1fr repeat(${wks.length},56px) 60px`,borderBottom:"1px solid rgba(255,255,255,0.03)",alignItems:"center"}}>
+            <div style={{padding:"8px 10px",display:"flex",alignItems:"center",gap:5}}>
+              <AvatarDisplay profile={profiles[m]} size={20}/>
+              <span style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m}</span>
+              {forfeited&&<span style={{fontSize:10}}>🏳️</span>}
+            </div>
+            {wks.map(w=>{
+              const penAmt=p.byWeek?.[w]||0;
+              const worked=wkWorkouts[w]||0;
+              return(
+                <div key={w} style={{textAlign:"center",padding:"2px"}}>
+                  {hasPenalty?(
+                    <span style={{fontSize:12,color:penAmt>0?"var(--red)":"var(--green)",fontWeight:penAmt>0?700:400}}>
+                      {penAmt>0?`$${penAmt}`:"✓"}
+                    </span>
+                  ):(
+                    <span style={{fontSize:12,color:worked>0?"var(--green)":"var(--muted)"}}>
+                      {worked>0?`${worked}x`:"—"}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            {/* Total column */}
+            <div style={{textAlign:"center",padding:"8px 4px"}}>
+              {forfeited?(
+                <span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>${c.forfeitCap||0}</span>
+              ):hasPenalty?(
+                <span style={{fontSize:12,fontWeight:700,color:p.totalOwed>0?"var(--red)":"var(--green)"}}>{p.totalOwed>0?`$${p.totalOwed}`:"$0"}</span>
+              ):(
+                <span style={{fontSize:12,color:"var(--accent2)",fontWeight:700}}>{Object.values(wkWorkouts).reduce((a,b)=>a+b,0)}</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -802,7 +861,7 @@ function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,on
           )}
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Participants</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{members.map(m=><button key={m} onClick={()=>toggleP(m)} style={{padding:"6px 12px",borderRadius:20,cursor:"pointer",fontSize:13,background:form.participants.includes(m)?"rgba(124,92,191,0.2)":"var(--bg3)",border:form.participants.includes(m)?"1px solid var(--accent)":"1px solid var(--border)",color:form.participants.includes(m)?"var(--accent2)":"var(--muted)"}}>{m}</button>)}</div></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Penalty (optional)</div><input className="input" placeholder='e.g. "Buys lunch"' value={form.penalty} onChange={e=>setForm({...form,penalty:e.target.value})} maxLength={80}/></div>
-          <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout</div><input className="input" type="number" placeholder="e.g. 5" value={form.penaltyAmt} onChange={e=>setForm({...form,penaltyAmt:e.target.value})} min={0}/></div>
+          <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout <span style={{color:"var(--bg3)",fontSize:11}}>(optional)</span></div><input className="input" type="number" placeholder="optional — e.g. 5" value={form.penaltyAmt} onChange={e=>setForm({...form,penaltyAmt:e.target.value})} min={0}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Forfeit cap $ (optional — max they'll ever owe)</div><input className="input" type="number" placeholder="e.g. 50" value={form.forfeitCap} onChange={e=>setForm({...form,forfeitCap:e.target.value})} min={0}/></div>
           {form.useDateRange&&<div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Max rest days per week allowed</div>
