@@ -244,13 +244,63 @@ function NotifBanner({currentUser}){
   );
 }
 
-function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,adminName,onOpenAdmin}){
+// ── PACK GOALS BOARD ─────────────────────────────────────────────────────────
+function PackGoals({currentUser,packGoals,onAddGoal,onCheer,onDeleteGoal}){
+  const [open,setOpen]=useState(false);
+  const [text,setText]=useState("");
+  const sub=()=>{if(!text.trim())return;onAddGoal(text.trim());setText("");setOpen(false);};
+  const myGoal=packGoals.find(g=>g.author===currentUser);
+  return(
+    <div style={{margin:"8px 16px 0"}}>
+      <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:3,color:"var(--muted)",marginBottom:8}}>PACK GOALS</div>
+      {packGoals.length===0&&!open&&(
+        <div style={{textAlign:"center",padding:"16px",background:"var(--bg3)",borderRadius:14,border:"1px dashed var(--border)",marginBottom:8}}>
+          <div style={{fontSize:12,color:"var(--muted)"}}>No goals posted yet. Set one for the pack to see!</div>
+        </div>
+      )}
+      {packGoals.map(g=>(
+        <div key={g.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)",marginBottom:8}}>
+          <div style={{fontSize:22}}>🎯</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--text)",marginBottom:2}}>{g.text}</div>
+            <div style={{fontSize:11,color:"var(--muted)"}}>{g.author}</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <button onClick={()=>onCheer(g.id,currentUser)} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:(g.cheers||[]).includes(currentUser)?1:0.4}}>🔥</button>
+            <span style={{fontSize:12,color:"var(--muted)"}}>{(g.cheers||[]).length||""}</span>
+            {g.author===currentUser&&<button onClick={()=>onDeleteGoal(g.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:16,marginLeft:2}}>×</button>}
+          </div>
+        </div>
+      ))}
+      {!myGoal&&!open&&(
+        <button onClick={()=>setOpen(true)} style={{width:"100%",padding:"10px",background:"rgba(124,92,191,0.1)",border:"1px dashed rgba(124,92,191,0.4)",borderRadius:12,cursor:"pointer",color:"var(--accent2)",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2}}>+ SET YOUR GOAL</button>
+      )}
+      {open&&(
+        <div style={{display:"flex",gap:8,marginTop:4}}>
+          <input className="input" placeholder="My goal is..." value={text} onChange={e=>setText(e.target.value)} maxLength={80} autoFocus style={{flex:1}} onKeyDown={e=>e.key==="Enter"&&sub()}/>
+          <button onClick={sub} disabled={!text.trim()} style={{padding:"10px 14px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13}}>POST</button>
+          <button onClick={()=>{setOpen(false);setText("");}} style={{padding:"10px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,cursor:"pointer",color:"var(--muted)",fontSize:13}}>✕</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile}){
   const key=todayStr(),td=sharedData[key]||{},my=td[currentUser],str=getStreak(history,currentUser),tot=getTotalWorkouts(history,currentUser),we=isWeekend(key);
   const sorted=[...members].sort((a,b)=>{const sa=getStreak(history,a),sb=getStreak(history,b);if(sb!==sa)return sb-sa;return b===currentUser?1:a===currentUser?-1:0;});
+
   return(
     <div>
-      <div style={{padding:"14px 16px 8px"}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:3,color:"var(--muted)",marginBottom:5}}>TODAY'S HOWL</div><div style={{fontSize:14,color:"rgba(255,255,255,0.7)",fontStyle:"italic",lineHeight:1.5}}>"{getQuote()}"</div></div>
+      {/* Quote */}
+      <div style={{padding:"14px 16px 8px"}}>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:3,color:"var(--muted)",marginBottom:5}}>TODAY'S HOWL</div>
+        <div style={{fontSize:14,color:"rgba(255,255,255,0.7)",fontStyle:"italic",lineHeight:1.5}}>"{getQuote()}"</div>
+      </div>
+
       <NotifBanner currentUser={currentUser}/>
+
+      {/* Log workout / rest day */}
       <div style={{padding:"10px 16px 4px"}}>
         {we?(
           <div style={{padding:"12px 16px",background:"var(--bg3)",borderRadius:14,textAlign:"center"}}><div style={{fontSize:24,marginBottom:4}}>😴</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)"}}>REST DAY — YOU EARNED IT</div></div>
@@ -267,28 +317,59 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,a
           </div>
         )}
       </div>
+
+      {/* My stats + admin */}
       <div style={{display:"flex",gap:8,padding:"10px 16px 6px",flexWrap:"wrap"}}>
         <div className="pill pill-purple">🔥 {str} DAY STREAK</div>
         <div className="pill pill-orange">💪 {tot} TOTAL</div>
         {currentUser===adminName&&<button onClick={onOpenAdmin} style={{padding:"5px 12px",borderRadius:20,background:"rgba(124,92,191,0.2)",border:"1px solid rgba(124,92,191,0.3)",color:"var(--accent2)",fontSize:12,cursor:"pointer"}}>⚙️ Admin</button>}
       </div>
-      <div className="section-label" style={{marginTop:6}}>THE PACK</div>
-      {sorted.map((m,i)=>{
-        const ms=getStreak(history,m),mt=getTotalWorkouts(history,m),done=!!td[m]?.done,isMe=m===currentUser;
-        return(
-          <div key={m} className="member-row" style={{margin:"0 16px 8px",background:isMe?"rgba(124,92,191,0.08)":"var(--bg3)",border:isMe?"1px solid rgba(124,92,191,0.3)":"1px solid var(--border)"}}>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:17,color:"var(--muted)",width:22,textAlign:"center"}}>{i+1}</div>
-            <AvatarDisplay profile={profiles[m]} size={38}/>
-            <div style={{flex:1}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:1}}>{m}</span>{isMe&&<span style={{fontSize:10,color:"var(--accent2)",background:"rgba(124,92,191,0.2)",padding:"1px 5px",borderRadius:4}}>YOU</span>}</div>
-              <div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>🔥{ms} streak · {mt} workouts</div>
+
+      {/* ── 2x2 GRID ── */}
+      <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:3,color:"var(--muted)",padding:"6px 16px 8px"}}>THE PACK</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,padding:"0 16px 16px"}}>
+        {sorted.map(m=>{
+          const done=!!td[m]?.done,isMe=m===currentUser,ms=getStreak(history,m);
+          const wt=td[m]?.workoutIcon||"";
+          return(
+            <div key={m} onClick={isMe?onOpenProfile:undefined} style={{
+              position:"relative",borderRadius:20,overflow:"hidden",
+              aspectRatio:"1",cursor:isMe?"pointer":"default",
+              background:done
+                ?"linear-gradient(145deg,rgba(46,204,113,0.18),rgba(46,204,113,0.05))"
+                :isMe?"rgba(124,92,191,0.12)":"var(--card)",
+              border:done?"1px solid rgba(46,204,113,0.35)":isMe?"1px solid rgba(124,92,191,0.4)":"1px solid var(--border)",
+              display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,
+              transition:"transform 0.15s",
+            }}>
+              {/* status glow top bar */}
+              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:done?"linear-gradient(90deg,#2ecc71,#27ae60)":isMe?"linear-gradient(90deg,var(--accent),var(--orange))":"transparent"}}/>
+              {/* avatar */}
+              <AvatarDisplay profile={profiles[m]} size={56}/>
+              {/* name */}
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2,color:isMe?"var(--accent2)":"var(--text)",textAlign:"center",lineHeight:1}}>{m}</div>
+              {/* streak */}
+              <div style={{fontSize:11,color:"var(--muted)"}}>🔥 {ms} streak</div>
+              {/* status badge */}
+              <div style={{
+                padding:"4px 12px",borderRadius:20,
+                background:done?"rgba(46,204,113,0.2)":"rgba(255,255,255,0.05)",
+                border:done?"1px solid rgba(46,204,113,0.4)":"1px solid var(--border)",
+                fontSize:12,color:done?"var(--green)":"var(--muted)",
+                fontFamily:"'Bebas Neue',cursive",letterSpacing:1,
+                display:"flex",alignItems:"center",gap:4,
+              }}>
+                {done?<>{wt||"✓"} DONE</>:<>○ REST</>}
+              </div>
+              {isMe&&<div style={{position:"absolute",top:10,right:10,fontSize:11,color:"var(--muted)"}}>👤</div>}
             </div>
-            <div style={{width:34,height:34,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:done?"rgba(46,204,113,0.15)":"rgba(255,255,255,0.04)",border:done?"1px solid rgba(46,204,113,0.4)":"1px solid var(--border)",fontSize:17}}>
-              {done?(td[m].workoutIcon||"✓"):"○"}
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      {/* Pack Goals */}
+      <PackGoals currentUser={currentUser} packGoals={packGoals} onAddGoal={onAddGoal} onCheer={onCheer} onDeleteGoal={onDeleteGoal}/>
+      <div style={{height:16}}/>
     </div>
   );
 }
@@ -565,6 +646,134 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed}){
   );
 }
 
+// ── PROFILE MODAL ────────────────────────────────────────────────────────────
+function ProfileModal({currentUser,profile,history,onClose,onSaveWeight,onSaveGoal,onChangePin}){
+  const [tab,setTab]=useState("stats");
+  const [weight,setWeight]=useState("");
+  const [weightUnit,setWeightUnit]=useState("lbs");
+  const [goal,setGoal]=useState(profile?.personalGoal||"");
+  const [goalSaved,setGoalSaved]=useState(false);
+  const [pin1,setPin1]=useState("");
+  const [pin2,setPin2]=useState("");
+  const [pinErr,setPinErr]=useState("");
+  const [pinDone,setPinDone]=useState(false);
+
+  const streak=getStreak(history,currentUser);
+  const total=getTotalWorkouts(history,currentUser);
+  const weightLog=profile?.weightLog||[];
+
+  const logWeight=()=>{
+    if(!weight||isNaN(Number(weight)))return;
+    const entry={w:Number(weight),unit:weightUnit,date:todayStr(),ts:Date.now()};
+    onSaveWeight([entry,...weightLog].slice(0,30));
+    setWeight("");
+  };
+
+  const saveGoal=()=>{onSaveGoal(goal.trim());setGoalSaved(true);setTimeout(()=>setGoalSaved(false),2000);};
+
+  const changePin=async()=>{
+    if(pin1.length!==4)return setPinErr("PIN must be 4 digits");
+    if(pin1!==pin2)return setPinErr("PINs don't match");
+    setPinErr("");await onChangePin(pin1);setPinDone(true);setPin1("");setPin2("");
+  };
+
+  const tabs=[{id:"stats",label:"STATS"},{id:"weight",label:"WEIGHT"},{id:"goal",label:"GOAL"},{id:"pin",label:"PIN"}];
+
+  return(
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" style={{maxHeight:"85dvh",overflowY:"auto"}}>
+        <div className="modal-handle"/>
+        {/* header */}
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+          <AvatarDisplay profile={profile} size={52}/>
+          <div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3}}>{currentUser}</div>
+            <div style={{fontSize:12,color:"var(--muted)"}}>🔥 {streak} streak · 💪 {total} workouts</div>
+          </div>
+        </div>
+
+        {/* tabs */}
+        <div style={{display:"flex",gap:6,marginBottom:16}}>
+          {tabs.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"8px 4px",borderRadius:10,cursor:"pointer",fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,background:tab===t.id?"rgba(124,92,191,0.2)":"var(--bg3)",border:tab===t.id?"1px solid var(--accent)":"1px solid var(--border)",color:tab===t.id?"var(--accent2)":"var(--muted)"}}>{t.label}</button>
+          ))}
+        </div>
+
+        {/* STATS tab */}
+        {tab==="stats"&&(
+          <div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+              {[["🔥","Current Streak",`${streak} days`],["💪","Total Workouts",total],["📅","This Month",Object.keys(history).filter(d=>{const m=new Date();return d.startsWith(`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,"0")}`)&&history[d]?.[currentUser]?.done}).length],["⚡","Best Workout",Object.values(history).map(d=>d?.[currentUser]?.workoutLabel).filter(Boolean).reduce((a,b,_,arr)=>arr.filter(x=>x===b).length>arr.filter(x=>x===a).length?b:a,"—")||"—"]].map(([icon,label,val])=>(
+                <div key={label} style={{padding:"14px",background:"var(--bg3)",borderRadius:14,border:"1px solid var(--border)",textAlign:"center"}}>
+                  <div style={{fontSize:24,marginBottom:4}}>{icon}</div>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:1}}>{val}</div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{label}</div>
+                </div>
+              ))}
+            </div>
+            {profile?.personalGoal&&(
+              <div style={{padding:"12px 14px",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.25)",borderRadius:12}}>
+                <div style={{fontSize:11,color:"var(--muted)",marginBottom:4}}>MY GOAL</div>
+                <div style={{fontSize:14,color:"var(--text)"}}>🎯 {profile.personalGoal}</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* WEIGHT tab */}
+        {tab==="weight"&&(
+          <div>
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:10}}>Private — only you can see this.</div>
+            <div style={{display:"flex",gap:8,marginBottom:16}}>
+              <input className="input" type="number" placeholder="Enter weight..." value={weight} onChange={e=>setWeight(e.target.value)} style={{flex:1}} onKeyDown={e=>e.key==="Enter"&&logWeight()}/>
+              <select className="input" value={weightUnit} onChange={e=>setWeightUnit(e.target.value)} style={{width:70,appearance:"none",textAlign:"center"}}>
+                <option>lbs</option><option>kg</option>
+              </select>
+              <button onClick={logWeight} disabled={!weight} style={{padding:"10px 14px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13}}>LOG</button>
+            </div>
+            {weightLog.length===0?(
+              <div style={{textAlign:"center",padding:"20px",color:"var(--muted)",fontSize:13}}>No weight entries yet.</div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {weightLog.map((e,i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)"}}>
+                    <span style={{fontSize:14,fontWeight:600}}>{e.w} {e.unit}</span>
+                    <span style={{fontSize:12,color:"var(--muted)"}}>{fmtDate(e.date)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* GOAL tab */}
+        {tab==="goal"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{fontSize:12,color:"var(--muted)"}}>Set a personal goal visible to the whole pack on the Pack tab.</div>
+            <textarea className="input" rows={3} placeholder="e.g. Run a 5K by June, lose 15 lbs, bench 225..." value={goal} onChange={e=>setGoal(e.target.value)} maxLength={120} style={{resize:"none"}}/>
+            <button className="btn-primary" onClick={saveGoal} disabled={!goal.trim()}>{goalSaved?"✓ SAVED!":"SAVE GOAL"}</button>
+            {profile?.personalGoal&&<button className="btn-ghost" onClick={()=>{setGoal("");onSaveGoal("");}}>Clear goal</button>}
+          </div>
+        )}
+
+        {/* PIN tab */}
+        {tab==="pin"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{fontSize:12,color:"var(--muted)"}}>Change your 4-digit login PIN.</div>
+            <input className="input" type="password" inputMode="numeric" placeholder="New 4-digit PIN" value={pin1} onChange={e=>setPin1(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
+            <input className="input" type="password" inputMode="numeric" placeholder="Confirm new PIN" value={pin2} onChange={e=>setPin2(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
+            {pinErr&&<div style={{color:"var(--red)",fontSize:13}}>{pinErr}</div>}
+            {pinDone&&<div style={{color:"var(--green)",fontSize:13}}>✓ PIN updated!</div>}
+            <button className="btn-primary" onClick={changePin} disabled={pin1.length!==4||pin2.length!==4}>UPDATE PIN</button>
+          </div>
+        )}
+
+        <button className="btn-ghost" style={{width:"100%",marginTop:12}} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 function WorkoutModal({onClose,onSubmit}){
   const [sel,setSel]=useState(null);const[note,setNote]=useState("");
   return<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}><div className="modal"><div className="modal-handle"/><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:14}}>LOG WORKOUT</div><div className="workout-grid" style={{marginBottom:14}}>{WORKOUT_TYPES.map(w=><button key={w.id} className={`workout-tile ${sel?.id===w.id?"selected":""}`} onClick={()=>setSel(w)}><div style={{fontSize:24,marginBottom:4}}>{w.icon}</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:sel?.id===w.id?"var(--accent2)":"var(--muted)"}}>{w.label}</div></button>)}</div><input className="input" placeholder="Optional note..." value={note} onChange={e=>setNote(e.target.value)} style={{marginBottom:12}} maxLength={80}/><button className="btn-primary" disabled={!sel} onClick={()=>onSubmit(sel,note)}>LOG IT 💪</button></div></div>;
@@ -584,6 +793,8 @@ export default function App(){
   const [view,setView]=useState("pack");
   const [workoutOpen,setWorkoutOpen]=useState(false);
   const [adminOpen,setAdminOpen]=useState(false);
+  const [profileOpen,setProfileOpen]=useState(false);
+  const [packGoals,setPackGoals]=useState([]);
   const [toast,setToast]=useState("");
   const unsubs=useRef([]);const tt=useRef(null);
   const showToast=useCallback(msg=>{setToast(msg);clearTimeout(tt.current);tt.current=setTimeout(()=>setToast(""),3000);},[]);
@@ -596,7 +807,8 @@ export default function App(){
       const u3=fsListen("wolfpack/feed",d=>{if(d)setFeed((d.posts||[]).sort((a,b)=>b.ts-a.ts));});
       const u4=fsListen("wolfpack/challenges",d=>{if(d)setChallenges(d.list||[]);});
       const u5=fsListen("wolfpack/gym",d=>{if(d)setGymSlots(d.slots||[]);});
-      unsubs.current=[u1,u2,u3,u4,u5];
+      const u6=fsListen("wolfpack/packgoals",d=>{if(d)setPackGoals(d.list||[]);});
+      unsubs.current=[u1,u2,u3,u4,u5,u6];
       const ad=await fsGet("wolfpack/admin");if(ad?.name)setAdminName(ad.name);
       setScreen(m.length>0?"login":"onboard");
     })();
@@ -626,6 +838,29 @@ export default function App(){
     const ns=gymSlots.filter(s=>s.bookedBy!==m);
     await Promise.all([fsSet("wolfpack/members",{list:nm}),fsSet("wolfpack/profiles",{users:np}),fsSet("wolfpack/challenges",{list:nc}),fsSet("wolfpack/gym",{slots:ns}),fsDelete(`wolfpack/pin_${m}`)]);
     setMembers(nm);setProfiles(np);showToast(`${m} removed from the pack.`);
+  };
+
+  const handleAddPackGoal=async t=>{
+    const goal={id:Date.now().toString(),author:currentUser,text:t,cheers:[],ts:Date.now()};
+    await fsSet("wolfpack/packgoals",{list:[goal,...packGoals]});
+  };
+  const handleCheerGoal=async(id,user)=>{
+    const nl=packGoals.map(g=>{if(g.id!==id)return g;const c=g.cheers||[];return{...g,cheers:c.includes(user)?c.filter(x=>x!==user):[...c,user]};});
+    await fsSet("wolfpack/packgoals",{list:nl});
+  };
+  const handleDeletePackGoal=async id=>{
+    await fsSet("wolfpack/packgoals",{list:packGoals.filter(g=>g.id!==id)});
+  };
+  const handleSaveWeight=async wl=>{
+    const np={...profiles,[currentUser]:{...profiles[currentUser],weightLog:wl}};
+    await fsSet("wolfpack/profiles",{users:np});setProfiles(np);
+  };
+  const handleSaveGoal=async goal=>{
+    const np={...profiles,[currentUser]:{...profiles[currentUser],personalGoal:goal}};
+    await fsSet("wolfpack/profiles",{users:np});setProfiles(np);
+  };
+  const handleChangePin=async newPin=>{
+    await fsSet(`wolfpack/pin_${currentUser}`,{pin:newPin});
   };
 
   const handleLogWorkout=async(wt,note)=>{
@@ -672,11 +907,11 @@ export default function App(){
         <div><div className="header-title">WOLFPACK</div><div style={{fontSize:11,color:"var(--muted)",letterSpacing:1}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div></div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <div style={{textAlign:"right",marginRight:4}}><div style={{fontSize:11,color:"var(--muted)"}}>welcome back</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2,color:"var(--accent2)"}}>{currentUser}</div></div>
-          <AvatarDisplay profile={profiles[currentUser]} size={40}/>
+          <div onClick={()=>setProfileOpen(true)} style={{cursor:"pointer"}}><AvatarDisplay profile={profiles[currentUser]} size={40}/></div>
         </div>
       </div>
       <div className="scroll">
-        {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)}/>}
+        {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)}/>}
         {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
         {view==="challenges"&&<ChallengesTab currentUser={currentUser} members={members} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge}/>}
@@ -684,6 +919,7 @@ export default function App(){
       </div>
       <nav className="nav">{NAV.map(n=><button key={n.id} className={`nav-btn ${view===n.id?"active":""}`} onClick={()=>setView(n.id)}><span className="icon">{n.icon}</span><span>{n.label}</span></button>)}</nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout}/>}
+      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} history={history} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onClose={()=>setAdminOpen(false)}/>}
     </div>
   );
