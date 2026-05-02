@@ -431,25 +431,118 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,a
   );
 }
 
-function FeedTab({currentUser,profiles,feed,onPost,onLike,onDelete}){
-  const [open,setOpen]=useState(false);const[text,setText]=useState("");
+function FeedPost({post:p, currentUser, profiles, onLike, onDelete, onComment, onDeleteComment}){
+  const [showComments,setShowComments]=useState(false);
+  const [commentText,setCommentText]=useState("");
+  const liked=(p.likes||[]).includes(currentUser);
+  const isMe=p.author===currentUser;
+  const comments=p.comments||[];
+
+  const submitComment=()=>{
+    if(!commentText.trim())return;
+    onComment(p.id,commentText.trim());
+    setCommentText("");
+  };
+
+  return(
+    <div className="card">
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+        <AvatarDisplay profile={profiles[p.author]} size={36}/>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1}}>{p.author}</div>
+          <div style={{fontSize:11,color:"var(--muted)"}}>{fmtTime(p.ts)}</div>
+        </div>
+        {isMe&&<button onClick={()=>onDelete(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:20,lineHeight:1}}>×</button>}
+      </div>
+
+      {/* Post text */}
+      <div style={{fontSize:15,lineHeight:1.5,marginBottom:12}}>{p.text}</div>
+
+      {/* Actions row */}
+      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:comments.length>0||showComments?10:0}}>
+        <button onClick={()=>onLike(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:liked?"var(--orange)":"var(--muted)",display:"flex",alignItems:"center",gap:4,fontSize:13}}>
+          {liked?"🔥":"🤍"} {(p.likes||[]).length||0}
+        </button>
+        <button onClick={()=>setShowComments(s=>!s)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",display:"flex",alignItems:"center",gap:4,fontSize:13}}>
+          💬 {comments.length>0?comments.length:"Reply"}
+        </button>
+      </div>
+
+      {/* Comments */}
+      {(showComments||comments.length>0)&&(
+        <div style={{borderTop:"1px solid var(--border)",paddingTop:10}}>
+          {/* Existing comments */}
+          {comments.map((c,i)=>(
+            <div key={i} style={{display:"flex",gap:8,marginBottom:8,alignItems:"flex-start"}}>
+              <AvatarDisplay profile={profiles[c.author]} size={26}/>
+              <div style={{flex:1,background:"var(--bg3)",borderRadius:10,padding:"7px 10px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+                  <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,color:"var(--accent2)"}}>{c.author}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:10,color:"var(--muted)"}}>{fmtTime(c.ts)}</span>
+                    {c.author===currentUser&&(
+                      <button onClick={()=>onDeleteComment(p.id,i)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:14,lineHeight:1,padding:0}}>×</button>
+                    )}
+                  </div>
+                </div>
+                <div style={{fontSize:13,color:"var(--text)",lineHeight:1.4}}>{c.text}</div>
+              </div>
+            </div>
+          ))}
+
+          {/* Comment input */}
+          {showComments&&(
+            <div style={{display:"flex",gap:8,marginTop:4}}>
+              <AvatarDisplay profile={profiles[currentUser]} size={26}/>
+              <div style={{flex:1,display:"flex",gap:6}}>
+                <input className="input" placeholder="Write a comment..." value={commentText}
+                  onChange={e=>setCommentText(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&submitComment()}
+                  style={{flex:1,padding:"8px 12px",fontSize:13}}/>
+                <button onClick={submitComment} disabled={!commentText.trim()} style={{
+                  padding:"8px 12px",background:"var(--accent)",border:"none",borderRadius:10,
+                  cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,flexShrink:0
+                }}>POST</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeedTab({currentUser,profiles,feed,onPost,onLike,onDelete,onComment,onDeleteComment}){
+  const [open,setOpen]=useState(false);
+  const [text,setText]=useState("");
   const sub=()=>{if(!text.trim())return;onPost(text.trim());setText("");setOpen(false);};
   return(
     <div>
-      <div style={{padding:"12px 16px 8px"}}><button className="btn-primary" onClick={()=>setOpen(true)}>💬 POST TO THE PACK</button></div>
-      {feed.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}><div style={{fontSize:40,marginBottom:12}}>🐺</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2}}>THE FEED IS EMPTY</div></div>}
-      {feed.map(p=>{const liked=(p.likes||[]).includes(currentUser),isMe=p.author===currentUser;return(
-        <div key={p.id} className="card">
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-            <AvatarDisplay profile={profiles[p.author]} size={36}/>
-            <div style={{flex:1}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1}}>{p.author}</div><div style={{fontSize:11,color:"var(--muted)"}}>{fmtTime(p.ts)}</div></div>
-            {isMe&&<button onClick={()=>onDelete(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:20,lineHeight:1}}>×</button>}
-          </div>
-          <div style={{fontSize:15,lineHeight:1.5,marginBottom:10}}>{p.text}</div>
-          <button onClick={()=>onLike(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:liked?"var(--orange)":"var(--muted)",display:"flex",alignItems:"center",gap:5,fontSize:13}}>{liked?"🔥":"🤍"} {(p.likes||[]).length||0} {(p.likes||[]).length===1?"like":"likes"}</button>
+      <div style={{padding:"12px 16px 8px"}}>
+        <button className="btn-primary" onClick={()=>setOpen(true)}>💬 POST TO THE PACK</button>
+      </div>
+      {feed.length===0&&(
+        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}>
+          <div style={{fontSize:40,marginBottom:12}}>🐺</div>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2}}>THE FEED IS EMPTY</div>
         </div>
-      );})}
-      {open&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setOpen(false)}><div className="modal"><div className="modal-handle"/><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:14}}>POST TO THE PACK</div><textarea className="input" rows={4} placeholder="What's on your mind, wolf?..." value={text} onChange={e=>setText(e.target.value)} style={{resize:"none",marginBottom:12}} autoFocus/><button className="btn-primary" onClick={sub} disabled={!text.trim()}>POST 🐺</button></div></div>}
+      )}
+      {feed.map(p=>(
+        <FeedPost key={p.id} post={p} currentUser={currentUser} profiles={profiles}
+          onLike={onLike} onDelete={onDelete} onComment={onComment} onDeleteComment={onDeleteComment}/>
+      ))}
+      {open&&(
+        <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setOpen(false)}>
+          <div className="modal">
+            <div className="modal-handle"/>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:14}}>POST TO THE PACK</div>
+            <textarea className="input" rows={4} placeholder="What's on your mind, wolf?..."
+              value={text} onChange={e=>setText(e.target.value)} style={{resize:"none",marginBottom:12}} autoFocus/>
+            <button className="btn-primary" onClick={sub} disabled={!text.trim()}>POST 🐺</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1308,6 +1401,7 @@ export default function App(){
   const [workoutOpen,setWorkoutOpen]=useState(false);
   const [adminOpen,setAdminOpen]=useState(false);
   const [profileOpen,setProfileOpen]=useState(false);
+  const [lastSeen,setLastSeen]=useState({feed:0,challenges:0,gym:0});
   const [packGoals,setPackGoals]=useState([]);
   const [toast,setToast]=useState("");
   const unsubs=useRef([]);const tt=useRef(null);
@@ -1342,7 +1436,16 @@ export default function App(){
     showToast(`Welcome to the pack, ${name}! 🐺`);
   };
 
-  const handleLogin=(name,action)=>{if(action==="join"){setScreen("onboard");return;}setCurrentUser(name);setScreen("main");};
+  const handleLogin=(name,action)=>{
+    if(action==="join"){setScreen("onboard");return;}
+    setCurrentUser(name);
+    setScreen("main");
+    // Load lastSeen from profile
+    fsGet("wolfpack/profiles").then(d=>{
+      const seen=d?.users?.[name]?.lastSeen;
+      if(seen) setLastSeen(seen);
+    });
+  };
 
   const handleResetPin=async m=>{await fsDelete(`wolfpack/pin_${m}`);showToast(`${m}'s PIN cleared. They can log in freely now.`);};
 
@@ -1396,6 +1499,23 @@ export default function App(){
   const handlePost=async t=>{await fsSet("wolfpack/feed",{posts:[{id:Date.now().toString(),author:currentUser,text:t,ts:Date.now(),likes:[]},...feed]});showToast("Posted! 🐺");};
   const handleLike=async id=>{await fsSet("wolfpack/feed",{posts:feed.map(p=>{if(p.id!==id)return p;const l=p.likes||[];return{...p,likes:l.includes(currentUser)?l.filter(x=>x!==currentUser):[...l,currentUser]};})});};
   const handleDelPost=async id=>{await fsSet("wolfpack/feed",{posts:feed.filter(p=>p.id!==id)});};
+  const handleComment=async(postId,text)=>{
+    const comment={author:currentUser,text,ts:Date.now()};
+    const newFeed=feed.map(p=>{
+      if(p.id!==postId)return p;
+      return{...p,comments:[...(p.comments||[]),comment]};
+    });
+    await fsSet("wolfpack/feed",{posts:newFeed});
+  };
+  const handleDeleteComment=async(postId,idx)=>{
+    const newFeed=feed.map(p=>{
+      if(p.id!==postId)return p;
+      const comments=[...(p.comments||[])];
+      comments.splice(idx,1);
+      return{...p,comments};
+    });
+    await fsSet("wolfpack/feed",{posts:newFeed});
+  };
   const handleBookGym=async(date,time)=>{
     const ex=gymSlots.filter(s=>s.date===date&&s.time===time);
     if(ex.length>=2){showToast("That slot is full!");return;}
@@ -1444,6 +1564,31 @@ export default function App(){
     showToast(`🏳️ Forfeited. You owe $${challenges.find(c=>c.id===challengeId)?.forfeitCap||0}.`);
   };
 
+  // ── DOT CONDITIONS ────────────────────────────────────────────────────────
+  // Feed dot: any post newer than lastSeen.feed not by currentUser
+  const hasFeedDot = feed.some(p => {
+    // New post by someone else
+    if(p.author !== currentUser && p.ts > lastSeen.feed) return true;
+    // New comment on any post by someone else
+    if((p.comments||[]).some(c => c.author !== currentUser && c.ts > lastSeen.feed)) return true;
+    return false;
+  });
+
+  // Challenges dot: any pending invite
+  const hasChallengeDot = challenges.some(c =>
+    c.status === "active" && c.participants?.[currentUser]?.status === "pending"
+  );
+
+  // Gym dot: any new booking on a day you're also booked, newer than lastSeen.gym
+  const hasGymDot = (() => {
+    const myDates = new Set(gymSlots.filter(s => s.bookedBy === currentUser).map(s => s.date));
+    return gymSlots.some(s =>
+      s.bookedBy !== currentUser &&
+      myDates.has(s.date) &&
+      s.createdAt > lastSeen.gym
+    );
+  })();
+
   if(screen==="loading")return<div className="loading-screen"><div className="loading-wolf">🐺</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:32,letterSpacing:6,background:"linear-gradient(135deg,#fff,#9b7de0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFPACK</div><div style={{color:"var(--muted)",fontSize:13}}>Loading the pack...</div></div>;
   if(screen==="onboard")return<Onboarding onJoin={handleJoin}/>;
   if(screen==="login")return<Login members={members} profiles={profiles} onLogin={handleLogin} adminName={adminName}/>;
@@ -1464,12 +1609,44 @@ export default function App(){
       </div>
       <div className="scroll">
         {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)}/>}
-        {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost}/>}
+        {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost} onComment={handleComment} onDeleteComment={handleDeleteComment}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
         {view==="challenges"&&<ChallengesTab currentUser={currentUser} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)}/>}
         {view==="stats"&&<StatsTab currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed}/>}
       </div>
-      <nav className="nav">{NAV.map(n=><button key={n.id} className={`nav-btn ${view===n.id?"active":""}`} onClick={()=>setView(n.id)}><span className="icon">{n.icon}</span><span>{n.label}</span></button>)}</nav>
+      <nav className="nav">
+        {NAV.map(n=>{
+          const hasDot=n.id==="feed"?hasFeedDot:n.id==="challenges"?hasChallengeDot:n.id==="gym"?hasGymDot:false;
+          return(
+            <button key={n.id} className={`nav-btn ${view===n.id?"active":""}`}
+              onClick={()=>{
+                const now=Date.now();
+                setView(n.id);
+                setLastSeen(p=>{
+                  const updated={...p,[n.id]:now};
+                  // Persist to Firebase
+                  if(currentUser){
+                    fsGet("wolfpack/profiles").then(d=>{
+                      if(d?.users?.[currentUser]){
+                        fsSet("wolfpack/profiles",{users:{...d.users,[currentUser]:{...d.users[currentUser],lastSeen:updated}}});
+                      }
+                    });
+                  }
+                  return updated;
+                });
+              }}
+              style={{position:"relative"}}>
+              <span className="icon" style={{position:"relative",display:"inline-block"}}>
+                {n.icon}
+                {hasDot&&view!==n.id&&(
+                  <span style={{position:"absolute",top:-2,right:-4,width:8,height:8,borderRadius:"50%",background:"var(--red)",border:"2px solid var(--bg)"}}/>
+                )}
+              </span>
+              <span>{n.label}</span>
+            </button>
+          );
+        })}
+      </nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onClose={()=>setAdminOpen(false)}/>}
