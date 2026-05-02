@@ -68,7 +68,8 @@ function calcPenalties(c,h,profiles){
     if(pData?.forfeited){r[m]={totalOwed:c.forfeitCap||0,byWeek:{},forfeited:true};return;}
     const profile=profiles?.[m];
     // Get all calendar days in range (not filtered by rest days)
-    const allDays=getDateRange(c.startDate,cap);
+    const penaltyStart=pData?.acceptedAt||c.startDate;
+    const allDays=getDateRange(penaltyStart,cap);
     const byWeek={};
     // Group days by week and calc missed per week
     allDays.forEach(d=>{
@@ -582,7 +583,12 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
   const save=()=>{
     if(!title.trim()) return;
     const np={...challenge.participants};
-    parts.forEach(m=>{if(!np[m])np[m]={progress:0,done:false};});
+    parts.forEach(m=>{
+      if(!np[m]){
+        // New member — set as pending invite, NOT auto-accepted
+        np[m]={progress:0,done:false,status:"pending"};
+      }
+    });
     Object.keys(np).forEach(m=>{if(!parts.includes(m))delete np[m];});
     const newGoal=isDR&&startDate&&endDate?getWeekdays(startDate,endDate).length:Number(goal);
     onSave({...challenge,title:title.trim(),goal:newGoal,unit:isDR?"days":unit,startDate:isDR?startDate:challenge.startDate,endDate:isDR?endDate:challenge.endDate,penalty:penalty.trim(),penaltyAmt:penaltyAmt?Number(penaltyAmt):0,participants:np});
@@ -730,9 +736,10 @@ function ChallengeCard({challenge:c,currentUser,members,profiles,onLog,onDelete,
   const myData=c.participants?.[currentUser]||{};
   const myForfeited=myData.forfeited||false;
   const myManual=myData.progress||0;
-  const myAuto=isDR&&c.startDate&&c.endDate?getWorkoutDays(c.startDate,todayStr()<c.endDate?todayStr():c.endDate,profiles?.[currentUser]).filter(d=>history[d]?.[currentUser]?.done).length:null;
+  const myAcceptedAt=c.participants?.[currentUser]?.acceptedAt||c.startDate;
+  const myAuto=isDR&&c.startDate&&c.endDate?getWorkoutDays(myAcceptedAt,todayStr()<c.endDate?todayStr():c.endDate,profiles?.[currentUser]).filter(d=>history[d]?.[currentUser]?.done).length:null;
   const myProg=myAuto!==null?myAuto:myManual;
-  const myGoal=isDR&&c.startDate&&c.endDate?getWorkoutDays(c.startDate,c.endDate,profiles?.[currentUser]).length:c.goal;
+  const myGoal=isDR&&c.startDate&&c.endDate?getWorkoutDays(myAcceptedAt,c.endDate,profiles?.[currentUser]).length:c.goal;
   const myPct=Math.min(100,Math.round((myProg/Math.max(myGoal,1))*100));
 
   // Penalty calc for auto-forfeit prompt
@@ -741,8 +748,9 @@ function ChallengeCard({challenge:c,currentUser,members,profiles,onLog,onDelete,
   const atForfeitCap=c.forfeitCap&&myOwed>=c.forfeitCap;
 
   const rows=parts.filter(m=>c.participants[m]?.status!=="pending").map(m=>{
-    const mGoal=isDR&&c.startDate&&c.endDate?getWorkoutDays(c.startDate,c.endDate,profiles?.[m]).length:c.goal;
-    const prog=isDR&&c.startDate&&c.endDate?getWorkoutDays(c.startDate,todayStr()<c.endDate?todayStr():c.endDate,profiles?.[m]).filter(d=>history[d]?.[m]?.done).length:(c.participants[m]?.progress||0);
+    const mAcceptedAt=c.participants[m]?.acceptedAt||c.startDate;
+    const mGoal=isDR&&c.startDate&&c.endDate?getWorkoutDays(mAcceptedAt,c.endDate,profiles?.[m]).length:c.goal;
+    const prog=isDR&&c.startDate&&c.endDate?getWorkoutDays(mAcceptedAt,todayStr()<c.endDate?todayStr():c.endDate,profiles?.[m]).filter(d=>history[d]?.[m]?.done).length:(c.participants[m]?.progress||0);
     const forfeited=c.participants[m]?.forfeited||false;
     return{name:m,prog,goal:mGoal,pct:Math.min(100,Math.round((prog/Math.max(mGoal,1))*100)),forfeited};
   }).sort((a,b)=>b.pct-a.pct);
@@ -1007,7 +1015,7 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed}){
 }
 
 // ── PROFILE MODAL ────────────────────────────────────────────────────────────
-function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,onSaveWeight,onSaveGoal,onChangePin,onSaveProfile,onSaveBackfill}){
+function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,onSaveWeight,onSaveGoal,onChangePin,onChangeName,onSaveProfile,onSaveBackfill}){
   const [tab,setTab]=useState("stats");
   const [weight,setWeight]=useState("");
   const [weightUnit,setWeightUnit]=useState("lbs");
@@ -1017,6 +1025,9 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
   const [pin2,setPin2]=useState("");
   const [pinErr,setPinErr]=useState("");
   const [pinDone,setPinDone]=useState(false);
+  const [newName,setNewName]=useState(currentUser);
+  const [nameErr,setNameErr]=useState("");
+  const [nameDone,setNameDone]=useState(false);
 
   const streak=getStreak(history,currentUser);
   const total=getTotalWorkouts(history,currentUser);
@@ -1334,13 +1345,30 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
 
           {/* PIN tab */}
           {tab==="pin"&&(
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <div style={{fontSize:12,color:"var(--muted)"}}>Change your 4-digit login PIN.</div>
-              <input className="input" type="password" inputMode="numeric" placeholder="New 4-digit PIN" value={pin1} onChange={e=>setPin1(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
-              <input className="input" type="password" inputMode="numeric" placeholder="Confirm new PIN" value={pin2} onChange={e=>setPin2(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
-              {pinErr&&<div style={{color:"var(--red)",fontSize:13}}>{pinErr}</div>}
-              {pinDone&&<div style={{color:"var(--green)",fontSize:13}}>✓ PIN updated!</div>}
-              <button className="btn-primary" onClick={changePin} disabled={pin1.length!==4||pin2.length!==4}>UPDATE PIN</button>
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {/* Name change */}
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)"}}>DISPLAY NAME</div>
+                <input className="input" placeholder="Your name..." value={newName}
+                  onChange={e=>{setNewName(e.target.value.slice(0,20));setNameErr("");setNameDone(false);}}
+                  maxLength={20}/>
+                {nameErr&&<div style={{color:"var(--red)",fontSize:13}}>{nameErr}</div>}
+                {nameDone&&<div style={{color:"var(--green)",fontSize:13}}>✓ Name updated!</div>}
+                <button className="btn-primary" onClick={()=>onChangeName(newName.trim(),setNameErr,setNameDone)}
+                  disabled={!newName.trim()||newName.trim()===currentUser}>
+                  UPDATE NAME
+                </button>
+              </div>
+              <div style={{height:1,background:"var(--border)"}}/>
+              {/* PIN change */}
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)"}}>CHANGE PIN</div>
+                <input className="input" type="password" inputMode="numeric" placeholder="New 4-digit PIN" value={pin1} onChange={e=>setPin1(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
+                <input className="input" type="password" inputMode="numeric" placeholder="Confirm new PIN" value={pin2} onChange={e=>setPin2(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
+                {pinErr&&<div style={{color:"var(--red)",fontSize:13}}>{pinErr}</div>}
+                {pinDone&&<div style={{color:"var(--green)",fontSize:13}}>✓ PIN updated!</div>}
+                <button className="btn-primary" onClick={changePin} disabled={pin1.length!==4||pin2.length!==4}>UPDATE PIN</button>
+              </div>
             </div>
           )}
 
@@ -1482,6 +1510,52 @@ export default function App(){
   const handleChangePin=async newPin=>{
     await fsSet(`wolfpack/pin_${currentUser}`,{pin:newPin});
   };
+  const handleChangeName=async(newName,setErr,setDone)=>{
+    if(!newName.trim()){setErr("Name can't be empty");return;}
+    if(newName.trim()===currentUser){return;}
+    // Check name not taken
+    if(members.map(m=>m.toLowerCase()).includes(newName.trim().toLowerCase())&&newName.trim().toLowerCase()!==currentUser.toLowerCase()){
+      setErr("That name is already taken");return;
+    }
+    const oldName=currentUser;
+    const nm=members.map(m=>m===oldName?newName.trim():m);
+    // Update profile
+    const np={...profiles,[newName.trim()]:{...profiles[oldName]}};
+    delete np[oldName];
+    // Update workout history keys
+    const newHistory={};
+    Object.entries(history).forEach(([date,dayData])=>{
+      const newDay={...dayData};
+      if(newDay[oldName]){newDay[newName.trim()]=newDay[oldName];delete newDay[oldName];}
+      newHistory[date]=newDay;
+    });
+    // Update challenges
+    const newChallenges=challenges.map(c=>{
+      const newParts={};
+      Object.entries(c.participants||{}).forEach(([m,v])=>{newParts[m===oldName?newName.trim():m]=v;});
+      return{...c,participants:newParts,createdBy:c.createdBy===oldName?newName.trim():c.createdBy};
+    });
+    // Update feed
+    const newFeed=feed.map(p=>({...p,author:p.author===oldName?newName.trim():p.author,comments:(p.comments||[]).map(c=>({...c,author:c.author===oldName?newName.trim():c.author}))}));
+    // Update gym slots
+    const newSlots=gymSlots.map(s=>({...s,bookedBy:s.bookedBy===oldName?newName.trim():s.bookedBy}));
+    // Update PIN
+    const pinData=await fsGet(`wolfpack/pin_${oldName}`);
+    await Promise.all([
+      fsSet("wolfpack/members",{list:nm}),
+      fsSet("wolfpack/profiles",{users:np}),
+      fsSet("wolfpack/workouts",{byDate:newHistory}),
+      fsSet("wolfpack/challenges",{list:newChallenges}),
+      fsSet("wolfpack/feed",{posts:newFeed}),
+      fsSet("wolfpack/gym",{slots:newSlots}),
+      ...(pinData?[fsSet(`wolfpack/pin_${newName.trim()}`,pinData),fsDelete(`wolfpack/pin_${oldName}`)]:[]),
+    ]);
+    // Update admin if needed
+    if(adminName===oldName){await fsSet("wolfpack/admin",{name:newName.trim()});setAdminName(newName.trim());}
+    setMembers(nm);setProfiles(np);setCurrentUser(newName.trim());
+    setDone(true);
+    showToast(`Name updated to ${newName.trim()}!`);
+  };
 
   const handleLogWorkout=async(workouts,note)=>{
     const key=todayStr(),time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
@@ -1540,7 +1614,11 @@ export default function App(){
   const handleAcceptChallenge=async(challengeId,member)=>{
     const newList=challenges.map(c=>{
       if(c.id!==challengeId)return c;
-      return{...c,participants:{...c.participants,[member]:{...c.participants[member],status:"accepted"}}};
+      return{...c,participants:{...c.participants,[member]:{
+        ...c.participants[member],
+        status:"accepted",
+        acceptedAt:todayStr(), // track when they joined for penalty purposes
+      }}};
     });
     await fsSet("wolfpack/challenges",{list:newList});
     showToast("Challenge accepted! Rest days are now locked. ⚔️");
@@ -1648,7 +1726,7 @@ export default function App(){
         })}
       </nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout}/>}
-      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
+      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onClose={()=>setAdminOpen(false)}/>}
     </div>
   );
