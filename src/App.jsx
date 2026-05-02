@@ -912,7 +912,7 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed}){
 }
 
 // ── PROFILE MODAL ────────────────────────────────────────────────────────────
-function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,onSaveWeight,onSaveGoal,onChangePin,onSaveProfile}){
+function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,onSaveWeight,onSaveGoal,onChangePin,onSaveProfile,onSaveBackfill}){
   const [tab,setTab]=useState("stats");
   const [weight,setWeight]=useState("");
   const [weightUnit,setWeightUnit]=useState("lbs");
@@ -975,7 +975,50 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
     setEditingAvatar(false);
   };
 
-  const tabs=[{id:"stats",label:"STATS"},{id:"weight",label:"WEIGHT"},{id:"goal",label:"GOAL"},{id:"rest",label:"REST DAYS"},{id:"pin",label:"PIN"}];
+  // Backfill state
+  const [backfillDate,setBackfillDate]=useState("");
+  const [backfillWorkouts,setBackfillWorkouts]=useState([]);
+  const [backfillDone,setBackfillDone]=useState(false);
+  const [backfillSaving,setBackfillSaving]=useState(false);
+
+  // Last 7 days excluding today
+  const backfillDates=Array.from({length:7},(_,i)=>{
+    const d=new Date();
+    d.setDate(d.getDate()-(i+1));
+    return d.toISOString().split("T")[0];
+  });
+
+  const toggleBackfillWorkout=w=>setBackfillWorkouts(s=>s.find(x=>x.id===w.id)?s.filter(x=>x.id!==w.id):[...s,w]);
+
+  const saveBackfill=async()=>{
+    if(!backfillDate||backfillWorkouts.length===0)return;
+    setBackfillSaving(true);
+    const time="12:00 PM";
+    const icons=backfillWorkouts.map(w=>w.icon).join("");
+    const labels=backfillWorkouts.map(w=>w.label).join(" + ");
+    const entry={done:true,workouts:backfillWorkouts.map(w=>({id:w.id,icon:w.icon,label:w.label})),workoutIcon:icons,workoutLabel:labels,note:"(backfilled)",time,ts:new Date(backfillDate+"T12:00:00").getTime()};
+    const updated={...history,[backfillDate]:{...(history[backfillDate]||{}),[currentUser]:entry}};
+    await onSaveBackfill(updated);
+    setBackfillDate("");setBackfillWorkouts([]);setBackfillDone(true);
+    setTimeout(()=>setBackfillDone(false),2500);
+    setBackfillSaving(false);
+  };
+
+  // Longest streak ever
+  const longestStreak=(()=>{
+    let best=0,cur=0;
+    const base=new Date();
+    for(let i=365;i>=0;i--){
+      const d=new Date(base);d.setDate(base.getDate()-i);
+      const k=d.toISOString().split("T")[0];
+      if(isRestDay(k,profile))continue;
+      if(history[k]?.[currentUser]?.done){cur++;best=Math.max(best,cur);}
+      else cur=0;
+    }
+    return best;
+  })();
+
+  const tabs=[{id:"stats",label:"STATS"},{id:"body",label:"BODY"},{id:"backfill",label:"BACKFILL"},{id:"rest",label:"REST DAYS"},{id:"pin",label:"PIN"}];
 
   return(
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -1030,114 +1073,185 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
           ))}
         </div>
 
-        {/* STATS tab */}
-        {tab==="stats"&&(
-          <div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-              {[["🔥","Current Streak",`${streak} days`],["💪","Total Workouts",total],["📅","This Month",Object.keys(history).filter(d=>{const m=new Date();return d.startsWith(`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,"0")}`)&&history[d]?.[currentUser]?.done}).length],["⚡","Best Workout",Object.values(history).map(d=>d?.[currentUser]?.workoutLabel).filter(Boolean).reduce((a,b,_,arr)=>arr.filter(x=>x===b).length>arr.filter(x=>x===a).length?b:a,"—")||"—"]].map(([icon,label,val])=>(
-                <div key={label} style={{padding:"14px",background:"var(--bg3)",borderRadius:14,border:"1px solid var(--border)",textAlign:"center"}}>
-                  <div style={{fontSize:24,marginBottom:4}}>{icon}</div>
-                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:1}}>{val}</div>
-                  <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{label}</div>
-                </div>
-              ))}
-            </div>
-            {profile?.personalGoal&&(
-              <div style={{padding:"12px 14px",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.25)",borderRadius:12}}>
-                <div style={{fontSize:11,color:"var(--muted)",marginBottom:4}}>MY GOAL</div>
-                <div style={{fontSize:14,color:"var(--text)"}}>🎯 {profile.personalGoal}</div>
-              </div>
-            )}
-          </div>
-        )}
+        {/* ── TAB CONTENT — fixed min height so modal doesn't jump ── */}
+        <div style={{minHeight:320}}>
 
-        {/* WEIGHT tab */}
-        {tab==="weight"&&(
-          <div>
-            <div style={{fontSize:12,color:"var(--muted)",marginBottom:10}}>Private — only you can see this.</div>
-            <div style={{display:"flex",gap:8,marginBottom:16}}>
-              <input className="input" type="number" placeholder="Enter weight..." value={weight} onChange={e=>setWeight(e.target.value)} style={{flex:1}} onKeyDown={e=>e.key==="Enter"&&logWeight()}/>
-              <select className="input" value={weightUnit} onChange={e=>setWeightUnit(e.target.value)} style={{width:70,appearance:"none",textAlign:"center"}}>
-                <option>lbs</option><option>kg</option>
-              </select>
-              <button onClick={logWeight} disabled={!weight} style={{padding:"10px 14px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13}}>LOG</button>
-            </div>
-            {weightLog.length===0?(
-              <div style={{textAlign:"center",padding:"20px",color:"var(--muted)",fontSize:13}}>No weight entries yet.</div>
-            ):(
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {weightLog.map((e,i)=>(
-                  <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)"}}>
-                    <span style={{fontSize:14,fontWeight:600}}>{e.w} {e.unit}</span>
-                    <span style={{fontSize:12,color:"var(--muted)"}}>{fmtDate(e.date)}</span>
+          {/* STATS tab */}
+          {tab==="stats"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {[
+                  ["🔥","Current Streak",`${streak} days`],
+                  ["🏆","Longest Streak",`${longestStreak} days`],
+                  ["💪","Total Workouts",total],
+                  ["📅","This Month",Object.keys(history).filter(d=>{const m=new Date();return d.startsWith(`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,"0")}`)&&history[d]?.[currentUser]?.done}).length],
+                ].map(([icon,label,val])=>(
+                  <div key={label} style={{padding:"14px",background:"var(--bg3)",borderRadius:14,border:"1px solid var(--border)",textAlign:"center"}}>
+                    <div style={{fontSize:24,marginBottom:4}}>{icon}</div>
+                    <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:1}}>{val}</div>
+                    <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{label}</div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        )}
-
-        {/* GOAL tab */}
-        {tab==="goal"&&(
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            <div style={{fontSize:12,color:"var(--muted)"}}>Set a personal goal visible to the whole pack on the Pack tab.</div>
-            <textarea className="input" rows={3} placeholder="e.g. Run a 5K by June, lose 15 lbs, bench 225..." value={goal} onChange={e=>setGoal(e.target.value)} maxLength={120} style={{resize:"none"}}/>
-            <button className="btn-primary" onClick={saveGoal} disabled={!goal.trim()}>{goalSaved?"✓ SAVED!":"SAVE GOAL"}</button>
-            {profile?.personalGoal&&<button className="btn-ghost" onClick={()=>{setGoal("");onSaveGoal("");}}>Clear goal</button>}
-          </div>
-        )}
-
-        {/* REST DAYS tab */}
-        {tab==="rest"&&(
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>
-            {challenges.some(ch=>ch.status==="active"&&Object.keys(ch.participants||{}).includes(currentUser))?(
-              <div style={{padding:"14px",background:"rgba(255,107,53,0.1)",border:"1px solid rgba(255,107,53,0.3)",borderRadius:12,textAlign:"center"}}>
-                <div style={{fontSize:24,marginBottom:6}}>🔒</div>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--orange)",marginBottom:4}}>LOCKED DURING CHALLENGE</div>
-                <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.5}}>You can't change rest days while you're in an active challenge. Finish or forfeit all active challenges first.</div>
-              </div>
-            ):(
-              <>
-            <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6}}>Pick your personal rest days. Minimum 2 required. Your streak and challenges will skip these days.<br/><br/><span style={{color:"var(--orange)"}}>Note: the gym is always closed on weekends regardless of your rest days.</span></div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
-              {DAY_NAMES.map((name,i)=>{
-                const sel=restDays.includes(i);
-                const isWE=i===0||i===6;
-                return(
-                  <button key={i} onClick={()=>toggleRestDay(i)} style={{
-                    padding:"10px 4px",borderRadius:10,cursor:"pointer",textAlign:"center",
-                    background:sel?"rgba(124,92,191,0.25)":"var(--bg3)",
-                    border:sel?"1px solid var(--accent)":"1px solid var(--border)",
-                    color:sel?"var(--accent2)":isWE?"var(--muted)":"var(--text)",
-                    fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,
-                    opacity:!sel&&restDays.length>=2&&!restDays.includes(i)?0.6:1,
-                  }}>
-                    <div>{name}</div>
-                    {sel&&<div style={{fontSize:9,marginTop:2}}>REST</div>}
-                  </button>
-                );
-              })}
+              {profile?.personalGoal&&(
+                <div style={{padding:"12px 14px",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.25)",borderRadius:12}}>
+                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:4}}>MY GOAL</div>
+                  <div style={{fontSize:14,color:"var(--text)"}}>🎯 {profile.personalGoal}</div>
+                </div>
+              )}
             </div>
-            <div style={{fontSize:12,color:"var(--muted)"}}>Selected: {restDays.map(d=>DAY_NAMES[d]).join(", ")} ({restDays.length} days)</div>
-            <button className="btn-primary" onClick={saveRestDays}>{restSaved?"✓ SAVED!":"SAVE REST DAYS"}</button>
-              </>
-            )}
-          </div>
-        )}
+          )}
 
-        {/* PIN tab */}
-        {tab==="pin"&&(
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            <div style={{fontSize:12,color:"var(--muted)"}}>Change your 4-digit login PIN.</div>
-            <input className="input" type="password" inputMode="numeric" placeholder="New 4-digit PIN" value={pin1} onChange={e=>setPin1(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
-            <input className="input" type="password" inputMode="numeric" placeholder="Confirm new PIN" value={pin2} onChange={e=>setPin2(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
-            {pinErr&&<div style={{color:"var(--red)",fontSize:13}}>{pinErr}</div>}
-            {pinDone&&<div style={{color:"var(--green)",fontSize:13}}>✓ PIN updated!</div>}
-            <button className="btn-primary" onClick={changePin} disabled={pin1.length!==4||pin2.length!==4}>UPDATE PIN</button>
-          </div>
-        )}
+          {/* BODY tab — goal + weight combined */}
+          {tab==="body"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {/* Personal goal */}
+              <div>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)",marginBottom:8}}>MY GOAL</div>
+                <div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>Visible to the whole pack on the Pack tab.</div>
+                <textarea className="input" rows={3} placeholder="e.g. Run a 5K by June, lose 15 lbs, bench 225..." value={goal} onChange={e=>setGoal(e.target.value)} maxLength={120} style={{resize:"none",marginBottom:8}}/>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="btn-primary" onClick={saveGoal} disabled={!goal.trim()} style={{flex:1}}>{goalSaved?"✓ SAVED!":"SAVE GOAL"}</button>
+                  {profile?.personalGoal&&<button className="btn-ghost" onClick={()=>{setGoal("");onSaveGoal("");}} style={{flex:1}}>Clear</button>}
+                </div>
+              </div>
+              <div style={{height:1,background:"var(--border)"}}/>
+              {/* Weight log */}
+              <div>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)",marginBottom:8}}>WEIGHT LOG <span style={{fontSize:10,color:"var(--muted)",letterSpacing:1}}>— private, only you see this</span></div>
+                <div style={{display:"flex",gap:8,marginBottom:10}}>
+                  <input className="input" type="number" placeholder="Enter weight..." value={weight} onChange={e=>setWeight(e.target.value)} style={{flex:1}} onKeyDown={e=>e.key==="Enter"&&logWeight()}/>
+                  <select className="input" value={weightUnit} onChange={e=>setWeightUnit(e.target.value)} style={{width:70,appearance:"none",textAlign:"center"}}>
+                    <option>lbs</option><option>kg</option>
+                  </select>
+                  <button onClick={logWeight} disabled={!weight} style={{padding:"10px 14px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13}}>LOG</button>
+                </div>
+                {weightLog.length===0?(
+                  <div style={{textAlign:"center",padding:"16px",color:"var(--muted)",fontSize:13}}>No weight entries yet.</div>
+                ):(
+                  <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:180,overflowY:"auto"}}>
+                    {weightLog.map((e,i)=>(
+                      <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)"}}>
+                        <span style={{fontSize:14,fontWeight:600}}>{e.w} {e.unit}</span>
+                        <span style={{fontSize:12,color:"var(--muted)"}}>{fmtDate(e.date)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
-        <button className="btn-ghost" style={{width:"100%",marginTop:12}} onClick={onClose}>Close</button>
+          {/* BACKFILL tab */}
+          {tab==="backfill"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6}}>
+                Log workouts from the last 7 days to keep your streak accurate.
+              </div>
+              <div>
+                <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Select date</div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {backfillDates.map(d=>{
+                    const alreadyLogged=!!(history[d]?.[currentUser]?.done);
+                    const isSelected=backfillDate===d;
+                    const isRest=isRestDay(d,profile);
+                    return(
+                      <button key={d} onClick={()=>{if(!alreadyLogged)setBackfillDate(d);}} style={{
+                        display:"flex",alignItems:"center",justifyContent:"space-between",
+                        padding:"10px 14px",borderRadius:12,cursor:alreadyLogged?"default":"pointer",
+                        background:isSelected?"rgba(124,92,191,0.2)":"var(--bg3)",
+                        border:isSelected?"1px solid var(--accent)":"1px solid var(--border)",
+                        opacity:alreadyLogged?0.5:1,
+                      }}>
+                        <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1,color:isSelected?"var(--accent2)":"var(--text)"}}>{fmtDate(d)}</span>
+                        <span style={{fontSize:12,color:alreadyLogged?"var(--green)":isRest?"var(--muted)":"var(--muted)"}}>
+                          {alreadyLogged?"✓ logged":isRest?"rest day":"tap to select"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {backfillDate&&(
+                <div>
+                  <div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>What did you do on {fmtDate(backfillDate)}?</div>
+                  <div className="workout-grid">
+                    {WORKOUT_TYPES.map(w=>{
+                      const sel=!!backfillWorkouts.find(x=>x.id===w.id);
+                      return(
+                        <button key={w.id} className={`workout-tile ${sel?"selected":""}`} onClick={()=>toggleBackfillWorkout(w)}>
+                          <div style={{fontSize:22,marginBottom:3}}>{w.icon}</div>
+                          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:sel?"var(--accent2)":"var(--muted)"}}>{w.label}</div>
+                          {sel&&<div style={{position:"absolute",top:4,right:4,width:14,height:14,borderRadius:"50%",background:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff"}}>✓</div>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {backfillDone&&<div style={{padding:"10px 14px",background:"rgba(46,204,113,0.1)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:10,fontSize:13,color:"var(--green)",textAlign:"center"}}>✓ Logged!</div>}
+              <button className="btn-primary" onClick={saveBackfill} disabled={!backfillDate||backfillWorkouts.length===0||backfillSaving}>
+                {backfillSaving?"SAVING...":"LOG PAST WORKOUT 💪"}
+              </button>
+            </div>
+          )}
+
+          {/* REST DAYS tab */}
+          {tab==="rest"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {challenges.some(ch=>ch.status==="active"&&Object.keys(ch.participants||{}).includes(currentUser)&&ch.participants[currentUser]?.status==="accepted")?(
+                <div style={{padding:"14px",background:"rgba(255,107,53,0.1)",border:"1px solid rgba(255,107,53,0.3)",borderRadius:12,textAlign:"center"}}>
+                  <div style={{fontSize:24,marginBottom:6}}>🔒</div>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--orange)",marginBottom:4}}>LOCKED DURING CHALLENGE</div>
+                  <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.5}}>You can't change rest days while in an active challenge. Finish or forfeit all active challenges first.</div>
+                </div>
+              ):(
+                <>
+                  <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6}}>
+                    Pick your personal rest days. Minimum 2 required.<br/>
+                    <span style={{color:"var(--orange)"}}>Note: the gym is always closed on weekends.</span>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
+                    {DAY_NAMES.map((name,i)=>{
+                      const sel=restDays.includes(i);
+                      const isWE=i===0||i===6;
+                      return(
+                        <button key={i} onClick={()=>toggleRestDay(i)} style={{
+                          padding:"10px 4px",borderRadius:10,cursor:"pointer",textAlign:"center",
+                          background:sel?"rgba(124,92,191,0.25)":"var(--bg3)",
+                          border:sel?"1px solid var(--accent)":"1px solid var(--border)",
+                          color:sel?"var(--accent2)":isWE?"var(--muted)":"var(--text)",
+                          fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,
+                          opacity:!sel&&restDays.length>=2?0.6:1,
+                        }}>
+                          <div>{name}</div>
+                          {sel&&<div style={{fontSize:9,marginTop:2}}>REST</div>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{fontSize:12,color:"var(--muted)"}}>Selected: {restDays.map(d=>DAY_NAMES[d]).join(", ")} ({restDays.length} days)</div>
+                  <button className="btn-primary" onClick={saveRestDays}>{restSaved?"✓ SAVED!":"SAVE REST DAYS"}</button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* PIN tab */}
+          {tab==="pin"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{fontSize:12,color:"var(--muted)"}}>Change your 4-digit login PIN.</div>
+              <input className="input" type="password" inputMode="numeric" placeholder="New 4-digit PIN" value={pin1} onChange={e=>setPin1(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
+              <input className="input" type="password" inputMode="numeric" placeholder="Confirm new PIN" value={pin2} onChange={e=>setPin2(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} style={{letterSpacing:8,textAlign:"center",fontSize:22}}/>
+              {pinErr&&<div style={{color:"var(--red)",fontSize:13}}>{pinErr}</div>}
+              {pinDone&&<div style={{color:"var(--green)",fontSize:13}}>✓ PIN updated!</div>}
+              <button className="btn-primary" onClick={changePin} disabled={pin1.length!==4||pin2.length!==4}>UPDATE PIN</button>
+            </div>
+          )}
+
+        </div>{/* end min-height wrapper */}
+
+                <button className="btn-ghost" style={{width:"100%",marginTop:12}} onClick={onClose}>Close</button>
       </div>
     </div>
   );
@@ -1249,6 +1363,9 @@ export default function App(){
   const handleDeletePackGoal=async id=>{
     await fsSet("wolfpack/packgoals",{list:packGoals.filter(g=>g.id!==id)});
   };
+  const handleSaveBackfill=async updatedHistory=>{
+    await fsSet("wolfpack/workouts",{byDate:updatedHistory});
+  };
   const handleSaveWeight=async wl=>{
     const np={...profiles,[currentUser]:{...profiles[currentUser],weightLog:wl}};
     await fsSet("wolfpack/profiles",{users:np});setProfiles(np);
@@ -1349,7 +1466,7 @@ export default function App(){
       </div>
       <nav className="nav">{NAV.map(n=><button key={n.id} className={`nav-btn ${view===n.id?"active":""}`} onClick={()=>setView(n.id)}><span className="icon">{n.icon}</span><span>{n.label}</span></button>)}</nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout}/>}
-      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onSaveProfile={np=>setProfiles(np)}/>}
+      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onClose={()=>setAdminOpen(false)}/>}
     </div>
   );
