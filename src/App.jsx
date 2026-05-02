@@ -280,15 +280,17 @@ function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteA
             <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px"}}>
               <AvatarDisplay profile={profiles[m]} size={36}/>
               <div style={{flex:1,fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:1}}>{m}</div>
-              <button onClick={()=>setBackfillMember(backfillMember===m?null:m)} style={{padding:"6px 10px",background:"rgba(46,204,113,0.15)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:8,cursor:"pointer",color:"var(--green)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,marginRight:4}}>
-                BACKFILL
-              </button>
-              <button onClick={()=>doReset(m)} disabled={!!busy} style={{padding:"6px 10px",background:"rgba(124,92,191,0.15)",border:"1px solid rgba(124,92,191,0.3)",borderRadius:8,cursor:"pointer",color:"var(--accent2)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,marginRight:4}}>
-                {busy===`r${m}`?"...":resetDone.includes(m)?"✓":"RESET PIN"}
-              </button>
-              <button onClick={()=>setConfirmDel(confirmDel===m?null:m)} disabled={!!busy} style={{padding:"6px 10px",background:"rgba(231,76,60,0.15)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,cursor:"pointer",color:"var(--red)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
-                DELETE
-              </button>
+              <div style={{display:"flex",gap:4}}>
+                <button onClick={()=>setBackfillMember(backfillMember===m?null:m)} style={{padding:"5px 8px",background:"rgba(46,204,113,0.15)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:8,cursor:"pointer",color:"var(--green)",fontSize:10,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                  FILL
+                </button>
+                <button onClick={()=>doReset(m)} disabled={!!busy} style={{padding:"5px 8px",background:"rgba(124,92,191,0.15)",border:"1px solid rgba(124,92,191,0.3)",borderRadius:8,cursor:"pointer",color:"var(--accent2)",fontSize:10,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                  {busy===`r${m}`?"...":resetDone.includes(m)?"✓":"PIN"}
+                </button>
+                <button onClick={()=>setConfirmDel(confirmDel===m?null:m)} disabled={!!busy} style={{padding:"5px 8px",background:"rgba(231,76,60,0.15)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,cursor:"pointer",color:"var(--red)",fontSize:10,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                  DEL
+                </button>
+              </div>
             </div>
 
             {/* Backfill panel */}
