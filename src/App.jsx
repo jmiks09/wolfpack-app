@@ -586,7 +586,7 @@ function ChallengeCard({challenge:c,currentUser,members,profiles,onLog,onDelete,
   const myOwed=penalties[currentUser]?.totalOwed||0;
   const atForfeitCap=c.forfeitCap&&myOwed>=c.forfeitCap;
 
-  const rows=parts.map(m=>{
+  const rows=parts.filter(m=>c.participants[m]?.status!=="pending").map(m=>{
     const mGoal=isDR&&c.startDate&&c.endDate?getWorkoutDays(c.startDate,c.endDate,profiles?.[m]).length:c.goal;
     const prog=isDR&&c.startDate&&c.endDate?getWorkoutDays(c.startDate,todayStr()<c.endDate?todayStr():c.endDate,profiles?.[m]).filter(d=>history[d]?.[m]?.done).length:(c.participants[m]?.progress||0);
     const forfeited=c.participants[m]?.forfeited||false;
@@ -608,6 +608,12 @@ function ChallengeCard({challenge:c,currentUser,members,profiles,onLog,onDelete,
             {isDR?`📅 ${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`:`Goal: ${c.goal} ${c.unit}`}
             {isDR&&c.maxRestDays!=null&&<span style={{color:"var(--muted)"}}> · max {c.maxRestDays} rest days/week</span>}
             {c.penalty&&<span style={{color:"var(--orange)"}}> · {c.penalty}{c.penaltyAmt>0?` ($${c.penaltyAmt}/miss)`:""}</span>}
+          {/* Show pending invites count */}
+          {Object.values(c.participants||{}).some(p=>p.status==="pending")&&(
+            <div style={{marginTop:4,fontSize:11,color:"var(--muted)"}}>
+              ⏳ {Object.values(c.participants).filter(p=>p.status==="pending").length} invite(s) pending
+            </div>
+          )}
             {c.forfeitCap>0&&<span style={{color:"var(--red)"}}> · forfeit cap ${c.forfeitCap}</span>}
           </div>
         </div>
@@ -701,7 +707,48 @@ function ChallengeCard({challenge:c,currentUser,members,profiles,onLog,onDelete,
   );
 }
 
-function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,onLogProgress,onDelete,onEditChallenge,onForfeit}){
+function ChallengeInvites({currentUser,challenges,profiles,onAccept,onDecline,onOpenProfile}){
+  const pending=challenges.filter(c=>c.status==="active"&&c.participants?.[currentUser]?.status==="pending");
+  if(pending.length===0)return null;
+  return(
+    <div style={{margin:"0 0 4px"}}>
+      {pending.map(c=>(
+        <div key={c.id} style={{margin:"0 16px 10px",padding:"14px",background:"rgba(124,92,191,0.08)",border:"1px solid rgba(124,92,191,0.35)",borderRadius:16}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <span style={{fontSize:20}}>⚔️</span>
+            <div style={{flex:1}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:2}}>{c.title}</div>
+              <div style={{fontSize:11,color:"var(--muted)"}}>Invited by {c.createdBy}</div>
+            </div>
+          </div>
+          {/* Challenge details */}
+          <div style={{fontSize:12,color:"var(--muted)",marginBottom:8,lineHeight:1.6}}>
+            {c.goalType==="dateRange"?`📅 ${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`:`🎯 Goal: ${c.goal} ${c.unit}`}
+            {c.maxRestDays!=null&&<span> · max {c.maxRestDays} rest days/week</span>}
+            {c.penaltyAmt>0&&<span style={{color:"var(--orange)"}}> · ${c.penaltyAmt}/miss</span>}
+            {c.forfeitCap>0&&<span style={{color:"var(--red)"}}> · forfeit cap ${c.forfeitCap}</span>}
+          </div>
+          {/* Rest day reminder */}
+          <div style={{padding:"8px 10px",background:"rgba(255,107,53,0.1)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:8,marginBottom:10,fontSize:12,color:"var(--orange)",lineHeight:1.5}}>
+            ⚠️ Before accepting, make sure your rest days are up to date — they'll be locked once you join.{" "}
+            <span onClick={onOpenProfile} style={{textDecoration:"underline",cursor:"pointer",fontWeight:600}}>Update rest days →</span>
+          </div>
+          {/* Accept / Decline */}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>onAccept(c.id,currentUser)} style={{flex:1,padding:"10px",background:"linear-gradient(135deg,var(--accent),var(--orange))",border:"none",borderRadius:10,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1}}>
+              ✓ ACCEPT
+            </button>
+            <button onClick={()=>onDecline(c.id,currentUser)} style={{flex:1,padding:"10px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,cursor:"pointer",color:"var(--muted)",fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1}}>
+              ✕ DECLINE
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,onLogProgress,onDelete,onEditChallenge,onForfeit,onAccept,onDecline,onOpenProfile}){
   const [open,setOpen]=useState(false);
   const defEnd=()=>{const e=new Date();e.setDate(e.getDate()+30);return e.toISOString().split("T")[0];};
   const [form,setForm]=useState({title:"",useDateRange:false,goal:30,unit:"reps",startDate:todayStr(),endDate:defEnd(),penalty:"",penaltyAmt:"",forfeitCap:"",maxRestDays:2,participants:[]});
@@ -711,16 +758,24 @@ function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,on
     if(!form.title.trim())return;
     const parts=form.participants.length>0?form.participants:members;
     const goal=form.useDateRange?getDateRange(form.startDate,form.endDate).length:Number(form.goal);
-    onAdd({id:Date.now().toString(),title:form.title.trim(),goalType:form.useDateRange?"dateRange":"amount",goal,unit:form.useDateRange?"days":form.unit,startDate:form.useDateRange?form.startDate:null,endDate:form.useDateRange?form.endDate:null,penalty:form.penalty.trim(),penaltyAmt:form.penaltyAmt?Number(form.penaltyAmt):0,forfeitCap:form.forfeitCap?Number(form.forfeitCap):0,maxRestDays:form.useDateRange?Number(form.maxRestDays):null,createdBy:currentUser,createdAt:Date.now(),participants:parts.reduce((a,m)=>({...a,[m]:{progress:0,done:false}}),{}),status:"active"});
+    // Creator is auto-enrolled, everyone else gets a pending invite
+    const participantMap=parts.reduce((a,m)=>({
+      ...a,
+      [m]: m===currentUser
+        ? {progress:0,done:false,status:"accepted"}
+        : {progress:0,done:false,status:"pending"}
+    }),{});
+    onAdd({id:Date.now().toString(),title:form.title.trim(),goalType:form.useDateRange?"dateRange":"amount",goal,unit:form.useDateRange?"days":form.unit,startDate:form.useDateRange?form.startDate:null,endDate:form.useDateRange?form.endDate:null,penalty:form.penalty.trim(),penaltyAmt:form.penaltyAmt?Number(form.penaltyAmt):0,forfeitCap:form.forfeitCap?Number(form.forfeitCap):0,maxRestDays:form.useDateRange?Number(form.maxRestDays):null,createdBy:currentUser,createdAt:Date.now(),participants:participantMap,status:"active"});
     setOpen(false);
   };
   const active=challenges.filter(c=>c.status==="active"),done=challenges.filter(c=>c.status!=="active");
   return(
     <div>
       <div style={{padding:"12px 16px 8px"}}><button className="btn-primary" onClick={()=>setOpen(true)}>⚔️ CREATE CHALLENGE</button></div>
-      {active.length===0&&done.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}><div style={{fontSize:40,marginBottom:12}}>⚔️</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2}}>NO ACTIVE CHALLENGES</div></div>}
-      {active.length>0&&<div className="section-label">ACTIVE</div>}
-      {active.map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} onForfeit={onForfeit} history={history}/>)}
+      <ChallengeInvites currentUser={currentUser} challenges={challenges} profiles={profiles} onAccept={onAccept} onDecline={onDecline} onOpenProfile={onOpenProfile}/>
+      {active.filter(c=>c.participants?.[currentUser]?.status!=="pending").length===0&&done.length===0&&challenges.filter(c=>c.participants?.[currentUser]?.status==="pending").length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}><div style={{fontSize:40,marginBottom:12}}>⚔️</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2}}>NO ACTIVE CHALLENGES</div></div>}
+      {active.filter(c=>c.participants?.[currentUser]?.status!=="pending").length>0&&<div className="section-label">ACTIVE</div>}
+      {active.filter(c=>c.participants?.[currentUser]?.status!=="pending").map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} onForfeit={onForfeit} history={history}/>)}
       {done.length>0&&<div className="section-label" style={{marginTop:8}}>COMPLETED</div>}
       {done.map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} onForfeit={onForfeit} history={history} completed/>)}
       {open&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setOpen(false)}><div className="modal">
@@ -1184,6 +1239,24 @@ export default function App(){
   };
   const handleDelChallenge=async id=>{await fsSet("wolfpack/challenges",{list:challenges.filter(c=>c.id!==id)});showToast("Challenge removed.");};
   const handleEditChallenge=async u=>{await fsSet("wolfpack/challenges",{list:challenges.map(c=>c.id===u.id?u:c)});showToast("Challenge updated!");};
+  const handleAcceptChallenge=async(challengeId,member)=>{
+    const newList=challenges.map(c=>{
+      if(c.id!==challengeId)return c;
+      return{...c,participants:{...c.participants,[member]:{...c.participants[member],status:"accepted"}}};
+    });
+    await fsSet("wolfpack/challenges",{list:newList});
+    showToast("Challenge accepted! Rest days are now locked. ⚔️");
+  };
+  const handleDeclineChallenge=async(challengeId,member)=>{
+    const newList=challenges.map(c=>{
+      if(c.id!==challengeId)return c;
+      const np={...c.participants};
+      delete np[member];
+      return{...c,participants:np};
+    });
+    await fsSet("wolfpack/challenges",{list:newList});
+    showToast("Challenge declined.");
+  };
   const handleForfeit=async(challengeId,member)=>{
     const newList=challenges.map(c=>{
       if(c.id!==challengeId)return c;
@@ -1212,7 +1285,7 @@ export default function App(){
         {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)}/>}
         {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
-        {view==="challenges"&&<ChallengesTab currentUser={currentUser} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit}/>}
+        {view==="challenges"&&<ChallengesTab currentUser={currentUser} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)}/>}
         {view==="stats"&&<StatsTab currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed}/>}
       </div>
       <nav className="nav">{NAV.map(n=><button key={n.id} className={`nav-btn ${view===n.id?"active":""}`} onClick={()=>setView(n.id)}><span className="icon">{n.icon}</span><span>{n.label}</span></button>)}</nav>
