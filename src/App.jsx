@@ -12,10 +12,115 @@ const QUOTES = [
   "Your only competition is who you were yesterday.",
   "The pain you feel today is the strength you feel tomorrow.",
   "Don't stop when you're tired. Stop when you're done.",
-  "One workout at a time. One day at a time.","Earn it.","Make yourself proud.",
+  "One workout at a time. One day at a time.",
+  "Earn it.", "Make yourself proud.",
   "The wolf on the hill is never as hungry as the wolf climbing it.",
-  "Train insane or remain the same.","Sweat is just fat crying.",
+  "Train insane or remain the same.", "Sweat is just fat crying.",
   "Success starts with self-discipline.",
+  "Wake up. Work out. Look hot. Kick ass.",
+  "Push yourself because no one else is going to do it for you.",
+  "Motivation gets you started. Habit keeps you going.",
+  "You don't have to be extreme. Just consistent.",
+  "Results happen over time, not overnight. Work hard, stay consistent.",
+  "The clock is ticking. Are you becoming the person you want to be?",
+  "Fall in love with the process and the results will come.",
+  "It never gets easier. You just get better.",
+  "Showing up is half the battle.",
+  "Be stronger than your excuses.",
+  "Your body can stand almost anything. It's your mind you have to convince.",
+  "The difference between try and triumph is a little umph.",
+  "Pain is weakness leaving the body.",
+  "If it doesn't challenge you, it doesn't change you.",
+  "You are one workout away from a good mood.",
+  "Don't wish for it. Work for it.",
+  "Suffer the pain of discipline or suffer the pain of regret.",
+  "Champions train. Legends push through pain.",
+  "Mental strength is what separates the good from the great.",
+  "Doubt kills more dreams than failure ever will.",
+  "The mind gives up before the body does.",
+  "Strong mind. Strong body. Strong life.",
+  "Embrace the grind. The grind builds character.",
+  "Do something today your future self will thank you for.",
+  "What hurts today makes you stronger tomorrow.",
+  "Small steps every day lead to big changes over time.",
+  "You don't need a new year. You just need a new day.",
+  "Consistency is the bridge between goals and achievement.",
+  "One more rep. One more set. One more day.",
+  "Discipline is choosing between what you want now and what you want most.",
+  "The only bad workout is the one that didn't happen.",
+  "Progress, not perfection.",
+  "Show up even when you don't feel like it. Especially then.",
+  "You don't always have to feel like it. You just have to do it.",
+  "Every day you train, you bank a deposit into your future.",
+  "Grind when no one is watching.",
+  "The last few reps are where champions are made.",
+  "It's not about being the best. It's about being better than yesterday.",
+  "Stop stopping. Start starting.",
+  "Ninety percent of success is just showing up.",
+  "Alone we are strong. Together we are unstoppable.",
+  "Iron sharpens iron.",
+  "Surround yourself with people who push you.",
+  "A wolf doesn't lose sleep over the opinions of sheep.",
+  "The pack is only as strong as its weakest link. Be the strongest link.",
+  "Find your tribe. Lift each other up.",
+  "When the pack runs together, no one gets left behind.",
+  "Accountability is the glue that holds goals together.",
+  "Hard work beats talent when talent doesn't work hard.",
+  "Celebrate others' wins. Compete with yourself.",
+  "Your body is your most priceless possession. Take care of it.",
+  "Fitness is not a destination. It's a way of life.",
+  "Take care of your body. It's the only place you have to live.",
+  "Sore today. Strong tomorrow.",
+  "Strive for progress, not perfection.",
+  "No shortcuts. No excuses. No regrets.",
+  "Every rep counts. Every meal matters. Every choice adds up.",
+  "Lift heavy. Eat clean. Sleep well. Repeat.",
+  "The gym is my therapy.",
+  "Train like a beast. Look like a beauty.",
+  "Strong is the new everything.",
+  "Your only limit is you.",
+  "Eat well. Train hard. Think positive.",
+  "Fitness is not about being better than someone else. It's about being better than you used to be.",
+  "No pain, no gain. Embrace it.",
+  "Wake up with determination. Go to bed with satisfaction.",
+  "Hustle for that muscle.",
+  "The harder you work, the luckier you get.",
+  "Outwork yesterday.",
+  "Champions are made from something deep inside — a desire, a dream, a vision.",
+  "Work hard in silence. Let success make the noise.",
+  "You didn't come this far to only come this far.",
+  "Success is what comes after you stop making excuses.",
+  "Keep going. Your future self is counting on you.",
+  "Greatness is earned, never given.",
+  "Be the hardest worker in the room.",
+  "Show up. Suit up. Never give up.",
+  "The grind never stops.",
+  "You have to be odd to be number one.",
+  "Just one more.",
+  "Do the work.",
+  "Stay the course.",
+  "Get after it.",
+  "No days off.",
+  "Be relentless.",
+  "Earn your rest.",
+  "Built not born.",
+  "Rise and grind.",
+  "Stay hungry.",
+  "Run the day or the day runs you.",
+  "First in. Last out.",
+  "Beast mode activated.",
+  "Make it count.",
+  "Attack the day.",
+  "Your habits will determine your future.",
+  "You are what you repeatedly do.",
+  "The secret of getting ahead is getting started.",
+  "Energy and persistence conquer all things.",
+  "The body achieves what the mind believes.",
+  "Good things come to those who sweat.",
+  "Strength does not come from the body. It comes from the will.",
+  "You have to expect things of yourself before you can do them.",
+  "There are no shortcuts to any place worth going.",
+  "The successful warrior is the average man with laser-like focus.",
 ];
 const BADGES = [
   {id:"first_blood",icon:"🩸",label:"First Blood",desc:"Log your first workout"},
@@ -30,6 +135,10 @@ const BADGES = [
 ];
 const WOLF_AVATARS = ["🐺","🦊","🦁","🐻","🐯","🦝","🐸","🦅","🦈","🐲","🦄","🦋"];
 const GYM_HOURS = Array.from({length:14},(_,i)=>{const h=6+i;return h<12?`${h}:00 AM`:h===12?`12:00 PM`:`${h-12}:00 PM`;});
+const REACTIONS = ["💪","🔥","👑","🐺","⚡","🙌"];
+const MILESTONES = [7,14,30,60,100]; // streak days that trigger auto-post
+const SESSION_MILESTONES = [50,100,200,500]; // session counts that trigger auto-post
+
 const NAV=[{id:"pack",icon:"🐺",label:"PACK"},{id:"feed",icon:"💬",label:"FEED"},{id:"gym",icon:"🏋️",label:"GYM"},{id:"challenges",icon:"⚔️",label:"CHALLENGES"},{id:"stats",icon:"📊",label:"STATS"}];
 
 const todayStr=()=>new Date().toISOString().split("T")[0];
@@ -54,7 +163,15 @@ function getTotalWorkouts(h,n){
     return sum+sessions;
   },0);
 }
-function getQuote(){return QUOTES[new Date().getDate()%QUOTES.length];}
+function getQuote(){
+  // Rotate by day of year so it changes daily and uses the full quote list
+  const now=new Date();
+  const start=new Date(now.getFullYear(),0,0);
+  const diff=now-start;
+  const oneDay=1000*60*60*24;
+  const dayOfYear=Math.floor(diff/oneDay);
+  return QUOTES[dayOfYear%QUOTES.length];
+}
 function calcPenalties(c,h,profiles){
   if(!c.penaltyAmt||c.penaltyAmt<=0||!c.startDate||!c.endDate)return{};
   const parts=Object.keys(c.participants||{});
@@ -417,7 +534,7 @@ function PackGoals({currentUser,packGoals,onAddGoal,onCheer,onDeleteGoal}){
   );
 }
 
-function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile}){
+function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,reactions,onReact,weeklyRecap,onDismissRecap}){
   const key=todayStr(),td=sharedData[key]||{},my=td[currentUser],str=getStreak(history,currentUser,profiles[currentUser]),tot=getTotalWorkouts(history,currentUser),we=isRestDay(key,profiles[currentUser]);
   const sorted=[...members].sort((a,b)=>{const sa=getStreak(history,a),sb=getStreak(history,b);if(sb!==sa)return sb-sa;return b===currentUser?1:a===currentUser?-1:0;});
 
@@ -443,7 +560,10 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,a
               <div style={{flex:1}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2,color:"var(--accent2)"}}>✓ {my.workoutLabel?.toUpperCase()}</div><div style={{fontSize:11,color:"var(--muted)"}}>{my.time}</div></div>
               {my.note&&<div style={{fontSize:12,color:"var(--muted)",maxWidth:110,textAlign:"right",fontStyle:"italic"}}>"{my.note}"</div>}
             </div>
-            <button className="btn-ghost" onClick={onLogWorkout} style={{marginTop:10,width:"100%",fontSize:12}}>+ Log Another</button>
+            <div style={{display:"flex",gap:8,marginTop:10}}>
+              <button className="btn-ghost" onClick={onLogWorkout} style={{flex:1,fontSize:12}}>+ Log Another</button>
+              <button onClick={onEditWorkout} style={{padding:"8px 14px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,cursor:"pointer",color:"var(--muted)",fontSize:12}}>✏️ Edit</button>
+            </div>
           </div>
         )}
       </div>
@@ -496,11 +616,54 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,a
               }}>
                 {done?"✓ DONE":restToday?"😴 REST":"○ PENDING"}
               </div>
+              {/* Reactions row */}
+              {!isMe&&(
+                <div style={{position:"absolute",bottom:8,right:12,display:"flex",gap:4}}>
+                  {REACTIONS.map(r=>{
+                    const count=(reactions?.[m]?.[r]||[]).length;
+                    const iReacted=(reactions?.[m]?.[r]||[]).includes(currentUser);
+                    return count>0||true?(
+                      <button key={r} onClick={e=>{e.stopPropagation();onReact(m,r);}} style={{
+                        padding:"2px 6px",borderRadius:20,fontSize:12,cursor:"pointer",
+                        background:iReacted?"rgba(124,92,191,0.25)":"rgba(255,255,255,0.05)",
+                        border:iReacted?"1px solid rgba(124,92,191,0.4)":"1px solid rgba(255,255,255,0.08)",
+                        display:"flex",alignItems:"center",gap:3,
+                      }}>
+                        {r}{count>0&&<span style={{fontSize:10,color:"var(--muted)"}}>{count}</span>}
+                      </button>
+                    ):null;
+                  })}
+                </div>
+              )}
               {isMe&&<div style={{position:"absolute",top:10,right:12,fontSize:11,color:"var(--muted)"}}>👤</div>}
             </div>
           );
         })}
       </div>
+
+      {/* Weekly recap dismissible card */}
+      {weeklyRecap&&!weeklyRecap.dismissed&&(
+        <div style={{margin:"0 16px 12px",padding:"14px 16px",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.3)",borderRadius:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--accent2)"}}>📊 LAST WEEK RECAP</div>
+            <button onClick={onDismissRecap} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:18,lineHeight:1}}>×</button>
+          </div>
+          {weeklyRecap.stats?.map((s,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <AvatarDisplay profile={profiles[s.name]} size={24}/>
+                <span style={{fontSize:13,fontWeight:600}}>{s.name}</span>
+              </div>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <span style={{fontSize:12,color:"var(--muted)"}}>{s.days} days</span>
+                <span style={{fontSize:12,color:s.days>=5?"var(--green)":s.days>=3?"var(--orange)":"var(--red)",fontWeight:700}}>
+                  {s.days>=5?"🔥 Crushed it":s.days>=3?"💪 Solid":s.days>0?"📈 Keep going":"😴 Rest week"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Pack Goals */}
       <PackGoals currentUser={currentUser} packGoals={packGoals} onAddGoal={onAddGoal} onCheer={onCheer} onDeleteGoal={onDeleteGoal}/>
@@ -535,7 +698,8 @@ function FeedPost({post:p, currentUser, profiles, onLike, onDelete, onComment, o
       </div>
 
       {/* Post text */}
-      <div style={{fontSize:15,lineHeight:1.5,marginBottom:12}}>{p.text}</div>
+      {p.text&&<div style={{fontSize:15,lineHeight:1.5,marginBottom:p.photo?8:12}}>{p.text}</div>}
+      {p.photo&&<img src={p.photo} alt="post" style={{width:"100%",borderRadius:10,marginBottom:12,maxHeight:300,objectFit:"cover"}}/>}
 
       {/* Actions row */}
       <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:comments.length>0||showComments?10:0}}>
@@ -594,7 +758,9 @@ function FeedPost({post:p, currentUser, profiles, onLike, onDelete, onComment, o
 function FeedTab({currentUser,profiles,feed,onPost,onLike,onDelete,onComment,onDeleteComment}){
   const [open,setOpen]=useState(false);
   const [text,setText]=useState("");
-  const sub=()=>{if(!text.trim())return;onPost(text.trim());setText("");setOpen(false);};
+  const [photo,setPhoto]=useState(null);
+  const photoRef=useRef();
+  const sub=()=>{if(!text.trim()&&!photo)return;onPost(text.trim(),photo);setText("");setPhoto(null);setOpen(false);};
   return(
     <div>
       <div style={{padding:"12px 16px 8px"}}>
@@ -615,9 +781,20 @@ function FeedTab({currentUser,profiles,feed,onPost,onLike,onDelete,onComment,onD
           <div className="modal">
             <div className="modal-handle"/>
             <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:14}}>POST TO THE PACK</div>
-            <textarea className="input" rows={4} placeholder="What's on your mind, wolf?..."
-              value={text} onChange={e=>setText(e.target.value)} style={{resize:"none",marginBottom:12}} autoFocus/>
-            <button className="btn-primary" onClick={sub} disabled={!text.trim()}>POST 🐺</button>
+            <textarea className="input" rows={3} placeholder="What's on your mind, wolf?..."
+              value={text} onChange={e=>setText(e.target.value)} style={{resize:"none",marginBottom:10}} autoFocus/>
+            {/* Photo preview */}
+            {photo&&(
+              <div style={{position:"relative",marginBottom:10}}>
+                <img src={photo} alt="post" style={{width:"100%",borderRadius:10,maxHeight:200,objectFit:"cover"}}/>
+                <button onClick={()=>setPhoto(null)} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.6)",border:"none",borderRadius:"50%",width:24,height:24,cursor:"pointer",color:"#fff",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              </div>
+            )}
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <button onClick={()=>photoRef.current.click()} style={{padding:"8px 14px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,cursor:"pointer",color:"var(--muted)",fontSize:13}}>📷 Photo</button>
+              <input ref={photoRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const f=e.target.files?.[0];if(!f)return;const raw=await readFileAsDataURL(f);const comp=await compressImage(raw,600);setPhoto(comp);}}/>
+            </div>
+            <button className="btn-primary" onClick={sub} disabled={!text.trim()&&!photo}>POST 🐺</button>
           </div>
         </div>
       )}
@@ -1136,6 +1313,23 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
     showRestSaved(true);setTimeout(()=>showRestSaved(false),2000);
   };
   const [restSaved,showRestSaved]=useState(false);
+  const [pbExercise,setPbExercise]=useState("");
+  const [pbValue,setPbValue]=useState("");
+  const [pbUnit,setPbUnit]=useState("lbs");
+  const [pbNote,setPbNote]=useState("");
+  const savePB=async()=>{
+    if(!pbExercise.trim()||!pbValue)return;
+    const pr={exercise:pbExercise.trim(),value:Number(pbValue),unit:pbUnit.trim()||"lbs",note:pbNote.trim(),date:todayStr()};
+    const updated=[pr,...(profile?.personalBests||[])].slice(0,50);
+    const np={...profiles,[currentUser]:{...profiles[currentUser],personalBests:updated}};
+    await fsSet("wolfpack/profiles",{users:np});if(onSaveProfile)onSaveProfile(np);
+    setPbExercise("");setPbValue("");setPbUnit("lbs");setPbNote("");
+  };
+  const deletePB=async(idx)=>{
+    const updated=[...(profile?.personalBests||[])];updated.splice(idx,1);
+    const np={...profiles,[currentUser]:{...profiles[currentUser],personalBests:updated}};
+    await fsSet("wolfpack/profiles",{users:np});if(onSaveProfile)onSaveProfile(np);
+  };
 
   // Avatar editing
   const [editingAvatar,setEditingAvatar]=useState(false);
@@ -1201,7 +1395,7 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
     return best;
   })();
 
-  const tabs=[{id:"stats",label:"STATS"},{id:"body",label:"BODY"},{id:"rest",label:"REST DAYS"},{id:"pin",label:"PIN"}];
+  const tabs=[{id:"stats",label:"STATS"},{id:"body",label:"BODY"},{id:"pb",label:"MY PRs"},{id:"rest",label:"REST DAYS"},{id:"pin",label:"PIN"}];
 
   return(
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -1286,6 +1480,41 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
           )}
 
           {/* BODY tab — goal + weight combined */}
+          {tab==="pb"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6}}>Track your personal records. Private — only you can see these.</div>
+              {/* Add PR form */}
+              <div style={{display:"flex",flexDirection:"column",gap:8,padding:"12px",background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)"}}>
+                <input className="input" placeholder="Exercise (e.g. Bench Press)" value={pbExercise} onChange={e=>setPbExercise(e.target.value)} maxLength={40}/>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <input className="input" placeholder="Value (e.g. 225)" value={pbValue} onChange={e=>setPbValue(e.target.value)} type="number" min={0}/>
+                  <input className="input" placeholder="Unit (lbs, reps, min)" value={pbUnit} onChange={e=>setPbUnit(e.target.value)} maxLength={10}/>
+                </div>
+                <input className="input" placeholder="Note (optional)" value={pbNote} onChange={e=>setPbNote(e.target.value)} maxLength={60}/>
+                <button className="btn-primary" onClick={savePB} disabled={!pbExercise.trim()||!pbValue}>LOG PR 🏆</button>
+              </div>
+              {/* PR list */}
+              {(profile?.personalBests||[]).length===0?(
+                <div style={{textAlign:"center",padding:"20px",color:"var(--muted)",fontSize:13}}>No PRs logged yet. Set your first one!</div>
+              ):(
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {(profile?.personalBests||[]).map((pb,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)"}}>
+                      <div style={{fontSize:20}}>🏆</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1}}>{pb.exercise}</div>
+                        <div style={{fontSize:13,color:"var(--accent2)",fontWeight:700}}>{pb.value} {pb.unit}</div>
+                        {pb.note&&<div style={{fontSize:11,color:"var(--muted)",fontStyle:"italic"}}>{pb.note}</div>}
+                        <div style={{fontSize:11,color:"var(--muted)"}}>{fmtDate(pb.date)}</div>
+                      </div>
+                      <button onClick={()=>deletePB(i)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:18,lineHeight:1}}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {tab==="body"&&(
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
               {/* Personal goal */}
@@ -1403,6 +1632,57 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
   );
 }
 
+// ── EDIT WORKOUT MODAL ────────────────────────────────────────────────────────
+function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete}){
+  const [selected,setSelected]=useState(
+    entry.workouts?.map(w=>WORKOUT_TYPES.find(x=>x.id===w.id)).filter(Boolean)||
+    WORKOUT_TYPES.filter(w=>entry.workoutType===w.id)
+  );
+  const [note,setNote]=useState(entry.note||"");
+  const [duration,setDuration]=useState(entry.duration||"");
+  const toggle=w=>setSelected(s=>s.find(x=>x.id===w.id)?s.filter(x=>x.id!==w.id):[...s,w]);
+
+  const save=()=>{
+    if(selected.length===0)return;
+    const icons=selected.map(w=>w.icon).join("");
+    const labels=selected.map(w=>w.label).join(" + ");
+    onSave(date,{...entry,workouts:selected.map(w=>({id:w.id,icon:w.icon,label:w.label})),workoutIcon:icons,workoutLabel:labels,note,duration:duration?Number(duration):null});
+    onClose();
+  };
+
+  return(
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-handle"/>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:6}}>EDIT WORKOUT</div>
+        <div style={{fontSize:12,color:"var(--muted)",marginBottom:12}}>{fmtDate(date)}</div>
+        <div className="workout-grid" style={{marginBottom:14}}>
+          {WORKOUT_TYPES.map(w=>{
+            const sel=!!selected.find(x=>x.id===w.id);
+            return(
+              <button key={w.id} className={`workout-tile ${sel?"selected":""}`} onClick={()=>toggle(w)} style={{position:"relative"}}>
+                <div style={{fontSize:24,marginBottom:4}}>{w.icon}</div>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:sel?"var(--accent2)":"var(--muted)"}}>{w.label}</div>
+                {sel&&<div style={{position:"absolute",top:4,right:4,width:14,height:14,borderRadius:"50%",background:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff"}}>✓</div>}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{display:"flex",gap:8,marginBottom:4}}>
+          <input className="input" placeholder="Note..." value={note} onChange={e=>setNote(e.target.value)} style={{flex:1}} maxLength={80}/>
+          <input className="input" type="number" placeholder="mins" value={duration} onChange={e=>setDuration(e.target.value.slice(0,3))} style={{width:70,textAlign:"center"}} min={1}/>
+        </div>
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:12,textAlign:"right"}}>duration (optional)</div>
+        <button className="btn-primary" onClick={save} disabled={selected.length===0}>SAVE CHANGES</button>
+        <button onClick={onDelete} style={{width:"100%",marginTop:8,padding:"10px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.25)",borderRadius:10,cursor:"pointer",color:"var(--red)",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1}}>
+          DELETE WORKOUT
+        </button>
+        <button className="btn-ghost" style={{width:"100%",marginTop:6}} onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 function WorkoutModal({onClose,onSubmit}){
   const [selected,setSelected]=useState([]);
   const [note,setNote]=useState("");
@@ -1459,6 +1739,9 @@ export default function App(){
   const [profileOpen,setProfileOpen]=useState(false);
   const [lastSeen,setLastSeen]=useState({feed:0,challenges:0,gym:0});
   const [packGoals,setPackGoals]=useState([]);
+  const [reactions,setReactions]=useState({});
+  const [editWorkout,setEditWorkout]=useState(null);
+  const [weeklyRecap,setWeeklyRecap]=useState(null);
   const [toast,setToast]=useState("");
   const unsubs=useRef([]);const tt=useRef(null);
   const showToast=useCallback(msg=>{setToast(msg);clearTimeout(tt.current);tt.current=setTimeout(()=>setToast(""),3000);},[]);
@@ -1472,7 +1755,8 @@ export default function App(){
       const u4=fsListen("wolfpack/challenges",d=>{if(d)setChallenges(d.list||[]);});
       const u5=fsListen("wolfpack/gym",d=>{if(d)setGymSlots(d.slots||[]);});
       const u6=fsListen("wolfpack/packgoals",d=>{if(d)setPackGoals(d.list||[]);});
-      unsubs.current=[u1,u2,u3,u4,u5,u6];
+      const u7=fsListen("wolfpack/reactions",d=>{if(d)setReactions(d.data||{});});
+      unsubs.current=[u1,u2,u3,u4,u5,u6,u7];
       const ad=await fsGet("wolfpack/admin");if(ad?.name)setAdminName(ad.name);
       setScreen(m.length>0?"login":"onboard");
     })();
@@ -1554,6 +1838,52 @@ export default function App(){
   const handleSaveBackfill=async updatedHistory=>{
     await fsSet("wolfpack/workouts",{byDate:updatedHistory});
   };
+
+  // Reactions
+  const handleReact=async(member,emoji)=>{
+    const memberReactions=reactions[member]||{};
+    const emojiList=memberReactions[emoji]||[];
+    const updated={...reactions,[member]:{...memberReactions,[emoji]:emojiList.includes(currentUser)?emojiList.filter(x=>x!==currentUser):[...emojiList,currentUser]}};
+    await fsSet("wolfpack/reactions",{data:updated});
+  };
+
+  // Edit workout
+  const handleSaveEditedWorkout=async(date,entry)=>{
+    const newHistory={...history,[date]:{...(history[date]||{}),[currentUser]:entry}};
+    await fsSet("wolfpack/workouts",{byDate:newHistory});
+    setEditWorkout(null);showToast("Workout updated!");
+  };
+  const handleDeleteWorkout=async(date)=>{
+    const newDay={...(history[date]||{})};
+    delete newDay[currentUser];
+    const newHistory={...history,[date]:newDay};
+    await fsSet("wolfpack/workouts",{byDate:newHistory});
+    setEditWorkout(null);showToast("Workout deleted.");
+  };
+
+  // Weekly recap — compute on Monday
+  useEffect(()=>{
+    if(!currentUser||members.length===0)return;
+    const today=new Date();
+    if(today.getDay()!==1)return; // only on Monday
+    const lastWeekStart=new Date(today);lastWeekStart.setDate(today.getDate()-7);
+    const lastWeekEnd=new Date(today);lastWeekEnd.setDate(today.getDate()-1);
+    const days=getDateRange(lastWeekStart.toISOString().split("T")[0],lastWeekEnd.toISOString().split("T")[0]);
+    const stats=members.map(m=>({name:m,days:days.filter(d=>history[d]?.[m]?.done).length})).sort((a,b)=>b.days-a.days);
+    setWeeklyRecap({stats,week:lastWeekStart.toISOString().split("T")[0],dismissed:false});
+  },[currentUser,members,history]);
+
+  // Milestone auto-posts — check after logging
+  const checkMilestones=async(newHistory)=>{
+    const streak=getStreak(newHistory,currentUser,profiles[currentUser]);
+    const sessions=getTotalWorkouts(newHistory,currentUser);
+    const streakMilestone=MILESTONES.find(m=>streak===m);
+    const sessionMilestone=SESSION_MILESTONES.find(m=>sessions===m);
+    const posts=[];
+    if(streakMilestone) posts.push({id:Date.now().toString(),author:currentUser,text:`🔥 ${currentUser} just hit a ${streakMilestone}-day streak! The wolf is on fire! 🐺`,ts:Date.now(),likes:[],isAuto:true});
+    if(sessionMilestone) posts.push({id:(Date.now()+1).toString(),author:currentUser,text:`💪 ${currentUser} just logged their ${sessionMilestone}th workout session! Beast mode! 🏋️`,ts:Date.now()+1,likes:[],isAuto:true});
+    if(posts.length>0) await fsSet("wolfpack/feed",{posts:[...posts,...feed]});
+  };
   const handleSaveWeight=async wl=>{
     const np={...profiles,[currentUser]:{...profiles[currentUser],weightLog:wl}};
     await fsSet("wolfpack/profiles",{users:np});setProfiles(np);
@@ -1623,9 +1953,13 @@ export default function App(){
     const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:labels,note,duration,time,ts:Date.now()};
     await fsSet("wolfpack/workouts",{byDate:{...history,[key]:{...(history[key]||{}),[currentUser]:entry}}});
     setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
+    await checkMilestones(newData);
   };
 
-  const handlePost=async t=>{await fsSet("wolfpack/feed",{posts:[{id:Date.now().toString(),author:currentUser,text:t,ts:Date.now(),likes:[]},...feed]});showToast("Posted! 🐺");};
+  const handlePost=async(t,photo)=>{
+    const post={id:Date.now().toString(),author:currentUser,text:t,ts:Date.now(),likes:[],...(photo?{photo}:{})};
+    await fsSet("wolfpack/feed",{posts:[post,...feed]});showToast("Posted! 🐺");
+  };
   const handleLike=async id=>{await fsSet("wolfpack/feed",{posts:feed.map(p=>{if(p.id!==id)return p;const l=p.likes||[];return{...p,likes:l.includes(currentUser)?l.filter(x=>x!==currentUser):[...l,currentUser]};})});};
   const handleDelPost=async id=>{await fsSet("wolfpack/feed",{posts:feed.filter(p=>p.id!==id)});};
   const handleComment=async(postId,text)=>{
@@ -1741,7 +2075,7 @@ export default function App(){
         </div>
       </div>
       <div className="scroll">
-        {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)}/>}
+        {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>}
         {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost} onComment={handleComment} onDeleteComment={handleDeleteComment}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
         {view==="challenges"&&<ChallengesTab currentUser={currentUser} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)}/>}
@@ -1781,6 +2115,7 @@ export default function App(){
         })}
       </nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout}/>}
+      {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)}/>}
     </div>
