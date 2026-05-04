@@ -492,6 +492,63 @@ function NotifBanner({currentUser}){
   );
 }
 
+// ── REACTION PILL ────────────────────────────────────────────────────────────
+function ReactionPill({member, reactions, currentUser, onReact}){
+  const [open,setOpen]=useState(false);
+  const memberReactions=reactions?.[member]||{};
+  // Get all reactions that have at least 1
+  const activeReactions=REACTIONS.filter(r=>(memberReactions[r]||[]).length>0);
+  const myReaction=REACTIONS.find(r=>(memberReactions[r]||[]).includes(currentUser));
+
+  return(
+    <div style={{position:"relative"}}>
+      <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
+        {/* Active reactions with counts */}
+        {activeReactions.map(r=>{
+          const count=(memberReactions[r]||[]).length;
+          const iReacted=(memberReactions[r]||[]).includes(currentUser);
+          return(
+            <button key={r} onClick={e=>{e.stopPropagation();onReact(member,r);}} style={{
+              padding:"2px 8px",borderRadius:20,fontSize:12,cursor:"pointer",
+              background:iReacted?"rgba(124,92,191,0.2)":"rgba(255,255,255,0.05)",
+              border:iReacted?"1px solid rgba(124,92,191,0.35)":"1px solid rgba(255,255,255,0.08)",
+              display:"flex",alignItems:"center",gap:3,
+            }}>
+              {r} <span style={{fontSize:10,color:"var(--muted)"}}>{count}</span>
+            </button>
+          );
+        })}
+        {/* React + button */}
+        <button onClick={e=>{e.stopPropagation();setOpen(o=>!o);}} style={{
+          padding:"2px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
+          background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
+          color:"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1,
+        }}>
+          {myReaction?"REACTED":"REACT +"}
+        </button>
+      </div>
+      {/* Emoji picker */}
+      {open&&(
+        <div onClick={e=>e.stopPropagation()} style={{
+          position:"absolute",bottom:"calc(100% + 6px)",right:0,
+          background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:14,
+          padding:"10px 12px",display:"flex",gap:8,zIndex:50,
+          boxShadow:"0 8px 24px rgba(0,0,0,0.4)",
+        }}>
+          {REACTIONS.map(r=>(
+            <button key={r} onClick={()=>{onReact(member,r);setOpen(false);}} style={{
+              fontSize:22,cursor:"pointer",background:"none",border:"none",
+              padding:"4px",borderRadius:8,
+              transform:(memberReactions[r]||[]).includes(currentUser)?"scale(1.3)":"scale(1)",
+              transition:"transform 0.1s",
+            }}>{r}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── PACK GOALS BOARD ─────────────────────────────────────────────────────────
 function PackGoals({currentUser,packGoals,onAddGoal,onCheer,onDeleteGoal}){
   const [open,setOpen]=useState(false);
@@ -556,9 +613,14 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
         ):(
           <div style={{background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.3)",borderRadius:16,padding:"14px 16px"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{fontSize:26}}>{my.workoutIcon}</div>
-              <div style={{flex:1}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2,color:"var(--accent2)"}}>✓ {my.workoutLabel?.toUpperCase()}</div><div style={{fontSize:11,color:"var(--muted)"}}>{my.time}</div></div>
-              {my.note&&<div style={{fontSize:12,color:"var(--muted)",maxWidth:110,textAlign:"right",fontStyle:"italic"}}>"{my.note}"</div>}
+              <div style={{flex:1}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--accent2)",marginBottom:4}}>✓ LOGGED · {my.time}</div>
+                {Array.isArray(my.summary)
+                  ?my.summary.map((line,i)=><div key={i} style={{fontSize:13,color:"var(--green)",lineHeight:1.6}}>{line}</div>)
+                  :<div style={{fontSize:13,color:"var(--green)"}}>{my.workoutLabel}</div>
+                }
+                {my.note&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>"{my.note}"</div>}
+              </div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:10}}>
               <button className="btn-ghost" onClick={onLogWorkout} style={{flex:1,fontSize:12}}>+ Log Another</button>
@@ -587,24 +649,32 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
                 :restToday?"rgba(255,255,255,0.03)"
                 :isMe?"rgba(124,92,191,0.1)":"var(--card)",
               border:done?"1px solid rgba(46,204,113,0.3)":isMe?"1px solid rgba(124,92,191,0.35)":"1px solid var(--border)",
-              padding:"14px 16px",
-              display:"flex",alignItems:"center",gap:14,
+              padding:"12px 14px",
+              paddingBottom:!isMe?"44px":"12px",
+              display:"flex",alignItems:"center",gap:12,
+              minHeight:80,
             }}>
               {/* left accent bar */}
               <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:done?"linear-gradient(180deg,#2ecc71,#27ae60)":isMe?"linear-gradient(180deg,var(--accent),var(--orange))":"transparent",borderRadius:"18px 0 0 18px"}}/>
               {/* rank */}
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,color:"var(--muted)",width:20,textAlign:"center",flexShrink:0}}>{i+1}</div>
               {/* avatar */}
-              <AvatarDisplay profile={profiles[m]} size={48}/>
+              <AvatarDisplay profile={profiles[m]} size={44}/>
               {/* info */}
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
-                  <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2,color:isMe?"var(--accent2)":"var(--text)"}}>{m}</span>
-                  {isMe&&<span style={{fontSize:10,color:"var(--accent2)",background:"rgba(124,92,191,0.2)",padding:"1px 5px",borderRadius:4}}>YOU</span>}
+              <div style={{flex:1,minWidth:0,overflow:"hidden"}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                  <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:1,color:isMe?"var(--accent2)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}>{m}</span>
+                  {isMe&&<span style={{fontSize:10,color:"var(--accent2)",background:"rgba(124,92,191,0.2)",padding:"1px 5px",borderRadius:4,flexShrink:0}}>YOU</span>}
                 </div>
-                <div style={{fontSize:12,color:"var(--muted)"}}>🔥 {ms} day streak</div>
-              <div style={{fontSize:10,color:"var(--muted)",opacity:0.6}}>{getTotalWorkouts(history,m)} sessions</div>
-                {done&&wt&&<div style={{fontSize:12,color:"var(--green)",marginTop:2}}>{wt}{td[m]?.duration&&<span style={{color:"var(--muted)",marginLeft:4}}>{td[m].duration}min</span>}</div>}
+                <div style={{fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>🔥 {ms} day streak · {getTotalWorkouts(history,m)} sessions</div>
+                {done&&(
+                  <div style={{marginTop:3}}>
+                    {Array.isArray(td[m]?.summary)
+                      ?td[m].summary.map((line,i)=><div key={i} style={{fontSize:11,color:"var(--green)",lineHeight:1.5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{line}</div>)
+                      :<div style={{fontSize:11,color:"var(--green)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{td[m]?.workoutLabel||""}</div>
+                    }
+                  </div>
+                )}
               </div>
               {/* status */}
               <div style={{
@@ -616,23 +686,10 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
               }}>
                 {done?"✓ DONE":restToday?"😴 REST":"○ PENDING"}
               </div>
-              {/* Reactions row */}
+              {/* Reactions — positioned at bottom of card */}
               {!isMe&&(
-                <div style={{position:"absolute",bottom:8,right:12,display:"flex",gap:4}}>
-                  {REACTIONS.map(r=>{
-                    const count=(reactions?.[m]?.[r]||[]).length;
-                    const iReacted=(reactions?.[m]?.[r]||[]).includes(currentUser);
-                    return count>0||true?(
-                      <button key={r} onClick={e=>{e.stopPropagation();onReact(m,r);}} style={{
-                        padding:"2px 6px",borderRadius:20,fontSize:12,cursor:"pointer",
-                        background:iReacted?"rgba(124,92,191,0.25)":"rgba(255,255,255,0.05)",
-                        border:iReacted?"1px solid rgba(124,92,191,0.4)":"1px solid rgba(255,255,255,0.08)",
-                        display:"flex",alignItems:"center",gap:3,
-                      }}>
-                        {r}{count>0&&<span style={{fontSize:10,color:"var(--muted)"}}>{count}</span>}
-                      </button>
-                    ):null;
-                  })}
+                <div style={{position:"absolute",bottom:8,left:16,right:16}}>
+                  <ReactionPill member={m} reactions={reactions} currentUser={currentUser} onReact={onReact}/>
                 </div>
               )}
               {isMe&&<div style={{position:"absolute",top:10,right:12,fontSize:11,color:"var(--muted)"}}>👤</div>}
@@ -652,7 +709,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
             <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <AvatarDisplay profile={profiles[s.name]} size={24}/>
-                <span style={{fontSize:13,fontWeight:600}}>{s.name}</span>
+                <span style={{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:100}}>{s.name}</span>
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
                 <span style={{fontSize:12,color:"var(--muted)"}}>{s.days} days</span>
@@ -1683,40 +1740,135 @@ function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete})
   );
 }
 
+// Per-type field definitions
+const WORKOUT_FIELDS = {
+  lift:   [{key:"sets",label:"Sets",placeholder:"e.g. 4"},{key:"reps",label:"Reps",placeholder:"e.g. 10"},{key:"weight",label:"Weight (lbs)",placeholder:"e.g. 135"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 60"}],
+  run:    [{key:"distance",label:"Distance (mi)",placeholder:"e.g. 3.1"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 30"}],
+  bike:   [{key:"distance",label:"Distance (mi)",placeholder:"e.g. 10"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 45"}],
+  hiit:   [{key:"duration",label:"Duration (min)",placeholder:"e.g. 20"},{key:"rounds",label:"Rounds",placeholder:"e.g. 5"}],
+  cardio: [{key:"duration",label:"Duration (min)",placeholder:"e.g. 30"},{key:"distance",label:"Distance (mi)",placeholder:"e.g. 2"}],
+  walk:   [{key:"distance",label:"Distance (mi)",placeholder:"e.g. 1.5"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 25"}],
+  other:  [{key:"duration",label:"Duration (min)",placeholder:"e.g. 45"}],
+};
+
+function formatWorkoutSummary(workouts, details){
+  // Returns array of {label, detail} for stacked display
+  return workouts.map(w=>{
+    const d=details[w.id]||{};
+    const parts=[];
+    if(d.distance) parts.push(`${d.distance} mi`);
+    if(d.sets&&d.reps) parts.push(`${d.sets} sets × ${d.reps} reps`);
+    else if(d.sets) parts.push(`${d.sets} sets`);
+    else if(d.reps) parts.push(`${d.reps} reps`);
+    if(d.weight) parts.push(`${d.weight} lbs`);
+    if(d.rounds) parts.push(`${d.rounds} rounds`);
+    if(d.duration) parts.push(`${d.duration} min`);
+    return {label:w.label, detail:parts.join(" · ")};
+  });
+}
+
+function WorkoutSummaryDisplay({summary, workoutLabel, style={}}){
+  // summary can be string (old) or used workoutLabel
+  // Parse stacked workout display
+  if(!workoutLabel&&!summary) return null;
+  const lines = workoutLabel ? workoutLabel.split(" + ") : [summary];
+  return(
+    <div style={style}>
+      {lines.map((line,i)=><div key={i} style={{fontSize:12,color:"var(--green)",lineHeight:1.6}}>{line}</div>)}
+    </div>
+  );
+}
+
 function WorkoutModal({onClose,onSubmit}){
   const [selected,setSelected]=useState([]);
+  const [details,setDetails]=useState({}); // {workoutId: {sets,reps,weight,duration,distance,...}}
   const [note,setNote]=useState("");
-  const [duration,setDuration]=useState("");
+  const [step,setStep]=useState("pick"); // "pick" | "details"
 
   const toggle=w=>setSelected(s=>s.find(x=>x.id===w.id)?s.filter(x=>x.id!==w.id):[...s,w]);
-  const isSelected=w=>!!selected.find(x=>x.id===w.id);
+  const setField=(id,key,val)=>setDetails(d=>({...d,[id]:{...d[id],[key]:val}}));
+
+  const handleSubmit=()=>{
+    const summary=formatWorkoutSummary(selected,details);
+    const totalDuration=selected.reduce((sum,w)=>sum+(Number(details[w.id]?.duration)||0),0)||null;
+    onSubmit(selected,note,totalDuration,details,summary);
+  };
 
   return(
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="modal">
+      <div className="modal" style={{maxHeight:"85dvh",overflowY:"auto"}}>
         <div className="modal-handle"/>
-        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:6}}>LOG WORKOUT</div>
-        <div style={{fontSize:12,color:"var(--muted)",marginBottom:12}}>Select one or more workout types</div>
-        <div className="workout-grid" style={{marginBottom:14}}>
-          {WORKOUT_TYPES.map(w=>(
-            <button key={w.id} className={`workout-tile ${isSelected(w)?"selected":""}`} onClick={()=>toggle(w)}>
-              <div style={{fontSize:24,marginBottom:4}}>{w.icon}</div>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:isSelected(w)?"var(--accent2)":"var(--muted)"}}>{w.label}</div>
-              {isSelected(w)&&<div style={{position:"absolute",top:4,right:4,width:14,height:14,borderRadius:"50%",background:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff"}}>✓</div>}
+
+        {step==="pick"&&(
+          <>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:6}}>LOG WORKOUT</div>
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:12}}>Select one or more workout types</div>
+            <div className="workout-grid" style={{marginBottom:14}}>
+              {WORKOUT_TYPES.map(w=>{
+                const sel=!!selected.find(x=>x.id===w.id);
+                return(
+                  <button key={w.id} className={`workout-tile ${sel?"selected":""}`} onClick={()=>toggle(w)}>
+                    <div style={{fontSize:24,marginBottom:4}}>{w.icon}</div>
+                    <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:sel?"var(--accent2)":"var(--muted)"}}>{w.label}</div>
+                    {sel&&<div style={{position:"absolute",top:4,right:4,width:14,height:14,borderRadius:"50%",background:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff"}}>✓</div>}
+                  </button>
+                );
+              })}
+            </div>
+            {selected.length>0&&(
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+                {selected.map(w=><span key={w.id} style={{padding:"4px 10px",background:"rgba(124,92,191,0.2)",border:"1px solid rgba(124,92,191,0.4)",borderRadius:20,fontSize:12,color:"var(--accent2)"}}>{w.icon} {w.label}</span>)}
+              </div>
+            )}
+            <button className="btn-primary" disabled={selected.length===0} onClick={()=>setStep("details")}>
+              NEXT → ADD DETAILS
             </button>
-          ))}
-        </div>
-        {selected.length>0&&(
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
-            {selected.map(w=><span key={w.id} style={{padding:"4px 10px",background:"rgba(124,92,191,0.2)",border:"1px solid rgba(124,92,191,0.4)",borderRadius:20,fontSize:12,color:"var(--accent2)"}}>{w.icon} {w.label}</span>)}
-          </div>
+          </>
         )}
-        <div style={{display:"flex",gap:8,marginBottom:4}}>
-          <input className="input" placeholder="Optional note..." value={note} onChange={e=>setNote(e.target.value)} style={{flex:1}} maxLength={80}/>
-          <input className="input" type="number" placeholder="mins" value={duration} onChange={e=>setDuration(e.target.value.slice(0,3))} style={{width:70,textAlign:"center"}} min={1}/>
-        </div>
-        <div style={{fontSize:11,color:"var(--muted)",marginBottom:12,textAlign:"right"}}>duration (optional)</div>
-        <button className="btn-primary" disabled={selected.length===0} onClick={()=>onSubmit(selected,note,duration?Number(duration):null)}>LOG IT 💪</button>
+
+        {step==="details"&&(
+          <>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+              <button onClick={()=>setStep("pick")} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:20,lineHeight:1}}>←</button>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3}}>ADD DETAILS</div>
+            </div>
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14}}>All fields are optional — fill in what you tracked.</div>
+
+            {selected.map(w=>{
+              const fields=WORKOUT_FIELDS[w.id]||WORKOUT_FIELDS.other;
+              return(
+                <div key={w.id} style={{marginBottom:16,padding:"12px 14px",background:"var(--bg3)",borderRadius:14,border:"1px solid var(--border)"}}>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:20}}>{w.icon}</span>{w.label}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    {fields.map(f=>(
+                      <div key={f.key}>
+                        <div style={{fontSize:11,color:"var(--muted)",marginBottom:4}}>{f.label}</div>
+                        <input className="input" type="number" placeholder={f.placeholder}
+                          value={details[w.id]?.[f.key]||""}
+                          onChange={e=>setField(w.id,f.key,e.target.value)}
+                          style={{padding:"10px 12px"}} min={0} step="any"/>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,color:"var(--muted)",marginBottom:4}}>Note (optional)</div>
+              <input className="input" placeholder="How it went, PRs, etc..." value={note} onChange={e=>setNote(e.target.value)} maxLength={120}/>
+            </div>
+
+            {/* Preview */}
+            <div style={{padding:"10px 14px",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.2)",borderRadius:10,marginBottom:12,fontSize:13,color:"var(--accent2)"}}>
+              {formatWorkoutSummary(selected,details)||"Your workout summary will appear here"}
+            </div>
+
+            <button className="btn-primary" onClick={handleSubmit}>LOG IT 💪</button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1942,7 +2094,7 @@ export default function App(){
     showToast(`Name updated to ${newName.trim()}!`);
   };
 
-  const handleLogWorkout=async(workouts,note,duration)=>{
+  const handleLogWorkout=async(workouts,note,duration,details,summary)=>{
     const key=todayStr(),time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
     // Support multiple workout types - merge with existing entries for today
     const existing=history[key]?.[currentUser]||{};
@@ -1950,7 +2102,20 @@ export default function App(){
     const newWorkouts=[...prevWorkouts,...workouts.map(w=>({id:w.id,icon:w.icon,label:w.label}))];
     const icons=newWorkouts.map(w=>w.icon).join("");
     const labels=newWorkouts.map(w=>w.label).join(" + ");
-    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:labels,note,duration,time,ts:Date.now()};
+    // Build clean stacked summary text for display
+    const summaryLines=newWorkouts.map(w=>{
+      const d=details?.[w.id]||{};
+      const parts=[];
+      if(d.distance) parts.push(`${d.distance} mi`);
+      if(d.sets&&d.reps) parts.push(`${d.sets} sets x ${d.reps} reps`);
+      else if(d.sets) parts.push(`${d.sets} sets`);
+      else if(d.reps) parts.push(`${d.reps} reps`);
+      if(d.weight) parts.push(`${d.weight} lbs`);
+      if(d.rounds) parts.push(`${d.rounds} rounds`);
+      if(d.duration) parts.push(`${d.duration} min`);
+      return parts.length>0?`${w.label}: ${parts.join(" · ")}`:w.label;
+    });
+    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration,details,time,ts:Date.now()};
     await fsSet("wolfpack/workouts",{byDate:{...history,[key]:{...(history[key]||{}),[currentUser]:entry}}});
     setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
     await checkMilestones(newData);
