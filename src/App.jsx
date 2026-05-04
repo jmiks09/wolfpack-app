@@ -666,7 +666,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
                   <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:1,color:isMe?"var(--accent2)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}>{m}</span>
                   {isMe&&<span style={{fontSize:10,color:"var(--accent2)",background:"rgba(124,92,191,0.2)",padding:"1px 5px",borderRadius:4,flexShrink:0}}>YOU</span>}
                 </div>
-                <div style={{fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>🔥 {ms} day streak · {getTotalWorkouts(history,m)} sessions</div>
+                <div style={{fontSize:11,color:"var(--muted)"}}>🔥 {ms} streak · {getTotalWorkouts(history,m)} sessions</div>
                 {done&&(
                   <div style={{marginTop:3}}>
                     {Array.isArray(td[m]?.summary)
@@ -681,17 +681,12 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
                 flexShrink:0,padding:"6px 14px",borderRadius:20,
                 background:done?"rgba(46,204,113,0.15)":restToday?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.04)",
                 border:done?"1px solid rgba(46,204,113,0.4)":"1px solid var(--border)",
-                fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,
+                fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,
                 color:done?"var(--green)":restToday?"var(--muted)":"var(--muted)",
               }}>
-                {done?"✓ DONE":restToday?"😴 REST":"○ PENDING"}
+                {done?"✓ DONE":restToday?"REST":"PENDING"}
               </div>
-              {/* Reactions — positioned at bottom of card */}
-              {!isMe&&(
-                <div style={{position:"absolute",bottom:8,left:16,right:16}}>
-                  <ReactionPill member={m} reactions={reactions} currentUser={currentUser} onReact={onReact}/>
-                </div>
-              )}
+
               {isMe&&<div style={{position:"absolute",top:10,right:12,fontSize:11,color:"var(--muted)"}}>👤</div>}
             </div>
           );
@@ -2003,6 +1998,8 @@ export default function App(){
   const handleSaveEditedWorkout=async(date,entry)=>{
     const newHistory={...history,[date]:{...(history[date]||{}),[currentUser]:entry}};
     await fsSet("wolfpack/workouts",{byDate:newHistory});
+    setHistory(newHistory);
+    setSharedData(newHistory);
     setEditWorkout(null);showToast("Workout updated!");
   };
   const handleDeleteWorkout=async(date)=>{
@@ -2010,7 +2007,11 @@ export default function App(){
     delete newDay[currentUser];
     const newHistory={...history,[date]:newDay};
     await fsSet("wolfpack/workouts",{byDate:newHistory});
-    setEditWorkout(null);showToast("Workout deleted.");
+    // Force local state update immediately
+    setHistory(newHistory);
+    setSharedData(newHistory);
+    setEditWorkout(null);
+    showToast("Workout deleted.");
   };
 
   // Weekly recap — compute on Monday
