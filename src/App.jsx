@@ -4,9 +4,8 @@ import { fsGet, fsSet, fsDelete, fsListen, requestNotifPermission, onForegroundM
 const INVITE_CODE = "WOLF2026";
 const WORKOUT_TYPES = [
   {id:"lift",icon:"🏋️",label:"Lifting"},{id:"run",icon:"🏃",label:"Running"},
-  {id:"bike",icon:"🚴",label:"Cycling"},{id:"swim",icon:"🏊",label:"Swimming"},
-  {id:"yoga",icon:"🧘",label:"Yoga"},{id:"hiit",icon:"⚡",label:"HIIT"},
-  {id:"sport",icon:"⚽",label:"Sport"},{id:"walk",icon:"🚶",label:"Walking"},
+  {id:"bike",icon:"🚴",label:"Cycling"},{id:"hiit",icon:"⚡",label:"HIIT"},
+  {id:"cardio",icon:"❤️‍🔥",label:"Mixed Cardio"},{id:"walk",icon:"🚶",label:"Walking"},
   {id:"other",icon:"💪",label:"Other"},
 ];
 const QUOTES = [
@@ -485,7 +484,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,a
                 </div>
                 <div style={{fontSize:12,color:"var(--muted)"}}>🔥 {ms} day streak</div>
               <div style={{fontSize:10,color:"var(--muted)",opacity:0.6}}>{getTotalWorkouts(history,m)} sessions</div>
-                {done&&wt&&<div style={{fontSize:12,color:"var(--green)",marginTop:2}}>{wt}</div>}
+                {done&&wt&&<div style={{fontSize:12,color:"var(--green)",marginTop:2}}>{wt}{td[m]?.duration&&<span style={{color:"var(--muted)",marginLeft:4}}>{td[m].duration}min</span>}</div>}
               </div>
               {/* status */}
               <div style={{
@@ -1202,7 +1201,7 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
     return best;
   })();
 
-  const tabs=[{id:"stats",label:"STATS"},{id:"body",label:"BODY"},{id:"backfill",label:"BACKFILL"},{id:"rest",label:"REST DAYS"},{id:"pin",label:"PIN"}];
+  const tabs=[{id:"stats",label:"STATS"},{id:"body",label:"BODY"},{id:"rest",label:"REST DAYS"},{id:"pin",label:"PIN"}];
 
   return(
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -1326,60 +1325,6 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
             </div>
           )}
 
-          {/* BACKFILL tab */}
-          {tab==="backfill"&&(
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6}}>
-                Log workouts from the last 7 days to keep your streak accurate.
-              </div>
-              <div>
-                <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Select date</div>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  {backfillDates.map(d=>{
-                    const alreadyLogged=!!(history[d]?.[currentUser]?.done);
-                    const isSelected=backfillDate===d;
-                    const isRest=isRestDay(d,profile);
-                    return(
-                      <button key={d} onClick={()=>{if(!alreadyLogged)setBackfillDate(d);}} style={{
-                        display:"flex",alignItems:"center",justifyContent:"space-between",
-                        padding:"10px 14px",borderRadius:12,cursor:alreadyLogged?"default":"pointer",
-                        background:isSelected?"rgba(124,92,191,0.2)":"var(--bg3)",
-                        border:isSelected?"1px solid var(--accent)":"1px solid var(--border)",
-                        opacity:alreadyLogged?0.5:1,
-                      }}>
-                        <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1,color:isSelected?"var(--accent2)":"var(--text)"}}>{fmtDate(d)}</span>
-                        <span style={{fontSize:12,color:alreadyLogged?"var(--green)":isRest?"var(--muted)":"var(--muted)"}}>
-                          {alreadyLogged?"✓ logged":isRest?"rest day":"tap to select"}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              {backfillDate&&(
-                <div>
-                  <div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>What did you do on {fmtDate(backfillDate)}?</div>
-                  <div className="workout-grid">
-                    {WORKOUT_TYPES.map(w=>{
-                      const sel=!!backfillWorkouts.find(x=>x.id===w.id);
-                      return(
-                        <button key={w.id} className={`workout-tile ${sel?"selected":""}`} onClick={()=>toggleBackfillWorkout(w)}>
-                          <div style={{fontSize:22,marginBottom:3}}>{w.icon}</div>
-                          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:sel?"var(--accent2)":"var(--muted)"}}>{w.label}</div>
-                          {sel&&<div style={{position:"absolute",top:4,right:4,width:14,height:14,borderRadius:"50%",background:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff"}}>✓</div>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {backfillDone&&<div style={{padding:"10px 14px",background:"rgba(46,204,113,0.1)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:10,fontSize:13,color:"var(--green)",textAlign:"center"}}>✓ Logged!</div>}
-              <button className="btn-primary" onClick={saveBackfill} disabled={!backfillDate||backfillWorkouts.length===0||backfillSaving}>
-                {backfillSaving?"SAVING...":"LOG PAST WORKOUT 💪"}
-              </button>
-            </div>
-          )}
-
           {/* REST DAYS tab */}
           {tab==="rest"&&(
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -1461,6 +1406,7 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
 function WorkoutModal({onClose,onSubmit}){
   const [selected,setSelected]=useState([]);
   const [note,setNote]=useState("");
+  const [duration,setDuration]=useState("");
 
   const toggle=w=>setSelected(s=>s.find(x=>x.id===w.id)?s.filter(x=>x.id!==w.id):[...s,w]);
   const isSelected=w=>!!selected.find(x=>x.id===w.id);
@@ -1485,8 +1431,12 @@ function WorkoutModal({onClose,onSubmit}){
             {selected.map(w=><span key={w.id} style={{padding:"4px 10px",background:"rgba(124,92,191,0.2)",border:"1px solid rgba(124,92,191,0.4)",borderRadius:20,fontSize:12,color:"var(--accent2)"}}>{w.icon} {w.label}</span>)}
           </div>
         )}
-        <input className="input" placeholder="Optional note..." value={note} onChange={e=>setNote(e.target.value)} style={{marginBottom:12}} maxLength={80}/>
-        <button className="btn-primary" disabled={selected.length===0} onClick={()=>onSubmit(selected,note)}>LOG IT 💪</button>
+        <div style={{display:"flex",gap:8,marginBottom:4}}>
+          <input className="input" placeholder="Optional note..." value={note} onChange={e=>setNote(e.target.value)} style={{flex:1}} maxLength={80}/>
+          <input className="input" type="number" placeholder="mins" value={duration} onChange={e=>setDuration(e.target.value.slice(0,3))} style={{width:70,textAlign:"center"}} min={1}/>
+        </div>
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:12,textAlign:"right"}}>duration (optional)</div>
+        <button className="btn-primary" disabled={selected.length===0} onClick={()=>onSubmit(selected,note,duration?Number(duration):null)}>LOG IT 💪</button>
       </div>
     </div>
   );
@@ -1662,7 +1612,7 @@ export default function App(){
     showToast(`Name updated to ${newName.trim()}!`);
   };
 
-  const handleLogWorkout=async(workouts,note)=>{
+  const handleLogWorkout=async(workouts,note,duration)=>{
     const key=todayStr(),time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
     // Support multiple workout types - merge with existing entries for today
     const existing=history[key]?.[currentUser]||{};
@@ -1670,7 +1620,7 @@ export default function App(){
     const newWorkouts=[...prevWorkouts,...workouts.map(w=>({id:w.id,icon:w.icon,label:w.label}))];
     const icons=newWorkouts.map(w=>w.icon).join("");
     const labels=newWorkouts.map(w=>w.label).join(" + ");
-    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:labels,note,time,ts:Date.now()};
+    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:labels,note,duration,time,ts:Date.now()};
     await fsSet("wolfpack/workouts",{byDate:{...history,[key]:{...(history[key]||{}),[currentUser]:entry}}});
     setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
   };
