@@ -905,6 +905,8 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
   const [endDate,setEndDate]=useState(challenge.endDate||"");
   const [penalty,setPenalty]=useState(challenge.penalty||"");
   const [penaltyAmt,setPenaltyAmt]=useState(challenge.penaltyAmt||"");
+  const [zelleContact,setZelleContact]=useState(challenge.zelleContact||"");
+  const [forfeitCap,setForfeitCap]=useState(challenge.forfeitCap||"");
   const [parts,setParts]=useState(Object.keys(challenge.participants||{}));
   const toggle=m=>setParts(p=>p.includes(m)?p.filter(x=>x!==m):[...p,m]);
 
@@ -919,7 +921,7 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
     });
     Object.keys(np).forEach(m=>{if(!parts.includes(m))delete np[m];});
     const newGoal=isDR&&startDate&&endDate?getWeekdays(startDate,endDate).length:Number(goal);
-    onSave({...challenge,title:title.trim(),goal:newGoal,unit:isDR?"days":unit,startDate:isDR?startDate:challenge.startDate,endDate:isDR?endDate:challenge.endDate,penalty:penalty.trim(),penaltyAmt:penaltyAmt?Number(penaltyAmt):0,participants:np});
+    onSave({...challenge,title:title.trim(),goal:newGoal,unit:isDR?"days":unit,startDate:isDR?startDate:challenge.startDate,endDate:isDR?endDate:challenge.endDate,penalty:penalty.trim(),penaltyAmt:penaltyAmt?Number(penaltyAmt):0,forfeitCap:forfeitCap?Number(forfeitCap):0,zelleContact:zelleContact.trim(),participants:np});
     onClose();
   };
 
@@ -947,6 +949,8 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
           )}
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Penalty</div><input className="input" placeholder='e.g. "Buys lunch"' value={penalty} onChange={e=>setPenalty(e.target.value)} maxLength={80}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout <span style={{fontSize:11}}>(optional)</span></div><input className="input" type="number" placeholder="optional — e.g. 5" value={penaltyAmt} onChange={e=>setPenaltyAmt(e.target.value)} min={0}/></div>
+          <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Forfeit cap $ (optional)</div><input className="input" type="number" placeholder="e.g. 50" value={forfeitCap} onChange={e=>setForfeitCap(e.target.value)} min={0}/></div>
+          <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Zelle contact (phone or email)</div><input className="input" placeholder="e.g. 555-555-5555" value={zelleContact} onChange={e=>setZelleContact(e.target.value)} maxLength={50}/></div>
           <div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>Participants</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -965,97 +969,191 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
   );
 }
 
-function PenaltyTracker({challenge:c,history,profiles}){
-  // Show tracker for date-range challenges always — with or without penalty amount
+function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMarkPaid,onLogPayment}){
   if(!c.startDate||!c.endDate)return null;
   const acceptedParts=Object.keys(c.participants||{}).filter(m=>c.participants[m]?.status!=="pending");
   if(acceptedParts.length===0)return null;
   const hasPenalty=c.penaltyAmt>0;
-  const penalties=hasPenalty?calcPenalties(c,history,profiles):{};
-  const cap=todayStr()<c.endDate?todayStr():c.endDate;
-  // Only show current week + total (not all past weeks)
-  const allWks=[...new Set(getDateRange(c.startDate,cap).map(d=>getWeekStart(d)))].sort();
-  const currentWk=getWeekStart(todayStr());
-  const wks=allWks.includes(currentWk)?[currentWk]:allWks.slice(-1);
+  if(!hasPenalty)return null;
+
+  const penalties=calcPenalties(c,history,profiles);
+  const payments=c.payments||{}; // {memberName: [{amount, method, date, ts}]}
+  const isAdmin=currentUser===adminName||currentUser===c.createdBy;
+
+  // Total earned (all missed workouts regardless of payments) = prize pot
+  const grandTotal=acceptedParts.reduce((sum,m)=>{
+    const p=penalties[m]||{};
+    return sum+(p.forfeited?c.forfeitCap||0:p.totalOwed||0);
+  },0);
+
+  // How much each person has paid
+  const paidAmount=m=>(payments[m]||[]).reduce((s,p)=>s+p.amount,0);
+  const isFullyPaid=m=>paidAmount(m)>=(penalties[m]?.totalOwed||0)&&(penalties[m]?.totalOwed||0)>0;
+
+  const [expandedMember,setExpandedMember]=useState(null);
+  const [partialAmt,setPartialAmt]=useState("");
+
+  const handleZelle=()=>{
+    const zelleContact=c.zelleContact||"";
+    if(zelleContact){
+      const amt=partialAmt?Number(partialAmt):(penalties[currentUser]?.totalOwed||0)-paidAmount(currentUser);
+      window.open(`https://enroll.zellepay.com/qr-codes?data=${encodeURIComponent(JSON.stringify({name:"WOLFPACK",token:zelleContact,amount:amt}))}`, "_blank");
+    }
+    if(partialAmt||true) onLogPayment(c.id,currentUser,partialAmt?Number(partialAmt):(penalties[currentUser]?.totalOwed||0)-paidAmount(currentUser),"Zelle");
+    setPartialAmt("");
+  };
+
+  const handleCash=(member,amt)=>{
+    onLogPayment(c.id,member||currentUser,amt||((penalties[currentUser]?.totalOwed||0)-paidAmount(currentUser)),"Cash");
+    setPartialAmt("");
+  };
 
   return(
     <div style={{marginTop:12,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
-      {/* Header */}
-      <div style={{padding:"8px 12px",background:"rgba(255,255,255,0.03)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:6}}>
-        <span>📊</span>
-        <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--muted)"}}>
-          TRACKER{hasPenalty?` — $${c.penaltyAmt}/MISS`:""}
-        </span>
-      </div>
-      {/* Column headers */}
-      <div style={{display:"grid",gridTemplateColumns:`1fr repeat(${wks.length},56px) 60px`,borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
-        <div style={{padding:"5px 10px",fontSize:10,color:"var(--muted)"}}>Member</div>
-        {wks.map(w=>{
-          const d=new Date(w+"T00:00:00");
-          const isCurrentWk=getWeekStart(todayStr())===w;
-          return(
-            <div key={w} style={{padding:"5px 3px",fontSize:9,color:isCurrentWk?"var(--accent2)":"var(--muted)",textAlign:"center",fontWeight:isCurrentWk?700:400}}>
-              {d.toLocaleDateString("en-US",{month:"short",day:"numeric"})}
-              {isCurrentWk&&<div style={{fontSize:8,color:"var(--accent2)"}}>NOW</div>}
-            </div>
-          );
-        })}
-        <div style={{padding:"5px 4px",fontSize:10,color:hasPenalty?"var(--red)":"var(--accent2)",textAlign:"center",fontWeight:700}}>
-          {hasPenalty?"OWES":"DONE"}
+
+      {/* ── EVERYONE VIEW: summary table ── */}
+      <div style={{padding:"8px 12px",background:"rgba(255,255,255,0.03)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <span>💸</span>
+          <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--muted)"}}>PENALTY TRACKER — ${c.penaltyAmt}/MISS</span>
         </div>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:"var(--gold)"}}>🏆 POT: ${grandTotal}</div>
       </div>
-      {/* Member rows */}
+
+      {/* Column headers */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 70px 60px",padding:"5px 12px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+        <span style={{fontSize:10,color:"var(--muted)"}}>Member</span>
+        <span style={{fontSize:10,color:"var(--muted)",textAlign:"center"}}>This week</span>
+        <span style={{fontSize:10,color:"var(--red)",textAlign:"right",fontWeight:700}}>Total</span>
+      </div>
+
       {acceptedParts.map(m=>{
-        const p=penalties[m]||{totalOwed:0,byWeek:{},forfeited:false};
+        const p=penalties[m]||{totalOwed:0,byWeek:{}};
         const forfeited=c.participants[m]?.forfeited||false;
-        // Per-week workout count
-        const wkWorkouts={};
-        wks.forEach(w=>{
-          const days=getDateRange(w,new Date(new Date(w+"T00:00:00").setDate(new Date(w+"T00:00:00").getDate()+6)).toISOString().split("T")[0]);
-          wkWorkouts[w]=days.filter(d=>d<=cap&&history[d]?.[m]?.done).length;
-        });
+        const cap=todayStr()<c.endDate?todayStr():c.endDate;
+        const currentWk=getWeekStart(todayStr());
+        const wkAmt=p.byWeek?.[currentWk]||0;
+        const totalAmt=forfeited?c.forfeitCap||0:p.totalOwed||0;
+        const paid=paidAmount(m);
+        const fullPaid=isFullyPaid(m);
+        const isMe=m===currentUser;
+        const myPayments=payments[m]||[];
+
         return(
-          <div key={m} style={{display:"grid",gridTemplateColumns:`1fr repeat(${wks.length},56px) 60px`,borderBottom:"1px solid rgba(255,255,255,0.03)",alignItems:"center"}}>
-            <div style={{padding:"8px 10px",display:"flex",alignItems:"center",gap:5}}>
-              <AvatarDisplay profile={profiles[m]} size={20}/>
-              <span style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m}</span>
-              {forfeited&&<span style={{fontSize:10}}>🏳️</span>}
+          <div key={m}>
+            {/* Summary row — visible to everyone */}
+            <div onClick={()=>isMe||isAdmin?setExpandedMember(expandedMember===m?null:m):null}
+              style={{display:"grid",gridTemplateColumns:"1fr 70px 60px",padding:"9px 12px",borderBottom:"1px solid rgba(255,255,255,0.04)",alignItems:"center",cursor:isMe||isAdmin?"pointer":"default",background:expandedMember===m?"rgba(255,255,255,0.03)":"transparent"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <AvatarDisplay profile={profiles[m]} size={22}/>
+                <span style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:100}}>{m}</span>
+                {forfeited&&<span style={{fontSize:10}}>🏳️</span>}
+                {fullPaid&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700}}>✓</span>}
+                {isMe&&<span style={{fontSize:9,color:"var(--accent2)",background:"rgba(124,92,191,0.2)",padding:"1px 4px",borderRadius:3}}>you</span>}
+              </div>
+              <div style={{textAlign:"center"}}>
+                {wkAmt>0?<span style={{fontSize:12,color:"var(--red)",fontWeight:700}}>${wkAmt}</span>:<span style={{fontSize:12,color:"var(--green)"}}>✓</span>}
+              </div>
+              <div style={{textAlign:"right"}}>
+                {totalAmt>0?(
+                  <span style={{fontSize:12,fontWeight:700,color:fullPaid?"var(--green)":"var(--red)"}}>
+                    {fullPaid?"✓ Paid":`$${totalAmt}`}
+                  </span>
+                ):<span style={{fontSize:12,color:"var(--green)"}}>$0</span>}
+              </div>
             </div>
-            {wks.map(w=>{
-              const penAmt=p.byWeek?.[w]||0;
-              const worked=wkWorkouts[w]||0;
-              return(
-                <div key={w} style={{textAlign:"center",padding:"2px"}}>
-                  {hasPenalty?(
-                    <span style={{fontSize:12,color:penAmt>0?"var(--red)":"var(--green)",fontWeight:penAmt>0?700:400}}>
-                      {penAmt>0?`$${penAmt}`:"✓"}
-                    </span>
-                  ):(
-                    <span style={{fontSize:12,color:worked>0?"var(--green)":"var(--muted)"}}>
-                      {worked>0?`${worked}x`:"—"}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-            {/* Total column */}
-            <div style={{textAlign:"center",padding:"8px 4px"}}>
-              {forfeited?(
-                <span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>${c.forfeitCap||0}</span>
-              ):hasPenalty?(
-                <span style={{fontSize:12,fontWeight:700,color:p.totalOwed>0?"var(--red)":"var(--green)"}}>{p.totalOwed>0?`$${p.totalOwed}`:"$0"}</span>
-              ):(
-                <span style={{fontSize:12,color:"var(--accent2)",fontWeight:700}}>{Object.values(wkWorkouts).reduce((a,b)=>a+b,0)}</span>
-              )}
-            </div>
+
+            {/* Expanded detail — only for the member themselves or admin */}
+            {expandedMember===m&&(isMe||isAdmin)&&totalAmt>0&&(
+              <div style={{padding:"12px 14px",background:"rgba(0,0,0,0.15)",borderBottom:"1px solid var(--border)"}}>
+
+                {/* Progress */}
+                {paid>0&&<div style={{marginBottom:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:11,color:"var(--muted)"}}>${paid} paid of ${totalAmt}</span>
+                    <span style={{fontSize:11,color:"var(--muted)"}}>{Math.round((paid/totalAmt)*100)}%</span>
+                  </div>
+                  <div style={{height:5,background:"var(--bg2)",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{width:`${Math.min(100,Math.round((paid/totalAmt)*100))}%`,height:"100%",background:"var(--green)",borderRadius:3}}/>
+                  </div>
+                </div>}
+
+                {/* Payment history */}
+                {myPayments.length>0&&(
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:10,color:"var(--muted)",fontWeight:600,letterSpacing:1,marginBottom:6}}>PAYMENT HISTORY</div>
+                    {myPayments.map((pay,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                        <div style={{width:24,height:24,borderRadius:"50%",background:pay.method==="Zelle"?"#1d4ed8":"#555",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          <span style={{fontSize:9,color:"#fff",fontWeight:700}}>{pay.method==="Zelle"?"Z":"$"}</span>
+                        </div>
+                        <div style={{flex:1}}>
+                          <span style={{fontSize:12,color:"var(--text)"}}>${pay.amount} via {pay.method}</span>
+                          <span style={{fontSize:10,color:"var(--muted)",marginLeft:6}}>{pay.date}</span>
+                        </div>
+                        <span style={{fontSize:11,color:"var(--green)"}}>✓</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pay buttons — only for the member themselves */}
+                {isMe&&!fullPaid&&(
+                  <div>
+                    <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>
+                      Pay remaining <strong style={{color:"var(--red)"}}>${totalAmt-paid}</strong>:
+                    </div>
+                    <div style={{display:"flex",gap:8,marginBottom:8}}>
+                      <button onClick={handleZelle} style={{flex:1,padding:"9px 8px",borderRadius:8,border:"1px solid #2563eb",background:"rgba(37,99,235,0.1)",color:"#60a5fa",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                        PAY ${totalAmt-paid} VIA ZELLE
+                      </button>
+                      <button onClick={()=>handleCash(m,totalAmt-paid)} style={{flex:1,padding:"9px 8px",borderRadius:8,border:"1px solid var(--border)",background:"var(--bg3)",color:"var(--muted)",fontSize:12,cursor:"pointer",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                        PAID CASH
+                      </button>
+                    </div>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <input type="number" placeholder="Partial amount..." value={partialAmt} onChange={e=>setPartialAmt(e.target.value)} min={1} max={totalAmt-paid} style={{flex:1,padding:"7px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg2)",color:"var(--text)",fontSize:12}}/>
+                      <button onClick={handleZelle} disabled={!partialAmt} style={{padding:"7px 10px",borderRadius:6,border:"1px solid #2563eb",background:"rgba(37,99,235,0.1)",color:"#60a5fa",fontSize:11,cursor:"pointer"}}>Zelle</button>
+                      <button onClick={()=>handleCash(m,Number(partialAmt))} disabled={!partialAmt} style={{padding:"7px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg3)",color:"var(--muted)",fontSize:11,cursor:"pointer"}}>Cash</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Admin mark as paid */}
+                {isAdmin&&!isMe&&!fullPaid&&(
+                  <div>
+                    <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>Admin — mark payment received:</div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>onMarkPaid(c.id,m,totalAmt-paid,"Cash")} style={{flex:1,padding:"8px",borderRadius:8,border:"1px solid var(--green)",background:"rgba(46,204,113,0.1)",color:"var(--green)",fontSize:12,cursor:"pointer",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                        MARK ${totalAmt-paid} PAID
+                      </button>
+                    </div>
+                    <div style={{display:"flex",gap:6,alignItems:"center",marginTop:6}}>
+                      <input type="number" placeholder="Partial amount..." value={partialAmt} onChange={e=>setPartialAmt(e.target.value)} min={1} style={{flex:1,padding:"7px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg2)",color:"var(--text)",fontSize:12}}/>
+                      <button onClick={()=>{onMarkPaid(c.id,m,Number(partialAmt),"Cash");setPartialAmt("");}} disabled={!partialAmt} style={{padding:"7px 10px",borderRadius:6,border:"1px solid var(--green)",background:"rgba(46,204,113,0.1)",color:"var(--green)",fontSize:11,cursor:"pointer"}}>Mark Paid</button>
+                    </div>
+                  </div>
+                )}
+
+                {fullPaid&&<div style={{textAlign:"center",color:"var(--green)",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2}}>✓ FULLY PAID UP</div>}
+              </div>
+            )}
           </div>
         );
       })}
+
+      {/* Grand total row */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 70px 60px",padding:"10px 12px",background:"rgba(241,196,15,0.05)",borderTop:"1px solid rgba(241,196,15,0.15)"}}>
+        <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,color:"var(--gold)"}}>🏆 PRIZE POT</span>
+        <div/>
+        <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,color:"var(--gold)",textAlign:"right",fontWeight:700}}>${grandTotal}</span>
+      </div>
     </div>
   );
 }
 
-function ChallengeCard({challenge:c,currentUser,members,profiles,onLog,onDelete,onEdit,onForfeit,history,completed}){
+
+function ChallengeCard({challenge:c,currentUser,adminName,members,profiles,onLog,onDelete,onEdit,onForfeit,onMarkPaid,onLogPayment,history,completed}){
   const [logOpen,setLogOpen]=useState(false);
   const [editOpen,setEditOpen]=useState(false);
   const [forfeitConfirm,setForfeitConfirm]=useState(false);
@@ -1149,7 +1247,7 @@ function ChallengeCard({challenge:c,currentUser,members,profiles,onLog,onDelete,
         </div>
       ))}
 
-      <PenaltyTracker challenge={c} history={history} profiles={profiles}/>
+      <PenaltyTracker challenge={c} history={history} profiles={profiles} currentUser={currentUser} adminName={adminName} onMarkPaid={onMarkPaid} onLogPayment={onLogPayment}/>
 
       {/* Auto-forfeit prompt when at cap */}
       {!completed&&amI&&!myForfeited&&atForfeitCap&&(
@@ -1241,7 +1339,7 @@ function ChallengeInvites({currentUser,challenges,profiles,onAccept,onDecline,on
   );
 }
 
-function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,onLogProgress,onDelete,onEditChallenge,onForfeit,onAccept,onDecline,onOpenProfile}){
+function ChallengesTab({currentUser,adminName,members,profiles,challenges,history,onAdd,onLogProgress,onDelete,onEditChallenge,onForfeit,onAccept,onDecline,onOpenProfile,onMarkPaid,onLogPayment}){
   const [open,setOpen]=useState(false);
   const defEnd=()=>{const e=new Date();e.setDate(e.getDate()+30);return localDateStr(e);};
   const [form,setForm]=useState({title:"",useDateRange:false,goal:30,unit:"reps",startDate:todayStr(),endDate:defEnd(),penalty:"",penaltyAmt:"",forfeitCap:"",maxRestDays:2,participants:[]});
@@ -1258,7 +1356,7 @@ function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,on
         ? {progress:0,done:false,status:"accepted"}
         : {progress:0,done:false,status:"pending"}
     }),{});
-    onAdd({id:Date.now().toString(),title:form.title.trim(),goalType:form.useDateRange?"dateRange":"amount",goal,unit:form.useDateRange?"days":form.unit,startDate:form.useDateRange?form.startDate:null,endDate:form.useDateRange?form.endDate:null,penalty:form.penalty.trim(),penaltyAmt:form.penaltyAmt?Number(form.penaltyAmt):0,forfeitCap:form.forfeitCap?Number(form.forfeitCap):0,maxRestDays:form.useDateRange?Number(form.maxRestDays):null,createdBy:currentUser,createdAt:Date.now(),participants:participantMap,status:"active"});
+    onAdd({id:Date.now().toString(),title:form.title.trim(),goalType:form.useDateRange?"dateRange":"amount",goal,unit:form.useDateRange?"days":form.unit,startDate:form.useDateRange?form.startDate:null,endDate:form.useDateRange?form.endDate:null,penalty:form.penalty.trim(),penaltyAmt:form.penaltyAmt?Number(form.penaltyAmt):0,forfeitCap:form.forfeitCap?Number(form.forfeitCap):0,maxRestDays:form.useDateRange?Number(form.maxRestDays):null,zelleContact:form.zelleContact||"",createdBy:currentUser,createdAt:Date.now(),participants:participantMap,status:"active"});
     setOpen(false);
   };
   const active=challenges.filter(c=>c.status==="active"),done=challenges.filter(c=>c.status!=="active");
@@ -1268,9 +1366,9 @@ function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,on
       <ChallengeInvites currentUser={currentUser} challenges={challenges} profiles={profiles} onAccept={onAccept} onDecline={onDecline} onOpenProfile={onOpenProfile}/>
       {active.filter(c=>c.participants?.[currentUser]?.status!=="pending").length===0&&done.length===0&&challenges.filter(c=>c.participants?.[currentUser]?.status==="pending").length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}><div style={{fontSize:40,marginBottom:12}}>⚔️</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2}}>NO ACTIVE CHALLENGES</div></div>}
       {active.filter(c=>c.participants?.[currentUser]?.status!=="pending").length>0&&<div className="section-label">ACTIVE</div>}
-      {active.filter(c=>c.participants?.[currentUser]?.status!=="pending").map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} onForfeit={onForfeit} history={history}/>)}
+      {active.filter(c=>c.participants?.[currentUser]?.status!=="pending").map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} onForfeit={onForfeit} onMarkPaid={onMarkPaid} onLogPayment={onLogPayment} history={history}/>)}
       {done.length>0&&<div className="section-label" style={{marginTop:8}}>COMPLETED</div>}
-      {done.map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} onForfeit={onForfeit} history={history} completed/>)}
+      {done.map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} onForfeit={onForfeit} onMarkPaid={onMarkPaid} onLogPayment={onLogPayment} history={history} completed/>)}
       {open&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setOpen(false)}><div className="modal">
         <div className="modal-handle"/>
         <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:14}}>NEW CHALLENGE</div>
@@ -1297,6 +1395,7 @@ function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,on
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Penalty (optional)</div><input className="input" placeholder='e.g. "Buys lunch"' value={form.penalty} onChange={e=>setForm({...form,penalty:e.target.value})} maxLength={80}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout <span style={{color:"var(--bg3)",fontSize:11}}>(optional)</span></div><input className="input" type="number" placeholder="optional — e.g. 5" value={form.penaltyAmt} onChange={e=>setForm({...form,penaltyAmt:e.target.value})} min={0}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Forfeit cap $ (optional — max they'll ever owe)</div><input className="input" type="number" placeholder="e.g. 50" value={form.forfeitCap} onChange={e=>setForm({...form,forfeitCap:e.target.value})} min={0}/></div>
+          <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Zelle contact (phone or email — for payment)</div><input className="input" placeholder="e.g. 555-555-5555" value={form.zelleContact||""} onChange={e=>setForm({...form,zelleContact:e.target.value})} maxLength={50}/></div>
           {form.useDateRange&&<div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Max rest days per week allowed</div>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -2220,6 +2319,20 @@ export default function App(){
     await fsSet("wolfpack/challenges",{list:newList});
     showToast("Challenge declined.");
   };
+  const handleMarkPaid=async(challengeId,member,amount,method)=>{
+    const payment={amount,method,date:todayStr(),ts:Date.now()};
+    const newList=challenges.map(c=>{
+      if(c.id!==challengeId)return c;
+      const existingPayments=c.payments?.[member]||[];
+      return{...c,payments:{...c.payments,[member]:[...existingPayments,payment]}};
+    });
+    await fsSet("wolfpack/challenges",{list:newList});
+    showToast(`✓ $${amount} ${method} payment recorded for ${member}`);
+  };
+  const handleLogPayment=async(challengeId,member,amount,method)=>{
+    await handleMarkPaid(challengeId,member,amount,method);
+  };
+
   const handleForfeit=async(challengeId,member)=>{
     const newList=challenges.map(c=>{
       if(c.id!==challengeId)return c;
@@ -2276,7 +2389,7 @@ export default function App(){
         {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>}
         {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost} onComment={handleComment} onDeleteComment={handleDeleteComment}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
-        {view==="challenges"&&<ChallengesTab currentUser={currentUser} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)}/>}
+        {view==="challenges"&&<ChallengesTab currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)} onMarkPaid={handleMarkPaid} onLogPayment={handleLogPayment}/>}
         {view==="stats"&&<StatsTab currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed}/>}
       </div>
       <nav className="nav">
