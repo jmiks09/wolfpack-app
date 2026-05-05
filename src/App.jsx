@@ -1886,8 +1886,15 @@ function WorkoutModal({onClose,onSubmit}){
             </div>
 
             {/* Preview */}
-            <div style={{padding:"10px 14px",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.2)",borderRadius:10,marginBottom:12,fontSize:13,color:"var(--accent2)"}}>
-              {formatWorkoutSummary(selected,details)||"Your workout summary will appear here"}
+            <div style={{padding:"10px 14px",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.2)",borderRadius:10,marginBottom:12}}>
+              {formatWorkoutSummary(selected,details).length===0
+                ?<div style={{fontSize:13,color:"var(--muted)"}}>Fill in details above to see preview</div>
+                :formatWorkoutSummary(selected,details).map((w,i)=>(
+                  <div key={i} style={{fontSize:13,color:"var(--accent2)",lineHeight:1.6}}>
+                    <span style={{fontWeight:600}}>{w.label}</span>{w.detail?`: ${w.detail}`:""}
+                  </div>
+                ))
+              }
             </div>
 
             <button className="btn-primary" onClick={handleSubmit}>LOG IT 💪</button>
