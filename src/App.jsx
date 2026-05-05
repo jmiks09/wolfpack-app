@@ -1003,18 +1003,22 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
   const [zelleConfirm,setZelleConfirm]=useState(false);
   const [zelleAmt,setZelleAmt]=useState(0);
 
+  const [zelleCopied,setZelleCopied]=useState(false);
   const handleZelle=(amt)=>{
+    // Just open Zelle website + show confirmation — no auto-copy
+    window.open("https://www.zellepay.com","_blank");
+    setZelleAmt(amt);
+    setZelleConfirm(true);
+    setZelleCopied(false);
+  };
+  const copyZelleContact=()=>{
     const recipientName=c.paymentRecipient==="admin"?adminName:c.createdBy;
-    const recipientProfile=profiles[recipientName]||{};
-    const zelleContact=recipientProfile.zelleContact||"";
-    // Copy contact to clipboard
+    const zelleContact=profiles[recipientName]?.zelleContact||"";
     if(zelleContact){
-      navigator.clipboard?.writeText(zelleContact).catch(()=>{});
+      navigator.clipboard?.writeText(zelleContact).then(()=>{
+        setZelleCopied(true);
+      }).catch(()=>{setZelleCopied(true);}); // still show copied even if clipboard API fails
     }
-    // Open Zelle app directly
-    window.location.href="zelle://";
-    // Show confirmation step after short delay
-    setTimeout(()=>{setZelleAmt(amt);setZelleConfirm(true);},800);
   };
 
   const confirmZellePayment=()=>{
@@ -1022,10 +1026,7 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
     setZelleConfirm(false);setZelleAmt(0);setPartialAmt("");
   };
 
-  const handleCash=(member,amt)=>{
-    onLogPayment(c.id,member||currentUser,amt||((penalties[currentUser]?.totalOwed||0)-paidAmount(currentUser)),"Cash");
-    setPartialAmt("");
-  };
+
 
   return(
     <div style={{marginTop:12,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
@@ -1125,8 +1126,28 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
                     {/* Zelle confirmation overlay */}
                     {zelleConfirm&&(
                       <div style={{padding:"12px",background:"rgba(37,99,235,0.1)",border:"1px solid rgba(37,99,235,0.3)",borderRadius:10,marginBottom:10}}>
-                        <div style={{fontSize:13,marginBottom:4,fontWeight:600,color:"#60a5fa"}}>Did you send ${zelleAmt} via Zelle?</div>
-                        {(()=>{const rn=c.paymentRecipient==="admin"?adminName:c.createdBy;const rc=profiles[rn]?.zelleContact;return rc?<div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>Send to: <strong style={{color:"var(--text)"}}>{rc}</strong> (copied to clipboard)</div>:<div style={{fontSize:12,color:"var(--orange)",marginBottom:8}}>⚠️ Challenge creator hasn't set their Zelle contact yet.</div>;})()}
+                        <div style={{fontSize:13,marginBottom:8,fontWeight:600,color:"#60a5fa"}}>Send ${zelleAmt} via Zelle then confirm below</div>
+                        {(()=>{
+                          const rn=c.paymentRecipient==="admin"?adminName:c.createdBy;
+                          const rc=profiles[rn]?.zelleContact;
+                          return rc?(
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"8px 10px",background:"rgba(0,0,0,0.2)",borderRadius:8}}>
+                              <div style={{flex:1}}>
+                                <div style={{fontSize:10,color:"var(--muted)",marginBottom:2}}>Send to:</div>
+                                <div style={{fontSize:13,color:"var(--text)",fontWeight:600}}>{rc}</div>
+                              </div>
+                              <button onClick={copyZelleContact} style={{
+                                padding:"6px 12px",borderRadius:8,cursor:"pointer",flexShrink:0,
+                                background:zelleCopied?"rgba(46,204,113,0.2)":"rgba(255,255,255,0.08)",
+                                border:zelleCopied?"1px solid var(--green)":"1px solid var(--border)",
+                                color:zelleCopied?"var(--green)":"var(--muted)",
+                                fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,
+                              }}>
+                                {zelleCopied?"✓ COPIED TO CLIPBOARD":"COPY"}
+                              </button>
+                            </div>
+                          ):<div style={{fontSize:12,color:"var(--orange)",marginBottom:8}}>⚠️ No Zelle contact set yet.</div>;
+                        })()}
                         <div style={{display:"flex",gap:8}}>
                           <button onClick={confirmZellePayment} style={{flex:1,padding:"9px",background:"#1d4ed8",border:"none",borderRadius:8,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1}}>YES, I PAID</button>
                           <button onClick={()=>setZelleConfirm(false)} style={{flex:1,padding:"9px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--muted)",fontSize:13}}>NOT YET</button>
@@ -1141,14 +1162,10 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
                       <button onClick={()=>handleZelle(totalAmt-paid)} style={{flex:1,padding:"9px 8px",borderRadius:8,border:"1px solid #2563eb",background:"rgba(37,99,235,0.1)",color:"#60a5fa",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
                         PAY ${totalAmt-paid} VIA ZELLE
                       </button>
-                      <button onClick={()=>handleCash(m,totalAmt-paid)} style={{flex:1,padding:"9px 8px",borderRadius:8,border:"1px solid var(--border)",background:"var(--bg3)",color:"var(--muted)",fontSize:12,cursor:"pointer",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
-                        PAID CASH
-                      </button>
                     </div>
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                       <input type="number" placeholder="Partial amount..." value={partialAmt} onChange={e=>setPartialAmt(e.target.value)} min={1} max={totalAmt-paid} style={{flex:1,padding:"7px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg2)",color:"var(--text)",fontSize:12}}/>
                       <button onClick={()=>handleZelle(Number(partialAmt))} disabled={!partialAmt} style={{padding:"7px 10px",borderRadius:6,border:"1px solid #2563eb",background:"rgba(37,99,235,0.1)",color:"#60a5fa",fontSize:11,cursor:"pointer"}}>Zelle</button>
-                      <button onClick={()=>handleCash(m,Number(partialAmt))} disabled={!partialAmt} style={{padding:"7px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg3)",color:"var(--muted)",fontSize:11,cursor:"pointer"}}>Cash</button>
                     </div>
                     </>}
                   </div>
