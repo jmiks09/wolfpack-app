@@ -1004,17 +1004,17 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
   const [zelleAmt,setZelleAmt]=useState(0);
 
   const handleZelle=(amt)=>{
-    // Get zelle contact from payment recipient profile
     const recipientName=c.paymentRecipient==="admin"?adminName:c.createdBy;
     const recipientProfile=profiles[recipientName]||{};
     const zelleContact=recipientProfile.zelleContact||"";
-    // Copy to clipboard
+    // Copy contact to clipboard
     if(zelleContact){
       navigator.clipboard?.writeText(zelleContact).catch(()=>{});
     }
-    // Show confirmation step — don't log payment yet
-    setZelleAmt(amt);
-    setZelleConfirm(true);
+    // Open Zelle app directly
+    window.location.href="zelle://";
+    // Show confirmation step after short delay
+    setTimeout(()=>{setZelleAmt(amt);setZelleConfirm(true);},800);
   };
 
   const confirmZellePayment=()=>{
@@ -1045,13 +1045,7 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
         <span style={{fontSize:10,color:"var(--muted)",textAlign:"center"}}>This week</span>
         <span style={{fontSize:10,color:"var(--red)",textAlign:"right",fontWeight:700}}>Total</span>
       </div>
-      {/* Today at-risk warning — show if today is a workout day and not yet logged */}
-      {acceptedParts.some(m=>!isRestDay(todayStr(),profiles[m])&&!history[todayStr()]?.[m]?.done)&&(
-        <div style={{padding:"6px 12px",background:"rgba(241,196,15,0.08)",borderBottom:"1px solid rgba(241,196,15,0.15)",display:"flex",alignItems:"center",gap:6}}>
-          <span style={{fontSize:12}}>⚠️</span>
-          <span style={{fontSize:11,color:"var(--gold)"}}>Workout day — log before midnight to avoid penalties</span>
-        </div>
-      )}
+
 
       {acceptedParts.map(m=>{
         const p=penalties[m]||{totalOwed:0,byWeek:{}};
