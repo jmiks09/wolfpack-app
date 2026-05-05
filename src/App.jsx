@@ -905,7 +905,6 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
   const [endDate,setEndDate]=useState(challenge.endDate||"");
   const [penalty,setPenalty]=useState(challenge.penalty||"");
   const [penaltyAmt,setPenaltyAmt]=useState(challenge.penaltyAmt||"");
-  const [zelleContact,setZelleContact]=useState(challenge.zelleContact||"");
   const [forfeitCap,setForfeitCap]=useState(challenge.forfeitCap||"");
   const [parts,setParts]=useState(Object.keys(challenge.participants||{}));
   const toggle=m=>setParts(p=>p.includes(m)?p.filter(x=>x!==m):[...p,m]);
@@ -921,7 +920,7 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
     });
     Object.keys(np).forEach(m=>{if(!parts.includes(m))delete np[m];});
     const newGoal=isDR&&startDate&&endDate?getWeekdays(startDate,endDate).length:Number(goal);
-    onSave({...challenge,title:title.trim(),goal:newGoal,unit:isDR?"days":unit,startDate:isDR?startDate:challenge.startDate,endDate:isDR?endDate:challenge.endDate,penalty:penalty.trim(),penaltyAmt:penaltyAmt?Number(penaltyAmt):0,forfeitCap:forfeitCap?Number(forfeitCap):0,zelleContact:zelleContact.trim(),participants:np});
+    onSave({...challenge,title:title.trim(),goal:newGoal,unit:isDR?"days":unit,startDate:isDR?startDate:challenge.startDate,endDate:isDR?endDate:challenge.endDate,penalty:penalty.trim(),penaltyAmt:penaltyAmt?Number(penaltyAmt):0,forfeitCap:forfeitCap?Number(forfeitCap):0,participants:np});
     onClose();
   };
 
@@ -950,7 +949,6 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Penalty</div><input className="input" placeholder='e.g. "Buys lunch"' value={penalty} onChange={e=>setPenalty(e.target.value)} maxLength={80}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout <span style={{fontSize:11}}>(optional)</span></div><input className="input" type="number" placeholder="optional — e.g. 5" value={penaltyAmt} onChange={e=>setPenaltyAmt(e.target.value)} min={0}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Forfeit cap $ (optional)</div><input className="input" type="number" placeholder="e.g. 50" value={forfeitCap} onChange={e=>setForfeitCap(e.target.value)} min={0}/></div>
-          <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Zelle contact (phone or email)</div><input className="input" placeholder="e.g. 555-555-5555" value={zelleContact} onChange={e=>setZelleContact(e.target.value)} maxLength={50}/></div>
           <div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>Participants</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -994,7 +992,9 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
   const [partialAmt,setPartialAmt]=useState("");
 
   const handleZelle=()=>{
-    const zelleContact=c.zelleContact||"";
+    // Get zelle contact from creator's profile — never stored in challenge
+    const creatorProfile=profiles[c.createdBy]||{};
+    const zelleContact=creatorProfile.zelleContact||"";
     if(zelleContact){
       const amt=partialAmt?Number(partialAmt):(penalties[currentUser]?.totalOwed||0)-paidAmount(currentUser);
       window.open(`https://enroll.zellepay.com/qr-codes?data=${encodeURIComponent(JSON.stringify({name:"WOLFPACK",token:zelleContact,amount:amt}))}`, "_blank");
@@ -1356,7 +1356,7 @@ function ChallengesTab({currentUser,adminName,members,profiles,challenges,histor
         ? {progress:0,done:false,status:"accepted"}
         : {progress:0,done:false,status:"pending"}
     }),{});
-    onAdd({id:Date.now().toString(),title:form.title.trim(),goalType:form.useDateRange?"dateRange":"amount",goal,unit:form.useDateRange?"days":form.unit,startDate:form.useDateRange?form.startDate:null,endDate:form.useDateRange?form.endDate:null,penalty:form.penalty.trim(),penaltyAmt:form.penaltyAmt?Number(form.penaltyAmt):0,forfeitCap:form.forfeitCap?Number(form.forfeitCap):0,maxRestDays:form.useDateRange?Number(form.maxRestDays):null,zelleContact:form.zelleContact||"",createdBy:currentUser,createdAt:Date.now(),participants:participantMap,status:"active"});
+    onAdd({id:Date.now().toString(),title:form.title.trim(),goalType:form.useDateRange?"dateRange":"amount",goal,unit:form.useDateRange?"days":form.unit,startDate:form.useDateRange?form.startDate:null,endDate:form.useDateRange?form.endDate:null,penalty:form.penalty.trim(),penaltyAmt:form.penaltyAmt?Number(form.penaltyAmt):0,forfeitCap:form.forfeitCap?Number(form.forfeitCap):0,maxRestDays:form.useDateRange?Number(form.maxRestDays):null,createdBy:currentUser,createdAt:Date.now(),participants:participantMap,status:"active"});
     setOpen(false);
   };
   const active=challenges.filter(c=>c.status==="active"),done=challenges.filter(c=>c.status!=="active");
@@ -1395,7 +1395,6 @@ function ChallengesTab({currentUser,adminName,members,profiles,challenges,histor
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Penalty (optional)</div><input className="input" placeholder='e.g. "Buys lunch"' value={form.penalty} onChange={e=>setForm({...form,penalty:e.target.value})} maxLength={80}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout <span style={{color:"var(--bg3)",fontSize:11}}>(optional)</span></div><input className="input" type="number" placeholder="optional — e.g. 5" value={form.penaltyAmt} onChange={e=>setForm({...form,penaltyAmt:e.target.value})} min={0}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Forfeit cap $ (optional — max they'll ever owe)</div><input className="input" type="number" placeholder="e.g. 50" value={form.forfeitCap} onChange={e=>setForm({...form,forfeitCap:e.target.value})} min={0}/></div>
-          <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Zelle contact (phone or email — for payment)</div><input className="input" placeholder="e.g. 555-555-5555" value={form.zelleContact||""} onChange={e=>setForm({...form,zelleContact:e.target.value})} maxLength={50}/></div>
           {form.useDateRange&&<div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Max rest days per week allowed</div>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -1489,6 +1488,18 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
     showRestSaved(true);setTimeout(()=>showRestSaved(false),2000);
   };
   const [restSaved,showRestSaved]=useState(false);
+  const [zelleInfo,setZelleInfo]=useState(profile?.zelleContact||"");
+  const [zelleSaved,setZelleSaved]=useState(false);
+  const saveZelle=async()=>{
+    const np={...profiles,[currentUser]:{...profiles[currentUser],zelleContact:zelleInfo.trim()}};
+    await fsSet("wolfpack/profiles",{users:np});if(onSaveProfile)onSaveProfile(np);
+    setZelleSaved(true);setTimeout(()=>setZelleSaved(false),2000);
+  };
+  const onSaveZelle=async(val)=>{
+    const np={...profiles,[currentUser]:{...profiles[currentUser],zelleContact:val}};
+    await fsSet("wolfpack/profiles",{users:np});if(onSaveProfile)onSaveProfile(np);
+    setZelleInfo(val);
+  };
   const [pbExercise,setPbExercise]=useState("");
   const [pbValue,setPbValue]=useState("");
   const [pbUnit,setPbUnit]=useState("lbs");
@@ -1726,6 +1737,17 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
                     ))}
                   </div>
                 )}
+              </div>
+              <div style={{height:1,background:"var(--border)",margin:"4px 0"}}/>
+              {/* Zelle contact — private */}
+              <div>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)",marginBottom:4}}>ZELLE CONTACT <span style={{fontSize:10,letterSpacing:1}}>— private, for challenge payments</span></div>
+                <input className="input" placeholder="Phone or email for Zelle" value={zelleInfo} onChange={e=>setZelleInfo(e.target.value)} maxLength={50}/>
+                <div style={{display:"flex",gap:8,marginTop:8}}>
+                  <button className="btn-primary" onClick={saveZelle} disabled={zelleInfo===profile?.zelleContact}>{zelleSaved?"✓ SAVED!":"SAVE ZELLE"}</button>
+                  {profile?.zelleContact&&<button className="btn-ghost" onClick={()=>{setZelleInfo("");onSaveZelle("");}}>Clear</button>}
+                </div>
+                <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>Only used when someone taps "Pay via Zelle" on a challenge you created. Never shown to others.</div>
               </div>
             </div>
           )}
