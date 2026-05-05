@@ -135,26 +135,36 @@ const BADGES = [
 ];
 const WOLF_AVATARS = ["🐺","🦊","🦁","🐻","🐯","🦝","🐸","🦅","🦈","🐲","🦄","🦋"];
 const GYM_HOURS = Array.from({length:14},(_,i)=>{const h=6+i;return h<12?`${h}:00 AM`:h===12?`12:00 PM`:`${h-12}:00 PM`;});
+const GYM_CLOSE_HOUR = 20; // 8 PM
+const isGymOpen = () => { const h=new Date().getHours(); return h>=6&&h<GYM_CLOSE_HOUR; };
 const REACTIONS = ["💪","🔥","👑","🐺","⚡","🙌"];
 const MILESTONES = [7,14,30,60,100]; // streak days that trigger auto-post
 const SESSION_MILESTONES = [50,100,200,500]; // session counts that trigger auto-post
 
 const NAV=[{id:"pack",icon:"🐺",label:"PACK"},{id:"feed",icon:"💬",label:"FEED"},{id:"gym",icon:"🏋️",label:"GYM"},{id:"challenges",icon:"⚔️",label:"CHALLENGES"},{id:"stats",icon:"📊",label:"STATS"}];
 
-const todayStr=()=>new Date().toISOString().split("T")[0];
+const todayStr=()=>{
+  const d=new Date();
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,"0");
+  const day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+};
+// Use local date string for any Date object (avoids UTC timezone shift)
+const localDateStr=d=>{const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,"0");const day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`;};
 const isWeekend=d=>{const x=new Date(d+"T00:00:00");return x.getDay()===0||x.getDay()===6;};
 const DAY_NAMES=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const getRestDays=profile=>profile?.restDays||[0,6]; // default Sat/Sun
 const isRestDay=(d,profile)=>{const x=new Date(d+"T00:00:00");return getRestDays(profile).includes(x.getDay());};
-const next7Days=()=>Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return d.toISOString().split("T")[0];});
+const next7Days=()=>Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return localDateStr(d);});
 const fmtDate=d=>new Date(d+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
 const fmtTime=ts=>new Date(ts).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
-const getWeekStart=d=>{const x=new Date(d+"T00:00:00");x.setDate(x.getDate()-x.getDay());return x.toISOString().split("T")[0];};
-const getDateRange=(s,e)=>{const dates=[];const sd=new Date(s+"T00:00:00"),ed=new Date(e+"T00:00:00");for(let d=new Date(sd);d<=ed;d.setDate(d.getDate()+1))dates.push(d.toISOString().split("T")[0]);return dates;};
+const getWeekStart=d=>{const x=new Date(d+"T00:00:00");x.setDate(x.getDate()-x.getDay());return localDateStr(x);};
+const getDateRange=(s,e)=>{const dates=[];const sd=new Date(s+"T00:00:00"),ed=new Date(e+"T00:00:00");for(let d=new Date(sd);d<=ed;d.setDate(d.getDate()+1))dates.push(localDateStr(d));return dates;};
 const getWeekdays=(s,e)=>getDateRange(s,e).filter(d=>!isWeekend(d));
 // Get workout days for a member based on their personal rest days
 const getWorkoutDays=(s,e,profile)=>getDateRange(s,e).filter(d=>!isRestDay(d,profile));
-function getStreak(h,n,profile){let s=0;const b=new Date();for(let i=0;i<365;i++){const d=new Date(b);d.setDate(b.getDate()-i);const k=d.toISOString().split("T")[0];if(isRestDay(k,profile))continue;if(h[k]?.[n]?.done)s++;else if(i>0)break;}return s;}
+function getStreak(h,n,profile){let s=0;const b=new Date();for(let i=0;i<365;i++){const d=new Date(b);d.setDate(b.getDate()-i);const k=localDateStr(d);if(isRestDay(k,profile))continue;if(h[k]?.[n]?.done)s++;else if(i>0)break;}return s;}
 function getTotalWorkouts(h,n){
   // Count total sessions — each workout type logged counts as 1 session
   return Object.values(h).reduce((sum,d)=>{
@@ -727,6 +737,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
 function FeedPost({post:p, currentUser, profiles, onLike, onDelete, onComment, onDeleteComment}){
   const [showComments,setShowComments]=useState(false);
   const [commentText,setCommentText]=useState("");
+  const [showLikes,setShowLikes]=useState(false);
   const liked=(p.likes||[]).includes(currentUser);
   const isMe=p.author===currentUser;
   const comments=p.comments||[];
@@ -754,14 +765,29 @@ function FeedPost({post:p, currentUser, profiles, onLike, onDelete, onComment, o
       {p.photo&&<img src={p.photo} alt="post" style={{width:"100%",borderRadius:10,marginBottom:12,maxHeight:300,objectFit:"cover"}}/>}
 
       {/* Actions row */}
-      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:comments.length>0||showComments?10:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:4}}>
         <button onClick={()=>onLike(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:liked?"var(--orange)":"var(--muted)",display:"flex",alignItems:"center",gap:4,fontSize:13}}>
-          {liked?"🔥":"🤍"} {(p.likes||[]).length||0}
+          {liked?"🔥":"🤍"} {(p.likes||[]).length||0} {(p.likes||[]).length===1?"like":"likes"}
         </button>
-        <button onClick={()=>setShowComments(s=>!s)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",display:"flex",alignItems:"center",gap:4,fontSize:13}}>
+        {(p.likes||[]).length>0&&(
+          <button onClick={()=>setShowLikes(s=>!s)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:12,textDecoration:"underline"}}>
+            {showLikes?"hide":"who liked?"}
+          </button>
+        )}
+        <button onClick={()=>setShowComments(s=>!s)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",display:"flex",alignItems:"center",gap:4,fontSize:13,marginLeft:"auto"}}>
           💬 {comments.length>0?comments.length:"Reply"}
         </button>
       </div>
+      {showLikes&&(p.likes||[]).length>0&&(
+        <div style={{marginBottom:8,padding:"8px 10px",background:"var(--bg3)",borderRadius:10,display:"flex",flexWrap:"wrap",gap:6}}>
+          {(p.likes||[]).map(name=>(
+            <div key={name} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px",background:"var(--bg2)",borderRadius:20,fontSize:12}}>
+              <AvatarDisplay profile={profiles[name]} size={16}/>
+              <span>{name}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Comments */}
       {(showComments||comments.length>0)&&(
@@ -863,8 +889,8 @@ function GymTab({currentUser,gymSlots,onBook,onCancel}){
         {dates.map(d=>{const act=d===sel,dd=new Date(d+"T00:00:00"),we=isWeekend(d);return<button key={d} onClick={()=>setSel(d)} style={{flexShrink:0,minWidth:56,padding:"8px 10px",borderRadius:12,cursor:"pointer",textAlign:"center",background:act?"linear-gradient(135deg,var(--accent),var(--orange))":"var(--bg3)",border:"none",color:we&&!act?"var(--muted)":"#fff",opacity:we?.6:1}}><div style={{fontSize:10,opacity:.8}}>{dd.toLocaleDateString("en-US",{weekday:"short"})}</div><div style={{fontSize:17,fontWeight:700}}>{dd.getDate()}</div>{we&&<div style={{fontSize:9,opacity:.7}}>REST</div>}</button>;})}
       </div>
       {mySlots.length>0&&<><div className="section-label">MY RESERVATIONS</div>{mySlots.map(s=><div key={s.id} style={{display:"flex",alignItems:"center",gap:12,margin:"0 16px 8px",padding:"12px 14px",background:"rgba(124,92,191,0.1)",borderRadius:12,border:"1px solid rgba(124,92,191,0.25)"}}><span style={{fontSize:20}}>🏋️</span><div style={{flex:1}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1}}>{s.time}</div><div style={{fontSize:11,color:"var(--muted)"}}>{fmtDate(s.date)}</div></div><button onClick={()=>onCancel(s.id)} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"var(--muted)",fontSize:12}}>Cancel</button></div>)}</>}
-      <div className="section-label">{fmtDate(sel)}{isWeekend(sel)&&" — REST DAY"}</div>
-      {isWeekend(sel)?<div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)"}}><div style={{fontSize:40,marginBottom:8}}>😴</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2}}>GYM CLOSED ON WEEKENDS</div></div>:
+      <div className="section-label">{fmtDate(sel)}{isWeekend(sel)?" — REST DAY":" — 6:00 AM – 8:00 PM"}</div>
+      {isWeekend(sel)||(!isGymOpen()&&sel===todayStr())?<div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)"}}><div style={{fontSize:40,marginBottom:8}}>{isWeekend(sel)?"😴":"🔒"}</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2}}>{isWeekend(sel)?"GYM CLOSED ON WEEKENDS":"GARAGE GYM CLOSED"}</div><div style={{fontSize:12,color:"var(--muted)",marginTop:6}}>Hours: 6:00 AM – 8:00 PM</div></div>:
         GYM_HOURS.map(time=>{
           const booked=daySlots.filter(s=>s.time===time),mine=booked.find(s=>s.bookedBy===currentUser),full=booked.length>=2;
           return<div key={time} style={{display:"flex",alignItems:"center",gap:10,margin:"0 16px 8px",padding:"12px 14px",background:"var(--card)",borderRadius:12,border:`1px solid ${mine?"rgba(124,92,191,0.3)":full?"rgba(231,76,60,0.2)":"var(--border)"}`}}><div style={{width:68,fontFamily:"'Bebas Neue',cursive",fontSize:13,color:mine?"var(--accent2)":full?"var(--red)":"var(--text)"}}>{time}</div><div style={{flex:1,display:"flex",gap:5,flexWrap:"wrap"}}>{booked.map(s=><span key={s.id} style={{fontSize:12,background:"var(--bg3)",padding:"2px 8px",borderRadius:8,color:"var(--muted)"}}>{s.bookedBy}</span>)}{booked.length===0&&<span style={{fontSize:12,color:"var(--muted)"}}>Open</span>}</div>{mine?<button onClick={()=>onCancel(mine.id)} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"var(--muted)",fontSize:12}}>Cancel</button>:full?<span style={{fontSize:12,color:"var(--red)",fontWeight:700}}>FULL</span>:<button onClick={()=>onBook(sel,time)} style={{background:"linear-gradient(135deg,var(--accent),var(--orange))",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",color:"#fff",fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>BOOK</button>}</div>;
@@ -951,7 +977,10 @@ function PenaltyTracker({challenge:c,history,profiles}){
   const hasPenalty=c.penaltyAmt>0;
   const penalties=hasPenalty?calcPenalties(c,history,profiles):{};
   const cap=todayStr()<c.endDate?todayStr():c.endDate;
-  const wks=[...new Set(getDateRange(c.startDate,cap).map(d=>getWeekStart(d)))].sort();
+  // Only show current week + total (not all past weeks)
+  const allWks=[...new Set(getDateRange(c.startDate,cap).map(d=>getWeekStart(d)))].sort();
+  const currentWk=getWeekStart(todayStr());
+  const wks=allWks.includes(currentWk)?[currentWk]:allWks.slice(-1);
 
   return(
     <div style={{marginTop:12,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
@@ -1218,7 +1247,7 @@ function ChallengeInvites({currentUser,challenges,profiles,onAccept,onDecline,on
 
 function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,onLogProgress,onDelete,onEditChallenge,onForfeit,onAccept,onDecline,onOpenProfile}){
   const [open,setOpen]=useState(false);
-  const defEnd=()=>{const e=new Date();e.setDate(e.getDate()+30);return e.toISOString().split("T")[0];};
+  const defEnd=()=>{const e=new Date();e.setDate(e.getDate()+30);return localDateStr(e);};
   const [form,setForm]=useState({title:"",useDateRange:false,goal:30,unit:"reps",startDate:todayStr(),endDate:defEnd(),penalty:"",penaltyAmt:"",forfeitCap:"",maxRestDays:2,participants:[]});
   useEffect(()=>setForm(f=>({...f,participants:members})),[members]);
   const toggleP=m=>setForm(f=>({...f,participants:f.participants.includes(m)?f.participants.filter(x=>x!==m):[...f.participants,m]}));
@@ -1292,7 +1321,7 @@ function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,on
 }
 
 function StatsTab({currentUser,members,profiles,history,challenges,feed}){
-  const last30=Array.from({length:30},(_,i)=>{const d=new Date();d.setDate(d.getDate()-29+i);return{date:d.toISOString().split("T")[0],day:d.getDate()};});
+  const last30=Array.from({length:30},(_,i)=>{const d=new Date();d.setDate(d.getDate()-29+i);return{date:localDateStr(d),day:d.getDate()};});
   const mb=computeBadges(currentUser,history,feed,challenges,profiles[currentUser]);
   return(
     <div>
@@ -1414,7 +1443,7 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
   const backfillDates=Array.from({length:7},(_,i)=>{
     const d=new Date();
     d.setDate(d.getDate()-(i+1));
-    return d.toISOString().split("T")[0];
+    return localDateStr(d);
   });
 
   const toggleBackfillWorkout=w=>setBackfillWorkouts(s=>s.find(x=>x.id===w.id)?s.filter(x=>x.id!==w.id):[...s,w]);
@@ -1439,7 +1468,7 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
     const base=new Date();
     for(let i=365;i>=0;i--){
       const d=new Date(base);d.setDate(base.getDate()-i);
-      const k=d.toISOString().split("T")[0];
+      const k=localDateStr(d);
       if(isRestDay(k,profile))continue;
       if(history[k]?.[currentUser]?.done){cur++;best=Math.max(best,cur);}
       else cur=0;
@@ -2021,9 +2050,9 @@ export default function App(){
     if(today.getDay()!==1)return; // only on Monday
     const lastWeekStart=new Date(today);lastWeekStart.setDate(today.getDate()-7);
     const lastWeekEnd=new Date(today);lastWeekEnd.setDate(today.getDate()-1);
-    const days=getDateRange(lastWeekStart.toISOString().split("T")[0],lastWeekEnd.toISOString().split("T")[0]);
+    const days=getDateRange(localDateStr(lastWeekStart),localDateStr(lastWeekEnd));
     const stats=members.map(m=>({name:m,days:days.filter(d=>history[d]?.[m]?.done).length})).sort((a,b)=>b.days-a.days);
-    setWeeklyRecap({stats,week:lastWeekStart.toISOString().split("T")[0],dismissed:false});
+    setWeeklyRecap({stats,week:localDateStr(lastWeekStart),dismissed:false});
   },[currentUser,members,history]);
 
   // Milestone auto-posts — check after logging
