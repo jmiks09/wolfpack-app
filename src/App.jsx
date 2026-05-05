@@ -664,8 +664,13 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
               display:"flex",alignItems:"center",gap:12,
               minHeight:80,
             }}>
-              {/* left accent bar */}
-              <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:done?"linear-gradient(180deg,#2ecc71,#27ae60)":isMe?"linear-gradient(180deg,var(--accent),var(--orange))":"transparent",borderRadius:"18px 0 0 18px"}}/>
+              {/* left accent bar with vertical status */}
+              <div style={{position:"absolute",left:0,top:0,bottom:0,width:26,background:done?"rgba(46,204,113,0.12)":restToday?"rgba(124,92,191,0.1)":"rgba(255,255,255,0.02)",borderRadius:"18px 0 0 18px",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+                <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:done?"linear-gradient(180deg,#2ecc71,#27ae60)":isMe?"linear-gradient(180deg,var(--accent),var(--orange))":restToday?"linear-gradient(180deg,var(--accent),#5a3fa0)":"transparent",borderRadius:"18px 0 0 18px"}}/>
+                <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:9,letterSpacing:2,color:done?"var(--green)":restToday?"var(--accent2)":"var(--muted)",writingMode:"vertical-rl",textOrientation:"mixed",transform:"rotate(180deg)",marginLeft:3}}>
+                  {done?"DONE":restToday?"REST":"PENDING"}
+                </span>
+              </div>
               {/* rank */}
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,color:"var(--muted)",width:20,textAlign:"center",flexShrink:0}}>{i+1}</div>
               {/* avatar */}
@@ -686,16 +691,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
                   </div>
                 )}
               </div>
-              {/* status */}
-              <div style={{
-                flexShrink:0,padding:"6px 14px",borderRadius:20,
-                background:done?"rgba(46,204,113,0.15)":restToday?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.04)",
-                border:done?"1px solid rgba(46,204,113,0.4)":"1px solid var(--border)",
-                fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,
-                color:done?"var(--green)":restToday?"var(--muted)":"var(--muted)",
-              }}>
-                {done?"✓ DONE":restToday?"REST":"PENDING"}
-              </div>
+
 
               {isMe&&<div style={{position:"absolute",top:10,right:12,fontSize:11,color:"var(--muted)"}}>👤</div>}
             </div>
