@@ -673,15 +673,15 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
               {/* info */}
               <div style={{flex:1,minWidth:0,overflow:"hidden"}}>
                 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                  <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:1,color:isMe?"var(--accent2)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}>{m}</span>
+                  <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:1,color:isMe?"var(--accent2)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>{m}</span>
                   {isMe&&<span style={{fontSize:10,color:"var(--accent2)",background:"rgba(124,92,191,0.2)",padding:"1px 5px",borderRadius:4,flexShrink:0}}>YOU</span>}
                 </div>
-                <div style={{fontSize:11,color:"var(--muted)"}}>🔥 {ms} streak · {getTotalWorkouts(history,m)} sessions</div>
+                <div style={{fontSize:11,color:"var(--muted)"}}>🔥 {ms} days · {getTotalWorkouts(history,m)} sessions</div>
                 {done&&(
                   <div style={{marginTop:3}}>
                     {Array.isArray(td[m]?.summary)
-                      ?td[m].summary.map((line,i)=><div key={i} style={{fontSize:11,color:"var(--green)",lineHeight:1.5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{line}</div>)
-                      :<div style={{fontSize:11,color:"var(--green)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{td[m]?.workoutLabel||""}</div>
+                      ?td[m].summary.map((line,i)=><div key={i} style={{fontSize:11,color:"var(--green)",lineHeight:1.5,wordBreak:"break-word"}}>{line}</div>)
+                      :<div style={{fontSize:11,color:"var(--green)",wordBreak:"break-word"}}>{td[m]?.workoutLabel||""}</div>
                     }
                   </div>
                 )}
