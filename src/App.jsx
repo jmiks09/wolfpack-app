@@ -906,6 +906,7 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
   const [penalty,setPenalty]=useState(challenge.penalty||"");
   const [penaltyAmt,setPenaltyAmt]=useState(challenge.penaltyAmt||"");
   const [forfeitCap,setForfeitCap]=useState(challenge.forfeitCap||"");
+  const [paymentRecipient,setPaymentRecipient]=useState(challenge.paymentRecipient||"creator");
   const [parts,setParts]=useState(Object.keys(challenge.participants||{}));
   const toggle=m=>setParts(p=>p.includes(m)?p.filter(x=>x!==m):[...p,m]);
 
@@ -950,6 +951,14 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout <span style={{fontSize:11}}>(optional)</span></div><input className="input" type="number" placeholder="optional — e.g. 5" value={penaltyAmt} onChange={e=>setPenaltyAmt(e.target.value)} min={0}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Forfeit cap $ (optional)</div><input className="input" type="number" placeholder="e.g. 50" value={forfeitCap} onChange={e=>setForfeitCap(e.target.value)} min={0}/></div>
           <div>
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Payments go to</div>
+            <div style={{display:"flex",gap:8}}>
+              {[{v:"creator",l:"Creator"},{v:"admin",l:"Admin"}].map(({v,l})=>(
+                <button key={v} onClick={()=>setPaymentRecipient(v)} style={{flex:1,padding:"8px",borderRadius:10,cursor:"pointer",fontSize:12,background:paymentRecipient===v?"rgba(124,92,191,0.2)":"var(--bg3)",border:paymentRecipient===v?"1px solid var(--accent)":"1px solid var(--border)",color:paymentRecipient===v?"var(--accent2)":"var(--muted)"}}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>Participants</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
               {members.map(m=>(
@@ -991,16 +1000,26 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
   const [expandedMember,setExpandedMember]=useState(null);
   const [partialAmt,setPartialAmt]=useState("");
 
-  const handleZelle=()=>{
-    // Get zelle contact from creator's profile — never stored in challenge
-    const creatorProfile=profiles[c.createdBy]||{};
-    const zelleContact=creatorProfile.zelleContact||"";
+  const [zelleConfirm,setZelleConfirm]=useState(false);
+  const [zelleAmt,setZelleAmt]=useState(0);
+
+  const handleZelle=(amt)=>{
+    // Get zelle contact from payment recipient profile
+    const recipientName=c.paymentRecipient==="admin"?adminName:c.createdBy;
+    const recipientProfile=profiles[recipientName]||{};
+    const zelleContact=recipientProfile.zelleContact||"";
+    // Copy to clipboard
     if(zelleContact){
-      const amt=partialAmt?Number(partialAmt):(penalties[currentUser]?.totalOwed||0)-paidAmount(currentUser);
-      window.open(`https://enroll.zellepay.com/qr-codes?data=${encodeURIComponent(JSON.stringify({name:"WOLFPACK",token:zelleContact,amount:amt}))}`, "_blank");
+      navigator.clipboard?.writeText(zelleContact).catch(()=>{});
     }
-    if(partialAmt||true) onLogPayment(c.id,currentUser,partialAmt?Number(partialAmt):(penalties[currentUser]?.totalOwed||0)-paidAmount(currentUser),"Zelle");
-    setPartialAmt("");
+    // Show confirmation step — don't log payment yet
+    setZelleAmt(amt);
+    setZelleConfirm(true);
+  };
+
+  const confirmZellePayment=()=>{
+    onLogPayment(c.id,currentUser,zelleAmt,"Zelle");
+    setZelleConfirm(false);setZelleAmt(0);setPartialAmt("");
   };
 
   const handleCash=(member,amt)=>{
@@ -1026,11 +1045,20 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
         <span style={{fontSize:10,color:"var(--muted)",textAlign:"center"}}>This week</span>
         <span style={{fontSize:10,color:"var(--red)",textAlign:"right",fontWeight:700}}>Total</span>
       </div>
+      {/* Today at-risk warning — show if today is a workout day and not yet logged */}
+      {acceptedParts.some(m=>!isRestDay(todayStr(),profiles[m])&&!history[todayStr()]?.[m]?.done)&&(
+        <div style={{padding:"6px 12px",background:"rgba(241,196,15,0.08)",borderBottom:"1px solid rgba(241,196,15,0.15)",display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:12}}>⚠️</span>
+          <span style={{fontSize:11,color:"var(--gold)"}}>Workout day — log before midnight to avoid penalties</span>
+        </div>
+      )}
 
       {acceptedParts.map(m=>{
         const p=penalties[m]||{totalOwed:0,byWeek:{}};
         const forfeited=c.participants[m]?.forfeited||false;
-        const cap=todayStr()<c.endDate?todayStr():c.endDate;
+        // Only count days that are fully over — yesterday and before
+    const yesterday=(()=>{const d=new Date();d.setDate(d.getDate()-1);return localDateStr(d);})();
+    const cap=yesterday<c.endDate?yesterday:c.endDate;
         const currentWk=getWeekStart(todayStr());
         const wkAmt=p.byWeek?.[currentWk]||0;
         const totalAmt=forfeited?c.forfeitCap||0:p.totalOwed||0;
@@ -1100,11 +1128,23 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
                 {/* Pay buttons — only for the member themselves */}
                 {isMe&&!fullPaid&&(
                   <div>
+                    {/* Zelle confirmation overlay */}
+                    {zelleConfirm&&(
+                      <div style={{padding:"12px",background:"rgba(37,99,235,0.1)",border:"1px solid rgba(37,99,235,0.3)",borderRadius:10,marginBottom:10}}>
+                        <div style={{fontSize:13,marginBottom:4,fontWeight:600,color:"#60a5fa"}}>Did you send ${zelleAmt} via Zelle?</div>
+                        {(()=>{const rn=c.paymentRecipient==="admin"?adminName:c.createdBy;const rc=profiles[rn]?.zelleContact;return rc?<div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>Send to: <strong style={{color:"var(--text)"}}>{rc}</strong> (copied to clipboard)</div>:<div style={{fontSize:12,color:"var(--orange)",marginBottom:8}}>⚠️ Challenge creator hasn't set their Zelle contact yet.</div>;})()}
+                        <div style={{display:"flex",gap:8}}>
+                          <button onClick={confirmZellePayment} style={{flex:1,padding:"9px",background:"#1d4ed8",border:"none",borderRadius:8,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1}}>YES, I PAID</button>
+                          <button onClick={()=>setZelleConfirm(false)} style={{flex:1,padding:"9px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--muted)",fontSize:13}}>NOT YET</button>
+                        </div>
+                      </div>
+                    )}
+                    {!zelleConfirm&&<>
                     <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>
                       Pay remaining <strong style={{color:"var(--red)"}}>${totalAmt-paid}</strong>:
                     </div>
                     <div style={{display:"flex",gap:8,marginBottom:8}}>
-                      <button onClick={handleZelle} style={{flex:1,padding:"9px 8px",borderRadius:8,border:"1px solid #2563eb",background:"rgba(37,99,235,0.1)",color:"#60a5fa",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                      <button onClick={()=>handleZelle(totalAmt-paid)} style={{flex:1,padding:"9px 8px",borderRadius:8,border:"1px solid #2563eb",background:"rgba(37,99,235,0.1)",color:"#60a5fa",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
                         PAY ${totalAmt-paid} VIA ZELLE
                       </button>
                       <button onClick={()=>handleCash(m,totalAmt-paid)} style={{flex:1,padding:"9px 8px",borderRadius:8,border:"1px solid var(--border)",background:"var(--bg3)",color:"var(--muted)",fontSize:12,cursor:"pointer",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
@@ -1113,9 +1153,10 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
                     </div>
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                       <input type="number" placeholder="Partial amount..." value={partialAmt} onChange={e=>setPartialAmt(e.target.value)} min={1} max={totalAmt-paid} style={{flex:1,padding:"7px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg2)",color:"var(--text)",fontSize:12}}/>
-                      <button onClick={handleZelle} disabled={!partialAmt} style={{padding:"7px 10px",borderRadius:6,border:"1px solid #2563eb",background:"rgba(37,99,235,0.1)",color:"#60a5fa",fontSize:11,cursor:"pointer"}}>Zelle</button>
+                      <button onClick={()=>handleZelle(Number(partialAmt))} disabled={!partialAmt} style={{padding:"7px 10px",borderRadius:6,border:"1px solid #2563eb",background:"rgba(37,99,235,0.1)",color:"#60a5fa",fontSize:11,cursor:"pointer"}}>Zelle</button>
                       <button onClick={()=>handleCash(m,Number(partialAmt))} disabled={!partialAmt} style={{padding:"7px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg3)",color:"var(--muted)",fontSize:11,cursor:"pointer"}}>Cash</button>
                     </div>
+                    </>}
                   </div>
                 )}
 
@@ -1342,7 +1383,7 @@ function ChallengeInvites({currentUser,challenges,profiles,onAccept,onDecline,on
 function ChallengesTab({currentUser,adminName,members,profiles,challenges,history,onAdd,onLogProgress,onDelete,onEditChallenge,onForfeit,onAccept,onDecline,onOpenProfile,onMarkPaid,onLogPayment}){
   const [open,setOpen]=useState(false);
   const defEnd=()=>{const e=new Date();e.setDate(e.getDate()+30);return localDateStr(e);};
-  const [form,setForm]=useState({title:"",useDateRange:false,goal:30,unit:"reps",startDate:todayStr(),endDate:defEnd(),penalty:"",penaltyAmt:"",forfeitCap:"",maxRestDays:2,participants:[]});
+  const [form,setForm]=useState({title:"",useDateRange:false,goal:30,unit:"reps",startDate:todayStr(),endDate:defEnd(),penalty:"",penaltyAmt:"",forfeitCap:"",maxRestDays:2,participants:[],paymentRecipient:"creator"});
   useEffect(()=>setForm(f=>({...f,participants:members})),[members]);
   const toggleP=m=>setForm(f=>({...f,participants:f.participants.includes(m)?f.participants.filter(x=>x!==m):[...f.participants,m]}));
   const sub=()=>{
@@ -1395,6 +1436,14 @@ function ChallengesTab({currentUser,adminName,members,profiles,challenges,histor
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Penalty (optional)</div><input className="input" placeholder='e.g. "Buys lunch"' value={form.penalty} onChange={e=>setForm({...form,penalty:e.target.value})} maxLength={80}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout <span style={{color:"var(--bg3)",fontSize:11}}>(optional)</span></div><input className="input" type="number" placeholder="optional — e.g. 5" value={form.penaltyAmt} onChange={e=>setForm({...form,penaltyAmt:e.target.value})} min={0}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Forfeit cap $ (optional — max they'll ever owe)</div><input className="input" type="number" placeholder="e.g. 50" value={form.forfeitCap} onChange={e=>setForm({...form,forfeitCap:e.target.value})} min={0}/></div>
+          <div>
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Payments go to</div>
+            <div style={{display:"flex",gap:8}}>
+              {[{v:"creator",l:"Me (challenge creator)"},{v:"admin",l:`Admin (${adminName})`}].map(({v,l})=>(
+                <button key={v} onClick={()=>setForm({...form,paymentRecipient:v})} style={{flex:1,padding:"8px",borderRadius:10,cursor:"pointer",fontSize:12,background:(form.paymentRecipient||"creator")===v?"rgba(124,92,191,0.2)":"var(--bg3)",border:(form.paymentRecipient||"creator")===v?"1px solid var(--accent)":"1px solid var(--border)",color:(form.paymentRecipient||"creator")===v?"var(--accent2)":"var(--muted)"}}>{l}</button>
+              ))}
+            </div>
+          </div>
           {form.useDateRange&&<div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Max rest days per week allowed</div>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
