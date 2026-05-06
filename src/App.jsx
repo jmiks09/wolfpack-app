@@ -134,9 +134,26 @@ const BADGES = [
   {id:"penalty_free",icon:"🛡️",label:"Clean Slate",desc:"Win a penalty challenge"},
 ];
 const WOLF_AVATARS = ["🐺","🦊","🦁","🐻","🐯","🦝","🐸","🦅","🦈","🐲","🦄","🦋"];
-const GYM_HOURS = Array.from({length:14},(_,i)=>{const h=6+i;return h<12?`${h}:00 AM`:h===12?`12:00 PM`:`${h-12}:00 PM`;});
-const GYM_CLOSE_HOUR = 20; // 8 PM
+// Half-hour slots 6 AM - 8 PM
+const GYM_HOURS = Array.from({length:28},(_,i)=>{
+  const totalMins=6*60+i*30;
+  const h=Math.floor(totalMins/60);
+  const m=totalMins%60;
+  const label=m===0?`${h===12?12:h%12}:00 ${h<12?"AM":"PM"}`:`${h===12?12:h%12}:30 ${h<12?"AM":"PM"}`;
+  return {label,h,m};
+});
+const GYM_DURATIONS=["30 min","1 hr","1.5 hrs","2 hrs"];
+const GYM_DURATION_MINS=[30,60,90,120];
+const GYM_CLOSE_HOUR = 20;
 const isGymOpen = () => { const h=new Date().getHours(); return h>=6&&h<GYM_CLOSE_HOUR; };
+// Check if a slot overlaps with a booked range
+const slotOverlaps=(slotH,slotM,booking)=>{
+  const slotStart=slotH*60+slotM;
+  const slotEnd=slotStart+30;
+  const bookStart=booking.startH*60+booking.startM;
+  const bookEnd=bookStart+booking.durationMins;
+  return slotStart<bookEnd&&slotEnd>bookStart;
+};
 const REACTIONS = ["💪","🔥","👑","🐺","⚡","🙌"];
 const MILESTONES = [7,14,30,60,100]; // streak days that trigger auto-post
 const SESSION_MILESTONES = [50,100,200,500]; // session counts that trigger auto-post
@@ -878,20 +895,147 @@ function FeedTab({currentUser,profiles,feed,onPost,onLike,onDelete,onComment,onD
 
 function GymTab({currentUser,gymSlots,onBook,onCancel}){
   const [sel,setSel]=useState(todayStr());
-  const dates=next7Days(),daySlots=gymSlots.filter(s=>s.date===sel),mySlots=gymSlots.filter(s=>s.bookedBy===currentUser);
+  const [bookingOpen,setBookingOpen]=useState(false);
+  const [selStartIdx,setSelStartIdx]=useState(null);
+  const [selDuration,setSelDuration]=useState(1);
+  const [conflictErr,setConflictErr]=useState(false);
+  const showConflict=()=>{setConflictErr(true);setTimeout(()=>setConflictErr(false),3000);}; // index into GYM_DURATIONS
+  const dates=next7Days();
+  const daySlots=gymSlots.filter(s=>s.date===sel);
+  const mySlots=gymSlots.filter(s=>s.bookedBy===currentUser);
+
+  // Check if a half-hour slot is occupied by any booking
+  const getSlotBooking=(slot)=>daySlots.find(s=>slotOverlaps(slot.h,slot.m,s));
+  const isSlotMine=(slot)=>{const b=getSlotBooking(slot);return b&&b.bookedBy===currentUser;};
+
+  const handleBook=()=>{
+    if(selStartIdx===null)return;
+    const slot=GYM_HOURS[selStartIdx];
+    const durMins=GYM_DURATION_MINS[selDuration];
+    // Check no conflicts in the chosen range
+    const slotsNeeded=GYM_HOURS.filter((_,i)=>{
+      const s=GYM_HOURS[i];
+      const sStart=s.h*60+s.m;
+      const bStart=slot.h*60+slot.m;
+      return sStart>=bStart&&sStart<bStart+durMins;
+    });
+    const conflict=slotsNeeded.some(s=>getSlotBooking(s)&&!isSlotMine(s));
+    if(conflict){showConflict();return;}
+    onBook(sel,slot,durMins,slot.label+" – "+formatEndTime(slot.h,slot.m,durMins));
+    setBookingOpen(false);setSelStartIdx(null);
+  };
+
+  const formatEndTime=(h,m,durMins)=>{
+    const total=h*60+m+durMins;
+    const eh=Math.floor(total/60),em=total%60;
+    return em===0?`${eh===12?12:eh%12}:00 ${eh<12?"AM":"PM"}`:`${eh===12?12:eh%12}:30 ${eh<12?"AM":"PM"}`;
+  };
+
   return(
     <div>
+      {/* Date picker */}
       <div style={{display:"flex",gap:8,padding:"12px 16px",overflowX:"auto"}}>
         {dates.map(d=>{const act=d===sel,dd=new Date(d+"T00:00:00"),we=isWeekend(d);return<button key={d} onClick={()=>setSel(d)} style={{flexShrink:0,minWidth:56,padding:"8px 10px",borderRadius:12,cursor:"pointer",textAlign:"center",background:act?"linear-gradient(135deg,var(--accent),var(--orange))":"var(--bg3)",border:"none",color:we&&!act?"var(--muted)":"#fff",opacity:we?.6:1}}><div style={{fontSize:10,opacity:.8}}>{dd.toLocaleDateString("en-US",{weekday:"short"})}</div><div style={{fontSize:17,fontWeight:700}}>{dd.getDate()}</div>{we&&<div style={{fontSize:9,opacity:.7}}>REST</div>}</button>;})}
       </div>
-      {mySlots.length>0&&<><div className="section-label">MY RESERVATIONS</div>{mySlots.map(s=><div key={s.id} style={{display:"flex",alignItems:"center",gap:12,margin:"0 16px 8px",padding:"12px 14px",background:"rgba(124,92,191,0.1)",borderRadius:12,border:"1px solid rgba(124,92,191,0.25)"}}><span style={{fontSize:20}}>🏋️</span><div style={{flex:1}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1}}>{s.time}</div><div style={{fontSize:11,color:"var(--muted)"}}>{fmtDate(s.date)}</div></div><button onClick={()=>onCancel(s.id)} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"var(--muted)",fontSize:12}}>Cancel</button></div>)}</>}
+
+      {/* My reservations */}
+      {mySlots.length>0&&(
+        <>
+          <div className="section-label">MY RESERVATIONS</div>
+          {mySlots.map(s=>(
+            <div key={s.id} style={{display:"flex",alignItems:"center",gap:12,margin:"0 16px 8px",padding:"12px 14px",background:"rgba(124,92,191,0.1)",borderRadius:12,border:"1px solid rgba(124,92,191,0.25)"}}>
+              <span style={{fontSize:20}}>🏋️</span>
+              <div style={{flex:1}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1}}>{s.displayTime||s.time}</div>
+                <div style={{fontSize:11,color:"var(--muted)"}}>{fmtDate(s.date)}</div>
+              </div>
+              <button onClick={()=>onCancel(s.id)} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"var(--muted)",fontSize:12}}>Cancel</button>
+            </div>
+          ))}
+        </>
+      )}
+
       <div className="section-label">{fmtDate(sel)}{isWeekend(sel)?" — REST DAY":" — 6:00 AM – 8:00 PM"}</div>
-      {isWeekend(sel)||(!isGymOpen()&&sel===todayStr())?<div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)"}}><div style={{fontSize:40,marginBottom:8}}>{isWeekend(sel)?"😴":"🔒"}</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2}}>{isWeekend(sel)?"GYM CLOSED ON WEEKENDS":"GARAGE GYM CLOSED"}</div><div style={{fontSize:12,color:"var(--muted)",marginTop:6}}>Hours: 6:00 AM – 8:00 PM</div></div>:
-        GYM_HOURS.map(time=>{
-          const booked=daySlots.filter(s=>s.time===time),mine=booked.find(s=>s.bookedBy===currentUser),full=booked.length>=2;
-          return<div key={time} style={{display:"flex",alignItems:"center",gap:10,margin:"0 16px 8px",padding:"12px 14px",background:"var(--card)",borderRadius:12,border:`1px solid ${mine?"rgba(124,92,191,0.3)":full?"rgba(231,76,60,0.2)":"var(--border)"}`}}><div style={{width:68,fontFamily:"'Bebas Neue',cursive",fontSize:13,color:mine?"var(--accent2)":full?"var(--red)":"var(--text)"}}>{time}</div><div style={{flex:1,display:"flex",gap:5,flexWrap:"wrap"}}>{booked.map(s=><span key={s.id} style={{fontSize:12,background:"var(--bg3)",padding:"2px 8px",borderRadius:8,color:"var(--muted)"}}>{s.bookedBy}</span>)}{booked.length===0&&<span style={{fontSize:12,color:"var(--muted)"}}>Open</span>}</div>{mine?<button onClick={()=>onCancel(mine.id)} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"var(--muted)",fontSize:12}}>Cancel</button>:full?<span style={{fontSize:12,color:"var(--red)",fontWeight:700}}>FULL</span>:<button onClick={()=>onBook(sel,time)} style={{background:"linear-gradient(135deg,var(--accent),var(--orange))",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",color:"#fff",fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>BOOK</button>}</div>;
-        })
-      }
+
+      {isWeekend(sel)||(!isGymOpen()&&sel===todayStr())?(
+        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)"}}>
+          <div style={{fontSize:40,marginBottom:8}}>{isWeekend(sel)?"😴":"🔒"}</div>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2}}>{isWeekend(sel)?"GYM CLOSED ON WEEKENDS":"GARAGE GYM CLOSED"}</div>
+          <div style={{fontSize:12,color:"var(--muted)",marginTop:6}}>Hours: 6:00 AM – 8:00 PM</div>
+        </div>
+      ):(
+        <>
+          {/* Book button */}
+          {!bookingOpen&&(
+            <div style={{padding:"0 16px 12px"}}>
+              <button className="btn-primary" onClick={()=>setBookingOpen(true)}>🏋️ RESERVE GYM TIME</button>
+            </div>
+          )}
+
+          {/* Booking picker */}
+          {bookingOpen&&(
+            <div style={{margin:"0 16px 12px",padding:"14px",background:"var(--card)",borderRadius:14,border:"1px solid var(--border)"}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2,marginBottom:10}}>PICK START TIME</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:12,maxHeight:180,overflowY:"auto"}}>
+                {GYM_HOURS.map((slot,i)=>{
+                  const booking=getSlotBooking(slot);
+                  const taken=!!booking&&booking.bookedBy!==currentUser;
+                  const mine=isSlotMine(slot);
+                  const sel2=selStartIdx===i;
+                  return(
+                    <button key={i} onClick={()=>!taken&&setSelStartIdx(i)} style={{
+                      padding:"6px 4px",borderRadius:8,cursor:taken?"default":"pointer",textAlign:"center",
+                      background:sel2?"rgba(124,92,191,0.3)":taken?"rgba(231,76,60,0.1)":mine?"rgba(124,92,191,0.1)":"var(--bg3)",
+                      border:sel2?"1px solid var(--accent)":taken?"1px solid rgba(231,76,60,0.3)":mine?"1px solid rgba(124,92,191,0.3)":"1px solid var(--border)",
+                      opacity:taken?0.7:1,
+                    }}>
+                      <div style={{fontSize:11,color:sel2?"var(--accent2)":taken?"var(--red)":mine?"var(--accent2)":"var(--text)"}}>{slot.label}</div>
+                      {taken&&<div style={{fontSize:9,color:"var(--red)",fontWeight:700}}>BOOKED</div>}
+                      {mine&&<div style={{fontSize:9,color:"var(--accent2)"}}>YOURS</div>}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,marginBottom:8}}>DURATION</div>
+              <div style={{display:"flex",gap:8,marginBottom:12}}>
+                {GYM_DURATIONS.map((d,i)=>(
+                  <button key={i} onClick={()=>setSelDuration(i)} style={{flex:1,padding:"8px 4px",borderRadius:8,cursor:"pointer",fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,background:selDuration===i?"rgba(124,92,191,0.2)":"var(--bg3)",border:selDuration===i?"1px solid var(--accent)":"1px solid var(--border)",color:selDuration===i?"var(--accent2)":"var(--muted)"}}>{d}</button>
+                ))}
+              </div>
+              {selStartIdx!==null&&(
+                <div style={{fontSize:12,color:"var(--accent2)",marginBottom:10,padding:"8px 10px",background:"rgba(124,92,191,0.1)",borderRadius:8}}>
+                  📅 {GYM_HOURS[selStartIdx].label} – {formatEndTime(GYM_HOURS[selStartIdx].h,GYM_HOURS[selStartIdx].m,GYM_DURATION_MINS[selDuration])} ({GYM_DURATIONS[selDuration]})
+                </div>
+              )}
+              {conflictErr&&<div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,fontSize:12,color:"var(--red)",marginBottom:8}}>⚠️ That time overlaps with an existing booking. Pick a different time.</div>}
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn-primary" onClick={handleBook} disabled={selStartIdx===null} style={{flex:1}}>CONFIRM BOOKING</button>
+                <button className="btn-ghost" onClick={()=>{setBookingOpen(false);setSelStartIdx(null);setConflictErr(false);}} style={{flex:1}}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* Timeline view */}
+          <div style={{padding:"0 16px 16px"}}>
+            {GYM_HOURS.map((slot,i)=>{
+              const booking=getSlotBooking(slot);
+              const taken=!!booking;
+              const mine=taken&&booking.bookedBy===currentUser;
+              // Only show on-the-hour slots to keep it clean, or booked slots
+              if(!taken&&slot.m!==0)return null;
+              return(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,padding:"10px 12px",background:mine?"rgba(124,92,191,0.1)":taken?"rgba(231,76,60,0.08)":"var(--card)",borderRadius:10,border:mine?"1px solid rgba(124,92,191,0.3)":taken?"1px solid rgba(231,76,60,0.25)":"1px solid var(--border)"}}>
+                  <div style={{width:60,fontFamily:"'Bebas Neue',cursive",fontSize:12,color:mine?"var(--accent2)":taken?"var(--red)":"var(--muted)"}}>{slot.label}</div>
+                  <div style={{flex:1,fontSize:12,color:mine?"var(--accent2)":taken?"var(--text)":"var(--muted)"}}>
+                    {taken?`${booking.bookedBy} · ${booking.displayTime||booking.time}`:"Open"}
+                  </div>
+                  {taken&&<div style={{padding:"3px 10px",borderRadius:20,background:mine?"rgba(124,92,191,0.2)":"rgba(231,76,60,0.15)",border:mine?"1px solid rgba(124,92,191,0.4)":"1px solid rgba(231,76,60,0.3)",fontSize:11,color:mine?"var(--accent2)":"var(--red)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{mine?"YOURS":"BOOKED"}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1943,13 +2087,13 @@ function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete})
 
 // Per-type field definitions
 const WORKOUT_FIELDS = {
-  lift:   [{key:"sets",label:"Sets",placeholder:"e.g. 4"},{key:"reps",label:"Reps",placeholder:"e.g. 10"},{key:"weight",label:"Weight (lbs)",placeholder:"e.g. 135"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 60"}],
+  lift:   [{key:"rounds",label:"Rounds",placeholder:"e.g. 3",text:true},{key:"sets",label:"Sets",placeholder:"e.g. 4-6",text:true},{key:"reps",label:"Reps",placeholder:"e.g. 10-12",text:true},{key:"weight",label:"Weight (lbs)",placeholder:"e.g. 135-185",text:true},{key:"duration",label:"Duration (min)",placeholder:"e.g. 60"}],
   run:    [{key:"distance",label:"Distance (mi)",placeholder:"e.g. 3.1"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 30"}],
   bike:   [{key:"distance",label:"Distance (mi)",placeholder:"e.g. 10"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 45"}],
-  hiit:   [{key:"duration",label:"Duration (min)",placeholder:"e.g. 20"},{key:"rounds",label:"Rounds",placeholder:"e.g. 5"}],
+  hiit:   [{key:"rounds",label:"Rounds",placeholder:"e.g. 5",text:true},{key:"duration",label:"Duration (min)",placeholder:"e.g. 20"}],
   cardio: [{key:"duration",label:"Duration (min)",placeholder:"e.g. 30"},{key:"distance",label:"Distance (mi)",placeholder:"e.g. 2"}],
   walk:   [{key:"distance",label:"Distance (mi)",placeholder:"e.g. 1.5"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 25"}],
-  other:  [{key:"duration",label:"Duration (min)",placeholder:"e.g. 45"}],
+  other:  [{key:"rounds",label:"Rounds",placeholder:"e.g. 3",text:true},{key:"duration",label:"Duration (min)",placeholder:"e.g. 45"}],
 };
 
 function formatWorkoutSummary(workouts, details){
@@ -1980,7 +2124,7 @@ function WorkoutSummaryDisplay({summary, workoutLabel, style={}}){
   );
 }
 
-function WorkoutModal({onClose,onSubmit}){
+function WorkoutModal({onClose,onSubmit,loading}){
   const [selected,setSelected]=useState([]);
   const [details,setDetails]=useState({}); // {workoutId: {sets,reps,weight,duration,distance,...}}
   const [note,setNote]=useState("");
@@ -2046,10 +2190,10 @@ function WorkoutModal({onClose,onSubmit}){
                     {fields.map(f=>(
                       <div key={f.key}>
                         <div style={{fontSize:11,color:"var(--muted)",marginBottom:4}}>{f.label}</div>
-                        <input className="input" type="number" placeholder={f.placeholder}
+                        <input className="input" type={f.text?"text":"number"} placeholder={f.placeholder}
                           value={details[w.id]?.[f.key]||""}
                           onChange={e=>setField(w.id,f.key,e.target.value)}
-                          style={{padding:"10px 12px"}} min={0} step="any"/>
+                          style={{padding:"10px 12px"}} min={f.text?undefined:0} step={f.text?undefined:"any"}/>
                       </div>
                     ))}
                   </div>
@@ -2074,7 +2218,7 @@ function WorkoutModal({onClose,onSubmit}){
               }
             </div>
 
-            <button className="btn-primary" onClick={handleSubmit}>LOG IT 💪</button>
+            <button className="btn-primary" onClick={handleSubmit} disabled={loading}>{loading?"LOGGING...":"LOG IT 💪"}</button>
           </>
         )}
       </div>
@@ -2308,30 +2452,39 @@ export default function App(){
     showToast(`Name updated to ${newName.trim()}!`);
   };
 
+  const [loggingWorkout,setLoggingWorkout]=useState(false);
   const handleLogWorkout=async(workouts,note,duration,details,summary)=>{
+    if(loggingWorkout)return; // prevent double-tap
+    setLoggingWorkout(true);
+    if(loggingWorkout)return; // prevent double-tap
+    setLoggingWorkout(true);
     const key=todayStr(),time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
     // Support multiple workout types - merge with existing entries for today
     const existing=history[key]?.[currentUser]||{};
     const prevWorkouts=existing.workouts||[];
+    const prevDetails=existing.details||{};
     const newWorkouts=[...prevWorkouts,...workouts.map(w=>({id:w.id,icon:w.icon,label:w.label}))];
+    // Merge details preserving existing ones
+    const mergedDetails={...prevDetails,...(details||{})};
     const icons=newWorkouts.map(w=>w.icon).join("");
     const labels=newWorkouts.map(w=>w.label).join(" + ");
-    // Build clean stacked summary text for display
+    // Build summary using MERGED details so previous workout details are preserved
     const summaryLines=newWorkouts.map(w=>{
-      const d=details?.[w.id]||{};
+      const d=mergedDetails?.[w.id]||{};
       const parts=[];
       if(d.distance) parts.push(`${d.distance} mi`);
+      if(d.rounds) parts.push(`${d.rounds} rounds`);
       if(d.sets&&d.reps) parts.push(`${d.sets} sets x ${d.reps} reps`);
       else if(d.sets) parts.push(`${d.sets} sets`);
       else if(d.reps) parts.push(`${d.reps} reps`);
       if(d.weight) parts.push(`${d.weight} lbs`);
-      if(d.rounds) parts.push(`${d.rounds} rounds`);
       if(d.duration) parts.push(`${d.duration} min`);
       return parts.length>0?`${w.label}: ${parts.join(" · ")}`:w.label;
     });
-    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration,details,time,ts:Date.now()};
+    const totalDur=newWorkouts.reduce((s,w)=>s+(Number(mergedDetails?.[w.id]?.duration)||0),0)||null;
+    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:mergedDetails,time,ts:Date.now()};
     await fsSet("wolfpack/workouts",{byDate:{...history,[key]:{...(history[key]||{}),[currentUser]:entry}}});
-    setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
+    setLoggingWorkout(false);setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
     await checkMilestones(newData);
   };
 
@@ -2358,12 +2511,16 @@ export default function App(){
     });
     await fsSet("wolfpack/feed",{posts:newFeed});
   };
-  const handleBookGym=async(date,time)=>{
-    const ex=gymSlots.filter(s=>s.date===date&&s.time===time);
-    if(ex.length>=2){showToast("That slot is full!");return;}
-    if(ex.find(s=>s.bookedBy===currentUser)){showToast("You already have that slot!");return;}
-    await fsSet("wolfpack/gym",{slots:[...gymSlots,{id:Date.now().toString(),date,time,bookedBy:currentUser,createdAt:Date.now()}]});
-    showToast(`Gym booked for ${time}! 💪`);
+  const handleBookGym=async(date,slot,durationMins,displayTime)=>{
+    // Check for conflicts
+    const daySlots=gymSlots.filter(s=>s.date===date);
+    const conflict=daySlots.find(s=>s.bookedBy!==currentUser&&slotOverlaps(slot.h,slot.m,s));
+    if(conflict){showToast("That time overlaps with an existing booking!");return;}
+    const myConflict=daySlots.find(s=>s.bookedBy===currentUser&&slotOverlaps(slot.h,slot.m,s));
+    if(myConflict){showToast("You already have a booking that overlaps!");return;}
+    const booking={id:Date.now().toString(),date,time:slot.label,displayTime,startH:slot.h,startM:slot.m,durationMins,bookedBy:currentUser,createdAt:Date.now()};
+    await fsSet("wolfpack/gym",{slots:[...gymSlots,booking]});
+    showToast(`Gym booked: ${displayTime}! 💪`);
   };
   const handleCancelGym=async id=>{await fsSet("wolfpack/gym",{slots:gymSlots.filter(s=>s.id!==id)});showToast("Cancelled.");};
   const handleAddChallenge=async c=>{await fsSet("wolfpack/challenges",{list:[c,...challenges]});showToast("Challenge created! ⚔️");};
@@ -2507,7 +2664,7 @@ export default function App(){
           );
         })}
       </nav>
-      {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout}/>}
+      {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)}/>}
