@@ -577,20 +577,25 @@ function ReactionPill({member, reactions, currentUser, onReact}){
 }
 
 // ── PACK GOALS BOARD ─────────────────────────────────────────────────────────
-function PackGoals({currentUser,packGoals,onAddGoal,onCheer,onDeleteGoal}){
+function PackGoals({currentUser,packGoals,profiles,members,onAddGoal,onCheer,onDeleteGoal}){
   const [open,setOpen]=useState(false);
   const [text,setText]=useState("");
   const sub=()=>{if(!text.trim())return;onAddGoal(text.trim());setText("");setOpen(false);};
   const myGoal=packGoals.find(g=>g.author===currentUser);
+  // Combine pack goals + personal goals from profiles
+  const profileGoals=members.filter(m=>profiles[m]?.personalGoal&&!packGoals.find(g=>g.author===m)).map(m=>({
+    id:`profile_${m}`,author:m,text:profiles[m].personalGoal,cheers:[],fromProfile:true
+  }));
+  const allGoals=[...packGoals,...profileGoals];
   return(
     <div style={{margin:"8px 16px 0"}}>
       <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:3,color:"var(--muted)",marginBottom:8}}>PACK GOALS</div>
-      {packGoals.length===0&&!open&&(
+      {allGoals.length===0&&!open&&(
         <div style={{textAlign:"center",padding:"16px",background:"var(--bg3)",borderRadius:14,border:"1px dashed var(--border)",marginBottom:8}}>
           <div style={{fontSize:12,color:"var(--muted)"}}>No goals posted yet. Set one for the pack to see!</div>
         </div>
       )}
-      {packGoals.map(g=>(
+      {allGoals.map(g=>(
         <div key={g.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)",marginBottom:8}}>
           <div style={{fontSize:22}}>🎯</div>
           <div style={{flex:1}}>
@@ -740,8 +745,8 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
         </div>
       )}
 
-      {/* Pack Goals */}
-      <PackGoals currentUser={currentUser} packGoals={packGoals} onAddGoal={onAddGoal} onCheer={onCheer} onDeleteGoal={onDeleteGoal}/>
+      {/* Pack Goals — includes personal goals from profiles */}
+      <PackGoals currentUser={currentUser} packGoals={packGoals} profiles={profiles} members={members} onAddGoal={onAddGoal} onCheer={onCheer} onDeleteGoal={onDeleteGoal}/>
       <div style={{height:16}}/>
     </div>
   );
@@ -1490,6 +1495,30 @@ function ChallengeCard({challenge:c,currentUser,adminName,members,profiles,onLog
       {/* Log input */}
       {logOpen&&<div style={{marginTop:10,display:"flex",gap:8}}><input className="input" type="number" placeholder={`Add ${c.unit}...`} value={amt} onChange={e=>setAmt(e.target.value)} min={1} autoFocus onKeyDown={e=>e.key==="Enter"&&doLog()}/><button onClick={doLog} disabled={!amt||Number(amt)<=0} style={{padding:"10px 14px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13}}>LOG</button><button onClick={()=>{setLogOpen(false);setAmt("");}} style={{padding:"10px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,cursor:"pointer",color:"var(--muted)",fontSize:13}}>✕</button></div>}
       {editOpen&&<EditChallengeModal challenge={c} members={members} onSave={onEdit} onClose={()=>setEditOpen(false)}/>}
+      <div className="section-label">WORKOUT HISTORY</div>
+      <div style={{padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8}}>
+        {(()=>{
+          const entries=Object.entries(history)
+            .filter(([,d])=>d?.[currentUser]?.done)
+            .sort((a,b)=>b[0].localeCompare(a[0]))
+            .slice(0,60);
+          if(entries.length===0) return <div style={{textAlign:"center",padding:"20px",color:"var(--muted)",fontSize:13}}>No workouts logged yet.</div>;
+          return entries.map(([date,dayData])=>{
+            const entry=dayData[currentUser];
+            const summary=Array.isArray(entry.summary)?entry.summary:[entry.workoutLabel||"Workout"];
+            return(
+              <div key={date} style={{padding:"12px 14px",background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:summary.some(s=>s.length>0)?6:0}}>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1,color:"var(--accent2)"}}>{fmtDate(date)}</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>{entry.time||""}</div>
+                </div>
+                {summary.map((line,i)=><div key={i} style={{fontSize:12,color:"var(--green)",lineHeight:1.6}}>{line}</div>)}
+                {entry.note&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>"{entry.note}"</div>}
+              </div>
+            );
+          });
+        })()}
+      </div>
     </div>
   );
 }
@@ -2086,8 +2115,9 @@ function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete})
 }
 
 // Per-type field definitions
+const LIFT_FOCUS = ["Legs","Arms","Chest","Back","Shoulders","Full Body","Core"];
 const WORKOUT_FIELDS = {
-  lift:   [{key:"rounds",label:"Rounds",placeholder:"e.g. 3",text:true},{key:"sets",label:"Sets",placeholder:"e.g. 4-6",text:true},{key:"reps",label:"Reps",placeholder:"e.g. 10-12",text:true},{key:"weight",label:"Weight (lbs)",placeholder:"e.g. 135-185",text:true},{key:"duration",label:"Duration (min)",placeholder:"e.g. 60"}],
+  lift:   [{key:"focus",label:"Focus",placeholder:"e.g. Legs",text:true,isSelect:true,options:LIFT_FOCUS},{key:"rounds",label:"Rounds",placeholder:"e.g. 3",text:true},{key:"sets",label:"Sets",placeholder:"e.g. 4-6",text:true},{key:"reps",label:"Reps",placeholder:"e.g. 10-12",text:true},{key:"weight",label:"Weight (lbs)",placeholder:"e.g. 135-185",text:true},{key:"duration",label:"Duration (min)",placeholder:"e.g. 60"}],
   run:    [{key:"distance",label:"Distance (mi)",placeholder:"e.g. 3.1"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 30"}],
   bike:   [{key:"distance",label:"Distance (mi)",placeholder:"e.g. 10"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 45"}],
   hiit:   [{key:"rounds",label:"Rounds",placeholder:"e.g. 5",text:true},{key:"duration",label:"Duration (min)",placeholder:"e.g. 20"}],
@@ -2101,12 +2131,13 @@ function formatWorkoutSummary(workouts, details){
   return workouts.map(w=>{
     const d=details[w.id]||{};
     const parts=[];
+    if(d.focus) parts.push(d.focus);
     if(d.distance) parts.push(`${d.distance} mi`);
+    if(d.rounds) parts.push(`${d.rounds} rounds`);
     if(d.sets&&d.reps) parts.push(`${d.sets} sets × ${d.reps} reps`);
     else if(d.sets) parts.push(`${d.sets} sets`);
     else if(d.reps) parts.push(`${d.reps} reps`);
     if(d.weight) parts.push(`${d.weight} lbs`);
-    if(d.rounds) parts.push(`${d.rounds} rounds`);
     if(d.duration) parts.push(`${d.duration} min`);
     return {label:w.label, detail:parts.join(" · ")};
   });
@@ -2188,12 +2219,26 @@ function WorkoutModal({onClose,onSubmit,loading}){
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     {fields.map(f=>(
-                      <div key={f.key}>
+                      <div key={f.key} style={{gridColumn:f.isSelect?"1/-1":"auto"}}>
                         <div style={{fontSize:11,color:"var(--muted)",marginBottom:4}}>{f.label}</div>
-                        <input className="input" type={f.text?"text":"number"} placeholder={f.placeholder}
-                          value={details[w.id]?.[f.key]||""}
-                          onChange={e=>setField(w.id,f.key,e.target.value)}
-                          style={{padding:"10px 12px"}} min={f.text?undefined:0} step={f.text?undefined:"any"}/>
+                        {f.isSelect?(
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                            {f.options.map(opt=>(
+                              <button key={opt} onClick={()=>setField(w.id,f.key,details[w.id]?.[f.key]===opt?"":opt)}
+                                style={{padding:"6px 14px",borderRadius:20,cursor:"pointer",fontSize:12,
+                                  background:details[w.id]?.[f.key]===opt?"rgba(124,92,191,0.25)":"var(--bg2)",
+                                  border:details[w.id]?.[f.key]===opt?"1px solid var(--accent)":"1px solid var(--border)",
+                                  color:details[w.id]?.[f.key]===opt?"var(--accent2)":"var(--muted)"}}>
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        ):(
+                          <input className="input" type={f.text?"text":"number"} placeholder={f.placeholder}
+                            value={details[w.id]?.[f.key]||""}
+                            onChange={e=>setField(w.id,f.key,e.target.value)}
+                            style={{padding:"10px 12px"}} min={f.text?undefined:0} step={f.text?undefined:"any"}/>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2472,6 +2517,7 @@ export default function App(){
     const summaryLines=newWorkouts.map(w=>{
       const d=mergedDetails?.[w.id]||{};
       const parts=[];
+      if(d.focus) parts.push(d.focus);
       if(d.distance) parts.push(`${d.distance} mi`);
       if(d.rounds) parts.push(`${d.rounds} rounds`);
       if(d.sets&&d.reps) parts.push(`${d.sets} sets x ${d.reps} reps`);
