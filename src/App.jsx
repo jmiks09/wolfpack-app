@@ -600,7 +600,7 @@ function PackGoals({currentUser,packGoals,profiles,members,onAddGoal,onCheer,onD
           <div style={{fontSize:22}}>🎯</div>
           <div style={{flex:1}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text)",marginBottom:2}}>{g.text}</div>
-            <div style={{fontSize:11,color:"var(--muted)"}}>{g.author}</div>
+            <div style={{fontSize:11,color:"var(--muted)"}}>{g.author}{g.date&&<span style={{marginLeft:6,opacity:0.6}}>· {fmtDate(g.date)}</span>}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <button onClick={()=>onCheer(g.id,currentUser)} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:(g.cheers||[]).includes(currentUser)?1:0.4}}>🔥</button>
@@ -1495,30 +1495,6 @@ function ChallengeCard({challenge:c,currentUser,adminName,members,profiles,onLog
       {/* Log input */}
       {logOpen&&<div style={{marginTop:10,display:"flex",gap:8}}><input className="input" type="number" placeholder={`Add ${c.unit}...`} value={amt} onChange={e=>setAmt(e.target.value)} min={1} autoFocus onKeyDown={e=>e.key==="Enter"&&doLog()}/><button onClick={doLog} disabled={!amt||Number(amt)<=0} style={{padding:"10px 14px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13}}>LOG</button><button onClick={()=>{setLogOpen(false);setAmt("");}} style={{padding:"10px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,cursor:"pointer",color:"var(--muted)",fontSize:13}}>✕</button></div>}
       {editOpen&&<EditChallengeModal challenge={c} members={members} onSave={onEdit} onClose={()=>setEditOpen(false)}/>}
-      <div className="section-label">WORKOUT HISTORY</div>
-      <div style={{padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8}}>
-        {(()=>{
-          const entries=Object.entries(history)
-            .filter(([,d])=>d?.[currentUser]?.done)
-            .sort((a,b)=>b[0].localeCompare(a[0]))
-            .slice(0,60);
-          if(entries.length===0) return <div style={{textAlign:"center",padding:"20px",color:"var(--muted)",fontSize:13}}>No workouts logged yet.</div>;
-          return entries.map(([date,dayData])=>{
-            const entry=dayData[currentUser];
-            const summary=Array.isArray(entry.summary)?entry.summary:[entry.workoutLabel||"Workout"];
-            return(
-              <div key={date} style={{padding:"12px 14px",background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:summary.some(s=>s.length>0)?6:0}}>
-                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1,color:"var(--accent2)"}}>{fmtDate(date)}</div>
-                  <div style={{fontSize:11,color:"var(--muted)"}}>{entry.time||""}</div>
-                </div>
-                {summary.map((line,i)=><div key={i} style={{fontSize:12,color:"var(--green)",lineHeight:1.6}}>{line}</div>)}
-                {entry.note&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>"{entry.note}"</div>}
-              </div>
-            );
-          });
-        })()}
-      </div>
     </div>
   );
 }
@@ -1672,6 +1648,30 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed}){
         const t=getTotalWorkouts(history,m),s=getStreak(history,m),mx=Math.max(...members.map(x=>getTotalWorkouts(history,x)),1);
         return<div key={m} className="member-row" style={{margin:"0 16px 8px"}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,color:"var(--muted)",width:22}}>{i+1}</div><AvatarDisplay profile={profiles[m]} size={36}/><div style={{flex:1}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1}}>{m}{m===currentUser&&" (you)"}</span><span style={{fontSize:12,color:"var(--muted)"}}>{t} workouts</span></div><div className="progress-bar" style={{height:4}}><div className="progress-fill" style={{width:`${(t/mx)*100}%`}}/></div><div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>🔥{s} day streak</div></div></div>;
       })}
+      <div className="section-label">MY WORKOUT HISTORY</div>
+      <div style={{padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8}}>
+        {(()=>{
+          const entries=Object.entries(history)
+            .filter(([,d])=>d?.[currentUser]?.done)
+            .sort((a,b)=>b[0].localeCompare(a[0]))
+            .slice(0,60);
+          if(entries.length===0)return<div style={{textAlign:"center",padding:"20px",color:"var(--muted)",fontSize:13}}>No workouts logged yet.</div>;
+          return entries.map(([date,dayData])=>{
+            const entry=dayData[currentUser];
+            const summary=Array.isArray(entry.summary)?entry.summary:[entry.workoutLabel||"Workout"];
+            return(
+              <div key={date} style={{padding:"12px 14px",background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1,color:"var(--accent2)"}}>{fmtDate(date)}</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>{entry.time||""}</div>
+                </div>
+                {summary.map((line,i)=><div key={i} style={{fontSize:12,color:"var(--green)",lineHeight:1.6}}>{line}</div>)}
+                {entry.note&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>"{entry.note}"</div>}
+              </div>
+            );
+          });
+        })()}
+      </div>
     </div>
   );
 }
@@ -2374,7 +2374,7 @@ export default function App(){
   };
 
   const handleAddPackGoal=async t=>{
-    const goal={id:Date.now().toString(),author:currentUser,text:t,cheers:[],ts:Date.now()};
+    const goal={id:Date.now().toString(),author:currentUser,text:t,cheers:[],ts:Date.now(),date:todayStr()};
     await fsSet("wolfpack/packgoals",{list:[goal,...packGoals]});
   };
   const handleCheerGoal=async(id,user)=>{
@@ -2444,7 +2444,7 @@ export default function App(){
     await fsSet("wolfpack/profiles",{users:np});setProfiles(np);
   };
   const handleSaveGoal=async goal=>{
-    const np={...profiles,[currentUser]:{...profiles[currentUser],personalGoal:goal}};
+    const np={...profiles,[currentUser]:{...profiles[currentUser],personalGoal:goal,goalDate:todayStr()}};
     await fsSet("wolfpack/profiles",{users:np});setProfiles(np);
   };
   const handleChangePin=async newPin=>{
