@@ -181,7 +181,18 @@ const getDateRange=(s,e)=>{const dates=[];const sd=new Date(s+"T00:00:00"),ed=ne
 const getWeekdays=(s,e)=>getDateRange(s,e).filter(d=>!isWeekend(d));
 // Get workout days for a member based on their personal rest days
 const getWorkoutDays=(s,e,profile)=>getDateRange(s,e).filter(d=>!isRestDay(d,profile));
-function getStreak(h,n,profile){let s=0;const b=new Date();for(let i=0;i<365;i++){const d=new Date(b);d.setDate(b.getDate()-i);const k=localDateStr(d);if(isRestDay(k,profile))continue;if(h[k]?.[n]?.done)s++;else if(i>0)break;}return s;}
+function getStreak(h,n,profile){
+  let s=0;const b=new Date();const today=localDateStr(b);
+  for(let i=0;i<365;i++){
+    const d=new Date(b);d.setDate(b.getDate()-i);
+    const k=localDateStr(d);
+    if(isRestDay(k,profile))continue;
+    if(h[k]?.[n]?.done){s++;}
+    else if(k===today){continue;} // skip today if not logged yet — don't break streak
+    else if(i>0)break;
+  }
+  return s;
+}
 function getTotalWorkouts(h,n){
   // Count total sessions — each workout type logged counts as 1 session
   return Object.values(h).reduce((sum,d)=>{
@@ -479,6 +490,30 @@ function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteA
                   style={{width:"100%",padding:"10px",background:"var(--green)",border:"none",borderRadius:10,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1,opacity:(!backfillDate||backfillWorkouts.length===0)?0.4:1}}>
                   {backfillSaving?"SAVING...":"LOG FOR "+m.toUpperCase()}
                 </button>
+                {/* Delete existing workouts for this member */}
+                <div style={{marginTop:10,borderTop:"1px solid var(--border)",paddingTop:10}}>
+                  <div style={{fontSize:10,color:"var(--muted)",letterSpacing:1,fontFamily:"'Bebas Neue',cursive",marginBottom:6}}>DELETE A LOGGED DAY</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    {backfillDates.filter(d=>history[d]?.[m]?.done).map(d=>(
+                      <div key={d} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 10px",background:"var(--bg2)",borderRadius:8,border:"1px solid var(--border)"}}>
+                        <div>
+                          <div style={{fontSize:12,color:"var(--text)"}}>{fmtDate(d)}</div>
+                          <div style={{fontSize:10,color:"var(--muted)"}}>{Array.isArray(history[d][m].summary)?history[d][m].summary.join(", "):history[d][m].workoutLabel||"Workout"}</div>
+                        </div>
+                        <button onClick={async()=>{
+                          const newDay={...(history[d]||{})};delete newDay[m];
+                          const newHistory={...history,[d]:newDay};
+                          await fsSet("wolfpack/workouts",{byDate:newHistory});
+                          setHistory(newHistory);setSharedData(newHistory);
+                          showToast(`Deleted workout for ${m} on ${fmtDate(d)}`);
+                        }} style={{padding:"4px 10px",background:"rgba(231,76,60,0.15)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,cursor:"pointer",color:"var(--red)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                          DELETE
+                        </button>
+                      </div>
+                    ))}
+                    {backfillDates.filter(d=>history[d]?.[m]?.done).length===0&&<div style={{fontSize:11,color:"var(--muted)"}}>No logged workouts in the last 7 days.</div>}
+                  </div>
+                </div>
               </div>
             )}
 
