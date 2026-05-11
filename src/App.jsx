@@ -2345,6 +2345,9 @@ export default function App(){
     const entry={done:true,workouts:workouts.map(w=>({id:w.id,icon:w.icon,label:w.label})),workoutIcon:icons,workoutLabel:labels,note:"(admin backfill)",time,ts:new Date(date+"T12:00:00").getTime()};
     const newHistory={...history,[date]:{...(history[date]||{}),[member]:entry}};
     await fsSet("wolfpack/workouts",{byDate:newHistory});
+    // Update local state immediately so streak/recap reflect the change
+    setHistory(newHistory);
+    setSharedData(newHistory);
 
     // Also update acceptedAt for any active challenge this member is in
     // so their goal recalculates from challenge start
