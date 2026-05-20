@@ -202,6 +202,18 @@ const AI_PRESET_DESCRIPTIONS = {
 };
 const MAX_DAILY_REGENS = 5;
 
+// ── Muscle groups for WOLFMODE picker ───────────────────────────────────────
+const AI_MUSCLE_GROUPS = [
+  {id:"chest",     label:"Chest",       icon:"💪"},
+  {id:"back",      label:"Back",        icon:"🔙"},
+  {id:"legs",      label:"Legs",        icon:"🦵"},
+  {id:"glutes",    label:"Glutes",      icon:"🍑"},
+  {id:"shoulders", label:"Shoulders",   icon:"🏋️"},
+  {id:"arms",      label:"Arms",        icon:"💪"},
+  {id:"core",      label:"Core",        icon:"🎯"},
+  {id:"fullbody",  label:"Full Body",   icon:"⚡"},
+];
+
 // ── AI Coach (Nutrition + Supplements) constants ────────────────────────────
 const AI_BULK_CUT = [
   {id:"bulk",     label:"Bulk",     icon:"📈", desc:"Build muscle, eat in surplus"},
@@ -797,7 +809,7 @@ function PackGoals({currentUser,packGoals,profiles,members,onAddGoal,onCheer,onD
   );
 }
 
-function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,onOpenAITrainer,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,reactions,onReact,weeklyRecap,onDismissRecap}){
+function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,onOpenAITrainer,onOpenNutrition,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,reactions,onReact,weeklyRecap,onDismissRecap}){
   const key=todayStr(),td=sharedData[key]||{},my=td[currentUser],str=getStreak(history,currentUser,profiles[currentUser]),tot=getTotalWorkouts(history,currentUser),we=isRestDay(key,profiles[currentUser]);
   const sorted=[...members].sort((a,b)=>{const sa=getStreak(history,a),sb=getStreak(history,b);if(sb!==sa)return sb-sa;return b===currentUser?1:a===currentUser?-1:0;});
 
@@ -836,26 +848,67 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
         )}
       </div>
 
-      {/* ── AI TRAINER BUTTON ── */}
+      {/* ── WOLFMODE BUTTON ── */}
       <div style={{padding:"6px 16px 0"}}>
+        <style>{`
+          @keyframes wolfPulse {
+            0%   { box-shadow: 0 0 0 0 rgba(255,107,53,0.5), 0 0 12px rgba(124,92,191,0.4); }
+            50%  { box-shadow: 0 0 0 8px rgba(255,107,53,0), 0 0 24px rgba(255,107,53,0.3); }
+            100% { box-shadow: 0 0 0 0 rgba(255,107,53,0), 0 0 12px rgba(124,92,191,0.4); }
+          }
+        `}</style>
         <button onClick={onOpenAITrainer} style={{
           width:"100%",
-          padding:"12px 14px",
-          background:"linear-gradient(135deg, rgba(124,92,191,0.15), rgba(255,107,53,0.1))",
-          border:"1px solid rgba(124,92,191,0.4)",
-          borderRadius:14,
+          padding:"14px 16px",
+          background:"linear-gradient(135deg, rgba(255,107,53,0.18), rgba(124,92,191,0.2))",
+          border:"1px solid rgba(255,107,53,0.5)",
+          borderRadius:16,
           cursor:"pointer",
-          display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+          display:"flex",alignItems:"center",gap:12,
+          animation:"wolfPulse 2.5s ease-in-out infinite",
         }}>
-          <span style={{fontSize:20}}>🤖</span>
-          <div style={{textAlign:"left"}}>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--accent2)"}}>AI TRAINER</div>
-            <div style={{fontSize:10,color:"var(--muted)"}}>Get a personalized workout</div>
+          <div style={{
+            width:42,height:42,borderRadius:12,
+            background:"linear-gradient(135deg, rgba(255,107,53,0.3), rgba(124,92,191,0.3))",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:22,flexShrink:0,
+          }}>🔥</div>
+          <div style={{textAlign:"left",flex:1}}>
+            <div style={{
+              fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,
+              background:"linear-gradient(90deg, #ff6b35, #c084fc)",
+              WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
+              lineHeight:1.1,
+            }}>WOLFMODE</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:1}}>Train Smarter · AI-Powered Workouts</div>
           </div>
+          <div style={{fontSize:18,color:"rgba(255,107,53,0.7)"}}>›</div>
         </button>
+
+        {/* Nutrition shortcut — only shows if user has enabled the coach */}
+        {profiles[currentUser]?.aiTrainer?.coach?.enabled&&profiles[currentUser]?.aiTrainer?.coach?.stats&&(
+          <button onClick={onOpenNutrition} style={{
+            width:"100%",marginTop:8,
+            padding:"10px 14px",
+            background:"rgba(46,204,113,0.06)",
+            border:"1px solid rgba(46,204,113,0.25)",
+            borderRadius:12,
+            cursor:"pointer",
+            display:"flex",alignItems:"center",gap:10,
+          }}>
+            <span style={{fontSize:18}}>🥩</span>
+            <div style={{textAlign:"left",flex:1}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--green)"}}>NUTRITION & SUPPS</div>
+              <div style={{fontSize:10,color:"var(--muted)"}}>
+                {profiles[currentUser]?.aiTrainer?.coach?.lastPlan
+                  ? `Last plan: ${new Date(profiles[currentUser].aiTrainer.coach.lastPlan.generatedAt).toLocaleDateString()}`
+                  : "Tap to generate your plan"}
+              </div>
+            </div>
+            <div style={{fontSize:14,color:"var(--green)"}}>›</div>
+          </button>
+        )}
       </div>
-
-
 
       {/* ── SINGLE COLUMN MEMBER CARDS ── */}
       <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:3,color:"var(--muted)",padding:"6px 16px 8px"}}>THE PACK</div>
@@ -2009,7 +2062,7 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
     return best;
   })();
 
-  const tabs=[{id:"stats",label:"STATS"},{id:"body",label:"BODY"},{id:"ai",label:"🤖 AI"},{id:"pb",label:"MY PRs"},{id:"rest",label:"REST DAYS"},{id:"pin",label:"PIN"}];
+  const tabs=[{id:"stats",label:"STATS"},{id:"body",label:"BODY"},{id:"ai",label:"🔥 WOLF"},{id:"pb",label:"MY PRs"},{id:"rest",label:"REST DAYS"},{id:"pin",label:"PIN"}];
 
   return(
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -2412,7 +2465,7 @@ function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile}){
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{fontSize:11,color:"var(--muted)",lineHeight:1.5}}>
-        The AI Trainer uses this info to build workouts tailored to you. Set these once — change anytime.
+        WOLFMODE uses this to build workouts tailored to you. Set these once — change anytime.
       </div>
 
       {/* Goal */}
@@ -2525,6 +2578,22 @@ function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile}){
 
       <button className="btn-primary" onClick={save} disabled={!goal||!experience}>
         {saved?"✓ SAVED":"SAVE AI TRAINER SETTINGS"}
+      </button>
+
+      {/* Reset button */}
+      <button onClick={async()=>{
+        if(!window.confirm("Clear all your AI Trainer data? This resets your goal, experience, injuries, nutrition stats, and saved plan."))return;
+        const updated={...profile,aiTrainer:{}};
+        const np={...profiles,[currentUser]:updated};
+        await fsSet("wolfpack/profiles",{users:np});
+        if(onSaveProfile)onSaveProfile(np);
+        setGoal("");setExperience("");setInjuries([]);setUsualSetup("home");setSaved(false);
+      }} style={{
+        width:"100%",padding:"10px",borderRadius:10,cursor:"pointer",
+        background:"transparent",border:"1px solid rgba(231,76,60,0.2)",
+        color:"rgba(231,76,60,0.5)",fontSize:11,marginTop:4,
+      }}>
+        🗑️ Reset all AI Trainer data
       </button>
 
       {/* ── AI COACH (Nutrition + Supplements) Section ── */}
@@ -3188,7 +3257,6 @@ function ExerciseCard({exercise, userName, experience, injuries, idx}){
 
 // ── AI TRAINER MODAL ────────────────────────────────────────────────────────
 function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, onUseWorkout, showToast}){
-  // Step state: "setup" (pick equipment) → "loading" → "result"
   const [step,setStep]=useState("setup");
   const [selectedPreset,setSelectedPreset]=useState(profile?.aiTrainer?.usualSetup||"home");
   const [customEquip,setCustomEquip]=useState(profile?.aiTrainer?.savedPresets?.[0]?.equipment||"");
@@ -3198,12 +3266,42 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
   const [error,setError]=useState(null);
   const [regenCount,setRegenCount]=useState(getRegenCount(currentUser));
 
-  // Profile must have a goal set before this works
+  // Muscle group + structure state
+  const [muscleGroup,setMuscleGroup]=useState(null); // null = AI picks
+  const [aiPickingMuscle,setAiPickingMuscle]=useState(false);
+  const [aiMuscleReason,setAiMuscleReason]=useState("");
+  const [numExercises,setNumExercises]=useState(5);
+  const [setsPerExercise,setSetsPerExercise]=useState(4);
+
   const goal=profile?.aiTrainer?.goal;
   const experience=profile?.aiTrainer?.experience;
   const injuries=(profile?.aiTrainer?.injuries||[]).join(", ");
-
   const goalLabel=AI_GOALS.find(g=>g.id===goal)?.label||goal;
+
+  // AI Pick for muscle group — looks at recent history and suggests
+  const handleAIPick=()=>{
+    setAiPickingMuscle(true);
+    const history7=getRecentHistoryString(history,currentUser);
+    // Simple heuristic: scan recent history for muscle keywords and pick the least-trained
+    const groups=["chest","back","legs","glutes","shoulders","arms","core"];
+    const counts={};
+    groups.forEach(g=>{counts[g]=0;});
+    const lower=history7.toLowerCase();
+    if(lower.includes("chest")||lower.includes("bench")||lower.includes("push")) counts.chest+=2;
+    if(lower.includes("back")||lower.includes("pull")||lower.includes("row")||lower.includes("lat")) counts.back+=2;
+    if(lower.includes("leg")||lower.includes("squat")||lower.includes("lunge")) counts.legs+=2;
+    if(lower.includes("glute")||lower.includes("hip thrust")||lower.includes("rdl")) counts.glutes+=2;
+    if(lower.includes("shoulder")||lower.includes("press")||lower.includes("delt")) counts.shoulders+=2;
+    if(lower.includes("arm")||lower.includes("curl")||lower.includes("tricep")||lower.includes("bicep")) counts.arms+=2;
+    if(lower.includes("core")||lower.includes("abs")||lower.includes("plank")) counts.core+=2;
+    // Find least trained
+    const sorted=groups.sort((a,b)=>counts[a]-counts[b]);
+    const pick=sorted[0];
+    const mg=AI_MUSCLE_GROUPS.find(m=>m.id===pick)||AI_MUSCLE_GROUPS[7]; // fallback full body
+    setMuscleGroup(mg.id);
+    setAiMuscleReason(`You haven't trained ${mg.label.toLowerCase()} much recently — good time to hit it.`);
+    setAiPickingMuscle(false);
+  };
 
   const generate=async(isRegen=false)=>{
     if(isRegen&&regenCount>=MAX_DAILY_REGENS){
@@ -3213,14 +3311,18 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     setStep("loading");
     setError(null);
     const equipment=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
-    const bulkCut=profile?.aiTrainer?.coach?.bulkCut;
+    const bulkCut=profile?.aiTrainer?.coach?.stats?.bulkCut;
+    const muscleLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label:"AI's choice based on history";
     const result=await aiGenerateWorkout({
       userName:currentUser,
-      goal:goalLabel+(bulkCut?` (currently ${bulkCut === "bulk" ? "bulking" : bulkCut === "cut" ? "cutting" : "maintaining"})`:""),
+      goal:goalLabel+(bulkCut?` (currently ${bulkCut==="bulk"?"bulking":bulkCut==="cut"?"cutting":"maintaining"})`:""),
       experience:experience||"intermediate",
       injuries:injuries||"None",
       equipment,
       recentHistory:getRecentHistoryString(history,currentUser),
+      muscleGroup:muscleLabel,
+      numExercises,
+      setsPerExercise,
     });
     if(result.ok){
       setWorkout(result.workout);
@@ -3234,24 +3336,23 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
 
   const handleUseWorkout=()=>{
     if(!workout)return;
-    // Build a summary string and pass to log-workout
     const summary=workout.exercises.map(e=>`${e.name}: ${e.sets}×${e.reps}${e.weight&&e.weight!=="bodyweight"?` @ ${e.weight}`:""}`).join(" + ");
-    const note=`AI Trainer: ${workout.title}`;
+    const note=`WOLFMODE: ${workout.title}`;
     onUseWorkout({summary,note,minutes:workout.estimatedMinutes});
     onClose();
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  // ── Profile not set up ───────────────────────────────────────────────────
   if(!goal||!experience){
     return(
       <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
         <div className="modal" style={{maxHeight:"85dvh",overflowY:"auto"}}>
           <div className="modal-handle"/>
           <div style={{textAlign:"center",padding:"10px 0 16px"}}>
-            <div style={{fontSize:36,marginBottom:8}}>🤖</div>
+            <div style={{fontSize:36,marginBottom:8}}>🔥</div>
             <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,marginBottom:8}}>SET UP YOUR PROFILE FIRST</div>
             <div style={{fontSize:13,color:"var(--muted)",marginBottom:18,lineHeight:1.5,padding:"0 10px"}}>
-              The AI Trainer needs your goal and experience level to build personalized workouts. Open your profile and fill in the AI Trainer section.
+              WOLFMODE needs your goal and experience level to train you right. Open your profile and fill in the 🤖 AI tab.
             </div>
             <button className="btn-primary" onClick={onClose} style={{maxWidth:240,margin:"0 auto"}}>OPEN MY PROFILE</button>
           </div>
@@ -3262,163 +3363,197 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
 
   return(
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="modal" style={{maxHeight:"90dvh",overflowY:"auto"}}>
+      <div className="modal" style={{maxHeight:"92dvh",overflowY:"auto"}}>
         <div className="modal-handle"/>
 
+        {/* ── SETUP STEP ── */}
         {step==="setup"&&(
           <>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
-              <div style={{fontSize:24}}>🤖</div>
-              <div>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3}}>AI TRAINER</div>
-                <div style={{fontSize:11,color:"var(--muted)"}}>Goal: {goalLabel} · {experience}</div>
+            {/* Header */}
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+              <div style={{fontSize:26}}>🔥</div>
+              <div style={{flex:1}}>
+                <div style={{
+                  fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,
+                  background:"linear-gradient(90deg,#ff6b35,#c084fc)",
+                  WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
+                  lineHeight:1,
+                }}>WOLFMODE</div>
+                <div style={{fontSize:10,color:"var(--muted)"}}>Goal: {goalLabel} · {experience}</div>
               </div>
             </div>
-            <div style={{fontSize:13,color:"var(--muted)",marginBottom:14}}>Where are you training today?</div>
 
-            {/* Preset grid */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-              {AI_EQUIPMENT_PRESETS.map(p=>{
-                const sel=selectedPreset===p.id;
+            {/* ── MUSCLE GROUP ── */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🎯 MUSCLE GROUP</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:8}}>
+                {AI_MUSCLE_GROUPS.map(mg=>{
+                  const sel=muscleGroup===mg.id;
+                  return(
+                    <button key={mg.id} onClick={()=>{setMuscleGroup(mg.id);setAiMuscleReason("");}}
+                      style={{
+                        padding:"8px 4px",borderRadius:10,cursor:"pointer",textAlign:"center",
+                        background:sel?"rgba(255,107,53,0.2)":"var(--bg3)",
+                        border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",
+                      }}>
+                      <div style={{fontSize:16,marginBottom:2}}>{mg.icon}</div>
+                      <div style={{fontSize:9,color:sel?"#ff6b35":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{mg.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={handleAIPick} disabled={aiPickingMuscle}
+                style={{
+                  width:"100%",padding:"10px 12px",borderRadius:10,cursor:"pointer",
+                  background:!muscleGroup?"rgba(124,92,191,0.2)":"var(--bg3)",
+                  border:!muscleGroup?"1px solid var(--accent)":"1px solid var(--border)",
+                  display:"flex",alignItems:"center",gap:8,
+                }}>
+                <span style={{fontSize:16}}>🤖</span>
+                <div style={{textAlign:"left",flex:1}}>
+                  <div style={{fontSize:12,color:!muscleGroup?"var(--accent2)":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1.5}}>
+                    {aiPickingMuscle?"ANALYZING YOUR HISTORY...":"AI PICK FOR ME"}
+                  </div>
+                  {aiMuscleReason&&<div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>{aiMuscleReason}</div>}
+                  {!muscleGroup&&!aiMuscleReason&&<div style={{fontSize:10,color:"var(--muted)"}}>Based on what you haven't trained recently</div>}
+                </div>
+                {!muscleGroup&&<div style={{fontSize:14,color:"var(--accent)"}}>✓</div>}
+              </button>
+            </div>
+
+            {/* ── WORKOUT STRUCTURE ── */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⚙️ WORKOUT STRUCTURE</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Exercises</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {[3,4,5,6].map(n=>(
+                      <button key={n} onClick={()=>setNumExercises(n)} style={{
+                        flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",
+                        background:numExercises===n?"rgba(255,107,53,0.2)":"var(--bg3)",
+                        border:numExercises===n?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",
+                        color:numExercises===n?"#ff6b35":"var(--muted)",
+                        fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1,
+                      }}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Sets each</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {[2,3,4,5].map(n=>(
+                      <button key={n} onClick={()=>setSetsPerExercise(n)} style={{
+                        flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",
+                        background:setsPerExercise===n?"rgba(255,107,53,0.2)":"var(--bg3)",
+                        border:setsPerExercise===n?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",
+                        color:setsPerExercise===n?"#ff6b35":"var(--muted)",
+                        fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1,
+                      }}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div style={{fontSize:10,color:"var(--muted)",marginTop:6,textAlign:"center"}}>
+                AI picks exercises + reps. You set the volume.
+              </div>
+            </div>
+
+            {/* ── EQUIPMENT ── */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🏠 WHERE ARE YOU TRAINING?</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}}>
+                {AI_EQUIPMENT_PRESETS.map(p=>{
+                  const sel=selectedPreset===p.id;
+                  return(
+                    <button key={p.id} onClick={()=>{setSelectedPreset(p.id);setShowCustomEditor(false);}}
+                      style={{
+                        padding:"10px 8px",borderRadius:12,cursor:"pointer",
+                        background:sel?"rgba(124,92,191,0.2)":"var(--bg3)",
+                        border:sel?"1px solid var(--accent)":"1px solid var(--border)",
+                        textAlign:"left",
+                      }}>
+                      <div style={{fontSize:18,marginBottom:2}}>{p.icon}</div>
+                      <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1.5,color:sel?"var(--accent2)":"#fff"}}>{p.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              {savedPresets.length>0&&savedPresets.map((sp,i)=>{
+                const sel=selectedPreset===`saved_${i}`;
                 return(
-                  <button key={p.id} onClick={()=>{setSelectedPreset(p.id);setShowCustomEditor(false);}}
+                  <button key={i} onClick={()=>{setSelectedPreset(`saved_${i}`);setCustomEquip(sp.equipment);setShowCustomEditor(false);}}
                     style={{
-                      padding:"14px 10px",borderRadius:14,cursor:"pointer",
-                      background:sel?"rgba(124,92,191,0.2)":"var(--bg3)",
+                      width:"100%",padding:"8px 12px",borderRadius:10,cursor:"pointer",textAlign:"left",marginBottom:6,
+                      background:sel?"rgba(124,92,191,0.15)":"var(--bg3)",
                       border:sel?"1px solid var(--accent)":"1px solid var(--border)",
-                      textAlign:"left",
                     }}>
-                    <div style={{fontSize:22,marginBottom:4}}>{p.icon}</div>
-                    <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1.5,color:sel?"var(--accent2)":"#fff"}}>{p.label}</div>
-                    <div style={{fontSize:10,color:"var(--muted)",marginTop:2,lineHeight:1.4}}>{p.desc}</div>
+                    <div style={{fontSize:12,color:sel?"var(--accent2)":"#fff"}}>⚙️ {sp.name}</div>
                   </button>
                 );
               })}
+              <button onClick={()=>{setSelectedPreset("custom");setShowCustomEditor(true);}}
+                style={{
+                  width:"100%",padding:"8px 12px",borderRadius:10,cursor:"pointer",
+                  background:selectedPreset==="custom"?"rgba(124,92,191,0.15)":"var(--bg3)",
+                  border:selectedPreset==="custom"?"1px solid var(--accent)":"1px solid var(--border)",
+                  textAlign:"left",color:selectedPreset==="custom"?"var(--accent2)":"var(--muted)",fontSize:12,
+                }}>
+                ⚙️ Custom equipment
+              </button>
+              {showCustomEditor&&(
+                <textarea className="input" placeholder="Describe your equipment..." value={customEquip}
+                  onChange={e=>setCustomEquip(e.target.value)} rows={2}
+                  style={{padding:10,resize:"vertical",fontFamily:"inherit",fontSize:12,marginTop:6}}/>
+              )}
             </div>
 
-            {/* Saved presets */}
-            {savedPresets.length>0&&(
-              <>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--muted)",marginBottom:8,marginTop:14}}>MY SAVED SETUPS</div>
-                <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
-                  {savedPresets.map((sp,i)=>{
-                    const sel=selectedPreset===`saved_${i}`;
-                    return(
-                      <button key={i} onClick={()=>{setSelectedPreset(`saved_${i}`);setCustomEquip(sp.equipment);setShowCustomEditor(false);}}
-                        style={{
-                          padding:"10px 12px",borderRadius:10,cursor:"pointer",textAlign:"left",
-                          background:sel?"rgba(124,92,191,0.15)":"var(--bg3)",
-                          border:sel?"1px solid var(--accent)":"1px solid var(--border)",
-                        }}>
-                        <div style={{fontSize:13,color:sel?"var(--accent2)":"#fff",marginBottom:2}}>⚙️ {sp.name}</div>
-                        <div style={{fontSize:10,color:"var(--muted)",lineHeight:1.4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sp.equipment}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
+            {error&&<div style={{padding:10,marginBottom:10,background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:10,color:"var(--red)",fontSize:12}}>{error}</div>}
 
-            {/* Custom */}
-            <button onClick={()=>{setSelectedPreset("custom");setShowCustomEditor(true);}}
-              style={{
-                width:"100%",padding:"10px 12px",marginBottom:12,borderRadius:10,cursor:"pointer",
-                background:selectedPreset==="custom"?"rgba(124,92,191,0.15)":"var(--bg3)",
-                border:selectedPreset==="custom"?"1px solid var(--accent)":"1px solid var(--border)",
-                textAlign:"left",color:selectedPreset==="custom"?"var(--accent2)":"#fff",fontSize:13,
-              }}>
-              ⚙️ Custom — describe your equipment
+            <button className="btn-primary" disabled={selectedPreset==="custom"&&!customEquip.trim()} onClick={()=>generate(false)}
+              style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+              🔥 GENERATE MY WORKOUT
             </button>
-
-            {showCustomEditor&&(
-              <div style={{marginBottom:12}}>
-                <textarea
-                  className="input"
-                  placeholder="e.g. Hotel gym: 2x adjustable dumbbells up to 50lb, treadmill, cable machine, no barbell..."
-                  value={customEquip}
-                  onChange={e=>setCustomEquip(e.target.value)}
-                  rows={3}
-                  style={{padding:10,resize:"vertical",fontFamily:"inherit",fontSize:13}}
-                />
-                {customEquip.trim().length>0&&(
-                  <button onClick={()=>{
-                    const name=prompt("Name this setup (e.g. 'Hotel gym', 'Mom's house'):","");
-                    if(name?.trim()){
-                      const updated=[...savedPresets,{name:name.trim(),equipment:customEquip.trim()}];
-                      setSavedPresets(updated);
-                      // Persist to profile
-                      fsGet("wolfpack/profiles").then(d=>{
-                        if(d?.users?.[currentUser]){
-                          const updatedProfile={
-                            ...d.users[currentUser],
-                            aiTrainer:{
-                              ...(d.users[currentUser].aiTrainer||{}),
-                              savedPresets:updated,
-                            },
-                          };
-                          fsSet("wolfpack/profiles",{users:{...d.users,[currentUser]:updatedProfile}});
-                        }
-                      });
-                      showToast(`Saved "${name.trim()}" 💾`);
-                    }
-                  }} className="btn-ghost" style={{marginTop:8,fontSize:12,padding:"6px 12px"}}>💾 Save this setup</button>
-                )}
-              </div>
-            )}
-
-            {error&&(
-              <div style={{padding:10,marginBottom:10,background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:10,color:"var(--red)",fontSize:12}}>{error}</div>
-            )}
-
-            <button className="btn-primary"
-              disabled={selectedPreset==="custom"&&!customEquip.trim()}
-              onClick={()=>generate(false)}>
-              🤖 GENERATE MY WORKOUT
-            </button>
-            <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:8}}>Regens remaining today: {MAX_DAILY_REGENS-regenCount}</div>
+            <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:6}}>{MAX_DAILY_REGENS-regenCount} regens remaining today</div>
           </>
         )}
 
+        {/* ── LOADING STEP ── */}
         {step==="loading"&&(
           <div style={{textAlign:"center",padding:"40px 20px"}}>
-            <div style={{fontSize:48,marginBottom:14,animation:"spin 2s linear infinite",display:"inline-block"}}>🤖</div>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2,marginBottom:6}}>BUILDING YOUR WORKOUT</div>
-            <div style={{fontSize:12,color:"var(--muted)"}}>Analyzing your goal, history, and equipment...</div>
+            <div style={{fontSize:48,marginBottom:14,animation:"spin 1.5s linear infinite",display:"inline-block"}}>🔥</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:6,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFMODE ACTIVATED</div>
+            <div style={{fontSize:12,color:"var(--muted)"}}>Building your {muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label:"personalized"} workout...</div>
             <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
           </div>
         )}
 
+        {/* ── RESULT STEP ── */}
         {step==="result"&&workout&&(
           <>
-            <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:6}}>
-              <div style={{fontSize:24}}>🤖</div>
+            <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
+              <div style={{fontSize:22}}>🔥</div>
               <div style={{flex:1}}>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:2,lineHeight:1.1}}>{workout.title}</div>
-                <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>~{workout.estimatedMinutes} min · {workout.exercises.length} exercises</div>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:2,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.1}}>{workout.title}</div>
+                <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>~{workout.estimatedMinutes} min · {workout.exercises.length} exercises · {setsPerExercise} sets each</div>
               </div>
             </div>
-
-            <div style={{
-              padding:"10px 12px",marginBottom:12,
-              background:"rgba(124,92,191,0.08)",
-              border:"1px solid rgba(124,92,191,0.2)",
-              borderRadius:10,fontSize:12,color:"rgba(255,255,255,0.8)",lineHeight:1.5,fontStyle:"italic",
-            }}>
-              💭 {workout.reasoning}
-            </div>
-
+            {workout.reasoning&&(
+              <div style={{padding:"10px 12px",marginBottom:12,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:10,fontSize:12,color:"rgba(255,255,255,0.8)",lineHeight:1.5,fontStyle:"italic"}}>
+                💭 {workout.reasoning}
+              </div>
+            )}
             {workout.exercises.map((ex,i)=>(
               <ExerciseCard key={i} exercise={ex} userName={currentUser} experience={experience} injuries={injuries} idx={i}/>
             ))}
-
             <div style={{display:"flex",gap:8,marginTop:12}}>
-              <button className="btn-primary" onClick={handleUseWorkout} style={{flex:1}}>USE THIS WORKOUT</button>
+              <button className="btn-primary" onClick={handleUseWorkout} style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>USE THIS WORKOUT</button>
               <button className="btn-ghost" onClick={()=>generate(true)} disabled={regenCount>=MAX_DAILY_REGENS} style={{flex:"0 0 auto",padding:"0 14px"}}>
                 🔄 ({MAX_DAILY_REGENS-regenCount})
               </button>
             </div>
-            <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:8}}>
-              {regenCount>=MAX_DAILY_REGENS?"No more regens today.":`${MAX_DAILY_REGENS-regenCount} regenerations left today`}
+            <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:6}}>
+              {regenCount>=MAX_DAILY_REGENS?"No more regens today.":`${MAX_DAILY_REGENS-regenCount} regens left today`}
             </div>
           </>
         )}
@@ -3426,6 +3561,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     </div>
   );
 }
+
 
 function WorkoutModal({onClose,onSubmit,loading}){
   const [selected,setSelected]=useState([]);
@@ -3564,6 +3700,7 @@ export default function App(){
   const [editWorkout,setEditWorkout]=useState(null);
   const [weeklyRecap,setWeeklyRecap]=useState(null);
   const [aiTrainerOpen,setAiTrainerOpen]=useState(false);
+  const [nutritionOpen,setNutritionOpen]=useState(false);
   const [toast,setToast]=useState("");
   const unsubs=useRef([]);const tt=useRef(null);
   const showToast=useCallback(msg=>{setToast(msg);clearTimeout(tt.current);tt.current=setTimeout(()=>setToast(""),3000);},[]);
@@ -3981,7 +4118,7 @@ export default function App(){
         </div>
       </div>
       <div className="scroll">
-        {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>}
+        {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>}
         {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost} onComment={handleComment} onDeleteComment={handleDeleteComment}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
         {view==="challenges"&&<ChallengesTab currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)} onMarkPaid={handleMarkPaid} onLogPayment={handleLogPayment}/>}
@@ -4022,6 +4159,7 @@ export default function App(){
       </nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
       {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={null} onClose={()=>{setAiTrainerOpen(false);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={handleLogAIWorkout} showToast={showToast}/>}
+      {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)}/>}
