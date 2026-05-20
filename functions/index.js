@@ -47,10 +47,26 @@ function parseJSON(text) {
   }
 }
 exports.generateWorkout = onCall({secrets: [ANTHROPIC_API_KEY], cors: true}, async (request) => {
-  const {userName, goal, experience, injuries, equipment, recentHistory} = request.data || {};
+  const {userName, goal, experience, injuries, equipment, recentHistory, muscleGroup, numExercises, setsPerExercise} = request.data || {};
   await checkRateLimit(userName, "workouts", MAX_WORKOUTS_PER_DAY);
-  const sys = `You are an expert personal trainer for WOLFPACK fitness app. ONLY use exercises possible with listed equipment. Adjust for experience/injuries. 4-7 exercises. Return ONLY valid JSON, no markdown.`;
-  const usr = `Workout for ${userName}, goal: ${goal}, experience: ${experience}, injuries: ${injuries||"None"}, equipment: ${equipment}, recent history: ${recentHistory||"None"}. JSON: {"title":"","reasoning":"","estimatedMinutes":45,"exercises":[{"name":"","sets":4,"reps":"8-10","weight":"","restSeconds":90,"primaryMuscle":"","notes":""}]}`;
+  const sys = `You are an expert personal trainer for WOLFPACK fitness app. ONLY use exercises possible with listed equipment. Adjust for experience/injuries. Return ONLY valid JSON, no markdown.`;
+  const exerciseCount = numExercises || 5;
+  const sets = setsPerExercise || 4;
+  const muscleInstruction = muscleGroup && muscleGroup !== "AI's choice based on history"
+    ? `Focus this workout on: ${muscleGroup}. All or most exercises must target this muscle group.`
+    : "Choose the best muscle group based on what's been trained least recently.";
+  const usr = `Build a workout for ${userName}.
+Goal: ${goal}
+Experience: ${experience}
+Injuries: ${injuries||"None"}
+Equipment: ${equipment}
+Recent history: ${recentHistory||"None"}
+${muscleInstruction}
+Number of exercises: exactly ${exerciseCount}
+Sets per exercise: exactly ${sets} (AI picks reps based on goal)
+
+Return ONLY this JSON:
+{"title":"","reasoning":"","estimatedMinutes":45,"exercises":[{"name":"","sets":${sets},"reps":"8-10","weight":"","restSeconds":90,"primaryMuscle":"","notes":""}]}`;
   const workout = parseJSON(await callClaude(sys, usr, ANTHROPIC_API_KEY.value()));
   return {workout};
 });
