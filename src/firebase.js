@@ -3,6 +3,7 @@ import {
   getFirestore, doc, getDoc, setDoc, onSnapshot, deleteDoc,
 } from "firebase/firestore";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { getFunctions, httpsCallable } from "firebase/functions";
 
 // ── REPLACE WITH YOUR FIREBASE CONFIG ────────────────────────────────────────
 const firebaseConfig = {
@@ -21,6 +22,7 @@ export const VAPID_KEY = "YOUR_VAPID_KEY";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const functions = getFunctions(app);
 
 let messaging = null;
 try { messaging = getMessaging(app); } catch(e) { /* not supported */ }
@@ -58,4 +60,39 @@ export const requestNotifPermission = async () => {
 export const onForegroundMessage = (cb) => {
   if (!messaging) return () => {};
   return onMessage(messaging, cb);
+};
+
+// ── AI Trainer — Cloud Function callers ─────────────────────────────────────
+// These call the secure backend that holds the Anthropic API key.
+// Backend enforces per-user daily rate limits.
+
+const generateWorkoutFn = httpsCallable(functions, "generateWorkout");
+const generateFormCuesFn = httpsCallable(functions, "generateFormCues");
+const generateNutritionPlanFn = httpsCallable(functions, "generateNutritionPlan");
+
+export const aiGenerateWorkout = async (params) => {
+  try {
+    const result = await generateWorkoutFn(params);
+    return { ok: true, ...result.data };
+  } catch (e) {
+    return { ok: false, error: e.message || "Failed to generate workout." };
+  }
+};
+
+export const aiGenerateFormCues = async (params) => {
+  try {
+    const result = await generateFormCuesFn(params);
+    return { ok: true, ...result.data };
+  } catch (e) {
+    return { ok: false, error: e.message || "Failed to generate form cues." };
+  }
+};
+
+export const aiGenerateNutritionPlan = async (params) => {
+  try {
+    const result = await generateNutritionPlanFn(params);
+    return { ok: true, ...result.data };
+  } catch (e) {
+    return { ok: false, error: e.message || "Failed to generate nutrition plan." };
+  }
 };
