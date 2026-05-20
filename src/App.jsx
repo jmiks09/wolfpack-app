@@ -134,27 +134,69 @@ const BADGES = [
   {id:"penalty_free",icon:"🛡️",label:"Clean Slate",desc:"Win a penalty challenge"},
 ];
 const WOLF_AVATARS = ["🐺","🦊","🦁","🐻","🐯","🦝","🐸","🦅","🦈","🐲","🦄","🦋"];
-const GYM_HOURS = Array.from({length:14},(_,i)=>{const h=6+i;return h<12?`${h}:00 AM`:h===12?`12:00 PM`:`${h-12}:00 PM`;});
+// Half-hour slots 6 AM - 8 PM
+const GYM_HOURS = Array.from({length:28},(_,i)=>{
+  const totalMins=6*60+i*30;
+  const h=Math.floor(totalMins/60);
+  const m=totalMins%60;
+  const label=m===0?`${h===12?12:h%12}:00 ${h<12?"AM":"PM"}`:`${h===12?12:h%12}:30 ${h<12?"AM":"PM"}`;
+  return {label,h,m};
+});
+const GYM_DURATIONS=["30 min","1 hr","1.5 hrs","2 hrs"];
+const GYM_DURATION_MINS=[30,60,90,120];
+const GYM_CLOSE_HOUR = 20;
+const isGymOpen = () => { const h=new Date().getHours(); return h>=6&&h<GYM_CLOSE_HOUR; };
+// Check if a slot overlaps with a booked range
+const slotOverlaps=(slotH,slotM,booking)=>{
+  const slotStart=slotH*60+slotM;
+  const slotEnd=slotStart+30;
+  const bookStart=booking.startH*60+booking.startM;
+  const bookEnd=bookStart+booking.durationMins;
+  return slotStart<bookEnd&&slotEnd>bookStart;
+};
 const REACTIONS = ["💪","🔥","👑","🐺","⚡","🙌"];
 const MILESTONES = [7,14,30,60,100]; // streak days that trigger auto-post
 const SESSION_MILESTONES = [50,100,200,500]; // session counts that trigger auto-post
 
 const NAV=[{id:"pack",icon:"🐺",label:"PACK"},{id:"feed",icon:"💬",label:"FEED"},{id:"gym",icon:"🏋️",label:"GYM"},{id:"challenges",icon:"⚔️",label:"CHALLENGES"},{id:"stats",icon:"📊",label:"STATS"}];
 
-const todayStr=()=>new Date().toISOString().split("T")[0];
+const todayStr=()=>{
+  const d=new Date();
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,"0");
+  const day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+};
+// Use local date string for any Date object (avoids UTC timezone shift)
+const localDateStr=d=>{const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,"0");const day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`;};
 const isWeekend=d=>{const x=new Date(d+"T00:00:00");return x.getDay()===0||x.getDay()===6;};
 const DAY_NAMES=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const getRestDays=profile=>profile?.restDays||[0,6]; // default Sat/Sun
 const isRestDay=(d,profile)=>{const x=new Date(d+"T00:00:00");return getRestDays(profile).includes(x.getDay());};
-const next7Days=()=>Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return d.toISOString().split("T")[0];});
+const next7Days=()=>Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return localDateStr(d);});
 const fmtDate=d=>new Date(d+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
 const fmtTime=ts=>new Date(ts).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
-const getWeekStart=d=>{const x=new Date(d+"T00:00:00");x.setDate(x.getDate()-x.getDay());return x.toISOString().split("T")[0];};
-const getDateRange=(s,e)=>{const dates=[];const sd=new Date(s+"T00:00:00"),ed=new Date(e+"T00:00:00");for(let d=new Date(sd);d<=ed;d.setDate(d.getDate()+1))dates.push(d.toISOString().split("T")[0]);return dates;};
+const getWeekStart=d=>{const x=new Date(d+"T00:00:00");x.setDate(x.getDate()-x.getDay());return localDateStr(x);};
+const getDateRange=(s,e)=>{const dates=[];const sd=new Date(s+"T00:00:00"),ed=new Date(e+"T00:00:00");for(let d=new Date(sd);d<=ed;d.setDate(d.getDate()+1))dates.push(localDateStr(d));return dates;};
 const getWeekdays=(s,e)=>getDateRange(s,e).filter(d=>!isWeekend(d));
 // Get workout days for a member based on their personal rest days
 const getWorkoutDays=(s,e,profile)=>getDateRange(s,e).filter(d=>!isRestDay(d,profile));
-function getStreak(h,n,profile){let s=0;const b=new Date();for(let i=0;i<365;i++){const d=new Date(b);d.setDate(b.getDate()-i);const k=d.toISOString().split("T")[0];if(isRestDay(k,profile))continue;if(h[k]?.[n]?.done)s++;else if(i>0)break;}return s;}
+function getStreak(h,n,profile){
+  let s=0;const b=new Date();const today=localDateStr(b);
+  for(let i=0;i<365;i++){
+    const d=new Date(b);d.setDate(b.getDate()-i);
+    const k=localDateStr(d);
+    // Always skip rest days
+    if(isRestDay(k,profile))continue;
+    // Skip today if not yet logged — don't penalize for current day
+    if(k===today&&!h[k]?.[n]?.done)continue;
+    // Count logged days
+    if(h[k]?.[n]?.done){s++;}
+    // Any past workout day that's missing breaks the streak
+    else break;
+  }
+  return s;
+}
 function getTotalWorkouts(h,n){
   // Count total sessions — each workout type logged counts as 1 session
   return Object.values(h).reduce((sum,d)=>{
@@ -452,6 +494,30 @@ function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteA
                   style={{width:"100%",padding:"10px",background:"var(--green)",border:"none",borderRadius:10,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1,opacity:(!backfillDate||backfillWorkouts.length===0)?0.4:1}}>
                   {backfillSaving?"SAVING...":"LOG FOR "+m.toUpperCase()}
                 </button>
+                {/* Delete existing workouts for this member */}
+                <div style={{marginTop:10,borderTop:"1px solid var(--border)",paddingTop:10}}>
+                  <div style={{fontSize:10,color:"var(--muted)",letterSpacing:1,fontFamily:"'Bebas Neue',cursive",marginBottom:6}}>DELETE A LOGGED DAY</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    {backfillDates.filter(d=>history[d]?.[m]?.done).map(d=>(
+                      <div key={d} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 10px",background:"var(--bg2)",borderRadius:8,border:"1px solid var(--border)"}}>
+                        <div>
+                          <div style={{fontSize:12,color:"var(--text)"}}>{fmtDate(d)}</div>
+                          <div style={{fontSize:10,color:"var(--muted)"}}>{Array.isArray(history[d][m].summary)?history[d][m].summary.join(", "):history[d][m].workoutLabel||"Workout"}</div>
+                        </div>
+                        <button onClick={async()=>{
+                          const newDay={...(history[d]||{})};delete newDay[m];
+                          const newHistory={...history,[d]:newDay};
+                          await fsSet("wolfpack/workouts",{byDate:newHistory});
+                          setHistory(newHistory);setSharedData(newHistory);
+                          showToast(`Deleted workout for ${m} on ${fmtDate(d)}`);
+                        }} style={{padding:"4px 10px",background:"rgba(231,76,60,0.15)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,cursor:"pointer",color:"var(--red)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                          DELETE
+                        </button>
+                      </div>
+                    ))}
+                    {backfillDates.filter(d=>history[d]?.[m]?.done).length===0&&<div style={{fontSize:11,color:"var(--muted)"}}>No logged workouts in the last 7 days.</div>}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -550,25 +616,30 @@ function ReactionPill({member, reactions, currentUser, onReact}){
 }
 
 // ── PACK GOALS BOARD ─────────────────────────────────────────────────────────
-function PackGoals({currentUser,packGoals,onAddGoal,onCheer,onDeleteGoal}){
+function PackGoals({currentUser,packGoals,profiles,members,onAddGoal,onCheer,onDeleteGoal}){
   const [open,setOpen]=useState(false);
   const [text,setText]=useState("");
   const sub=()=>{if(!text.trim())return;onAddGoal(text.trim());setText("");setOpen(false);};
   const myGoal=packGoals.find(g=>g.author===currentUser);
+  // Combine pack goals + personal goals from profiles
+  const profileGoals=members.filter(m=>profiles[m]?.personalGoal&&profiles[m]?.shareGoal&&!packGoals.find(g=>g.author===m)).map(m=>({
+    id:`profile_${m}`,author:m,text:profiles[m].personalGoal,cheers:[],fromProfile:true
+  }));
+  const allGoals=[...packGoals,...profileGoals];
   return(
     <div style={{margin:"8px 16px 0"}}>
       <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:3,color:"var(--muted)",marginBottom:8}}>PACK GOALS</div>
-      {packGoals.length===0&&!open&&(
+      {allGoals.length===0&&!open&&(
         <div style={{textAlign:"center",padding:"16px",background:"var(--bg3)",borderRadius:14,border:"1px dashed var(--border)",marginBottom:8}}>
           <div style={{fontSize:12,color:"var(--muted)"}}>No goals posted yet. Set one for the pack to see!</div>
         </div>
       )}
-      {packGoals.map(g=>(
+      {allGoals.map(g=>(
         <div key={g.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)",marginBottom:8}}>
           <div style={{fontSize:22}}>🎯</div>
           <div style={{flex:1}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text)",marginBottom:2}}>{g.text}</div>
-            <div style={{fontSize:11,color:"var(--muted)"}}>{g.author}</div>
+            <div style={{fontSize:11,color:"var(--muted)"}}>{g.author}{g.date&&<span style={{marginLeft:6,opacity:0.6}}>· {fmtDate(g.date)}</span>}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <button onClick={()=>onCheer(g.id,currentUser)} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:(g.cheers||[]).includes(currentUser)?1:0.4}}>🔥</button>
@@ -654,8 +725,13 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
               display:"flex",alignItems:"center",gap:12,
               minHeight:80,
             }}>
-              {/* left accent bar */}
-              <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:done?"linear-gradient(180deg,#2ecc71,#27ae60)":isMe?"linear-gradient(180deg,var(--accent),var(--orange))":"transparent",borderRadius:"18px 0 0 18px"}}/>
+              {/* left accent bar with vertical status */}
+              <div style={{position:"absolute",left:0,top:0,bottom:0,width:26,background:done?"rgba(46,204,113,0.12)":restToday?"rgba(124,92,191,0.1)":"rgba(255,255,255,0.02)",borderRadius:"18px 0 0 18px",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+                <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:done?"linear-gradient(180deg,#2ecc71,#27ae60)":isMe?"linear-gradient(180deg,var(--accent),var(--orange))":restToday?"linear-gradient(180deg,var(--accent),#5a3fa0)":"transparent",borderRadius:"18px 0 0 18px"}}/>
+                <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:9,letterSpacing:2,color:done?"var(--green)":restToday?"var(--accent2)":"var(--muted)",writingMode:"vertical-rl",textOrientation:"mixed",transform:"rotate(180deg)",marginLeft:3}}>
+                  {done?"DONE":restToday?"REST":"PENDING"}
+                </span>
+              </div>
               {/* rank */}
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,color:"var(--muted)",width:20,textAlign:"center",flexShrink:0}}>{i+1}</div>
               {/* avatar */}
@@ -663,35 +739,21 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
               {/* info */}
               <div style={{flex:1,minWidth:0,overflow:"hidden"}}>
                 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                  <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:1,color:isMe?"var(--accent2)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}>{m}</span>
+                  <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:1,color:isMe?"var(--accent2)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>{m}</span>
                   {isMe&&<span style={{fontSize:10,color:"var(--accent2)",background:"rgba(124,92,191,0.2)",padding:"1px 5px",borderRadius:4,flexShrink:0}}>YOU</span>}
                 </div>
-                <div style={{fontSize:11,color:"var(--muted)",whiteSpace:"nowrap"}}>🔥 {ms} day streak · {getTotalWorkouts(history,m)} sessions</div>
+                <div style={{fontSize:11,color:"var(--muted)"}}>🔥 {ms} days · {getTotalWorkouts(history,m)} sessions</div>
                 {done&&(
                   <div style={{marginTop:3}}>
                     {Array.isArray(td[m]?.summary)
-                      ?td[m].summary.map((line,i)=><div key={i} style={{fontSize:11,color:"var(--green)",lineHeight:1.5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{line}</div>)
-                      :<div style={{fontSize:11,color:"var(--green)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{td[m]?.workoutLabel||""}</div>
+                      ?td[m].summary.map((line,i)=><div key={i} style={{fontSize:11,color:"var(--green)",lineHeight:1.5,wordBreak:"break-word"}}>{line}</div>)
+                      :<div style={{fontSize:11,color:"var(--green)",wordBreak:"break-word"}}>{td[m]?.workoutLabel||""}</div>
                     }
                   </div>
                 )}
               </div>
-              {/* status */}
-              <div style={{
-                flexShrink:0,padding:"6px 14px",borderRadius:20,
-                background:done?"rgba(46,204,113,0.15)":restToday?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.04)",
-                border:done?"1px solid rgba(46,204,113,0.4)":"1px solid var(--border)",
-                fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,
-                color:done?"var(--green)":restToday?"var(--muted)":"var(--muted)",
-              }}>
-                {done?"✓ DONE":restToday?"😴 REST":"○ PENDING"}
-              </div>
-              {/* Reactions — positioned at bottom of card */}
-              {!isMe&&(
-                <div style={{position:"absolute",bottom:8,left:16,right:16}}>
-                  <ReactionPill member={m} reactions={reactions} currentUser={currentUser} onReact={onReact}/>
-                </div>
-              )}
+
+
               {isMe&&<div style={{position:"absolute",top:10,right:12,fontSize:11,color:"var(--muted)"}}>👤</div>}
             </div>
           );
@@ -722,8 +784,8 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
         </div>
       )}
 
-      {/* Pack Goals */}
-      <PackGoals currentUser={currentUser} packGoals={packGoals} onAddGoal={onAddGoal} onCheer={onCheer} onDeleteGoal={onDeleteGoal}/>
+      {/* Pack Goals — includes personal goals from profiles */}
+      <PackGoals currentUser={currentUser} packGoals={packGoals} profiles={profiles} members={members} onAddGoal={onAddGoal} onCheer={onCheer} onDeleteGoal={onDeleteGoal}/>
       <div style={{height:16}}/>
     </div>
   );
@@ -732,6 +794,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
 function FeedPost({post:p, currentUser, profiles, onLike, onDelete, onComment, onDeleteComment}){
   const [showComments,setShowComments]=useState(false);
   const [commentText,setCommentText]=useState("");
+  const [showLikes,setShowLikes]=useState(false);
   const liked=(p.likes||[]).includes(currentUser);
   const isMe=p.author===currentUser;
   const comments=p.comments||[];
@@ -759,14 +822,29 @@ function FeedPost({post:p, currentUser, profiles, onLike, onDelete, onComment, o
       {p.photo&&<img src={p.photo} alt="post" style={{width:"100%",borderRadius:10,marginBottom:12,maxHeight:300,objectFit:"cover"}}/>}
 
       {/* Actions row */}
-      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:comments.length>0||showComments?10:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:4}}>
         <button onClick={()=>onLike(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:liked?"var(--orange)":"var(--muted)",display:"flex",alignItems:"center",gap:4,fontSize:13}}>
-          {liked?"🔥":"🤍"} {(p.likes||[]).length||0}
+          {liked?"🔥":"🤍"} {(p.likes||[]).length||0} {(p.likes||[]).length===1?"like":"likes"}
         </button>
-        <button onClick={()=>setShowComments(s=>!s)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",display:"flex",alignItems:"center",gap:4,fontSize:13}}>
+        {(p.likes||[]).length>0&&(
+          <button onClick={()=>setShowLikes(s=>!s)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:12,textDecoration:"underline"}}>
+            {showLikes?"hide":"who liked?"}
+          </button>
+        )}
+        <button onClick={()=>setShowComments(s=>!s)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",display:"flex",alignItems:"center",gap:4,fontSize:13,marginLeft:"auto"}}>
           💬 {comments.length>0?comments.length:"Reply"}
         </button>
       </div>
+      {showLikes&&(p.likes||[]).length>0&&(
+        <div style={{marginBottom:8,padding:"8px 10px",background:"var(--bg3)",borderRadius:10,display:"flex",flexWrap:"wrap",gap:6}}>
+          {(p.likes||[]).map(name=>(
+            <div key={name} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px",background:"var(--bg2)",borderRadius:20,fontSize:12}}>
+              <AvatarDisplay profile={profiles[name]} size={16}/>
+              <span>{name}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Comments */}
       {(showComments||comments.length>0)&&(
@@ -861,20 +939,147 @@ function FeedTab({currentUser,profiles,feed,onPost,onLike,onDelete,onComment,onD
 
 function GymTab({currentUser,gymSlots,onBook,onCancel}){
   const [sel,setSel]=useState(todayStr());
-  const dates=next7Days(),daySlots=gymSlots.filter(s=>s.date===sel),mySlots=gymSlots.filter(s=>s.bookedBy===currentUser&&s.date>=todayStr());
+  const [bookingOpen,setBookingOpen]=useState(false);
+  const [selStartIdx,setSelStartIdx]=useState(null);
+  const [selDuration,setSelDuration]=useState(1);
+  const [conflictErr,setConflictErr]=useState(false);
+  const showConflict=()=>{setConflictErr(true);setTimeout(()=>setConflictErr(false),3000);}; // index into GYM_DURATIONS
+  const dates=next7Days();
+  const daySlots=gymSlots.filter(s=>s.date===sel);
+  const mySlots=gymSlots.filter(s=>s.bookedBy===currentUser&&s.date>=todayStr());
+
+  // Check if a half-hour slot is occupied by any booking
+  const getSlotBooking=(slot)=>daySlots.find(s=>slotOverlaps(slot.h,slot.m,s));
+  const isSlotMine=(slot)=>{const b=getSlotBooking(slot);return b&&b.bookedBy===currentUser;};
+
+  const handleBook=()=>{
+    if(selStartIdx===null)return;
+    const slot=GYM_HOURS[selStartIdx];
+    const durMins=GYM_DURATION_MINS[selDuration];
+    // Check no conflicts in the chosen range
+    const slotsNeeded=GYM_HOURS.filter((_,i)=>{
+      const s=GYM_HOURS[i];
+      const sStart=s.h*60+s.m;
+      const bStart=slot.h*60+slot.m;
+      return sStart>=bStart&&sStart<bStart+durMins;
+    });
+    const conflict=slotsNeeded.some(s=>getSlotBooking(s)&&!isSlotMine(s));
+    if(conflict){showConflict();return;}
+    onBook(sel,slot,durMins,slot.label+" – "+formatEndTime(slot.h,slot.m,durMins));
+    setBookingOpen(false);setSelStartIdx(null);
+  };
+
+  const formatEndTime=(h,m,durMins)=>{
+    const total=h*60+m+durMins;
+    const eh=Math.floor(total/60),em=total%60;
+    return em===0?`${eh===12?12:eh%12}:00 ${eh<12?"AM":"PM"}`:`${eh===12?12:eh%12}:30 ${eh<12?"AM":"PM"}`;
+  };
+
   return(
     <div>
+      {/* Date picker */}
       <div style={{display:"flex",gap:8,padding:"12px 16px",overflowX:"auto"}}>
         {dates.map(d=>{const act=d===sel,dd=new Date(d+"T00:00:00"),we=isWeekend(d);return<button key={d} onClick={()=>setSel(d)} style={{flexShrink:0,minWidth:56,padding:"8px 10px",borderRadius:12,cursor:"pointer",textAlign:"center",background:act?"linear-gradient(135deg,var(--accent),var(--orange))":"var(--bg3)",border:"none",color:we&&!act?"var(--muted)":"#fff",opacity:we?.6:1}}><div style={{fontSize:10,opacity:.8}}>{dd.toLocaleDateString("en-US",{weekday:"short"})}</div><div style={{fontSize:17,fontWeight:700}}>{dd.getDate()}</div>{we&&<div style={{fontSize:9,opacity:.7}}>REST</div>}</button>;})}
       </div>
-      {mySlots.length>0&&<><div className="section-label">MY RESERVATIONS</div>{mySlots.map(s=><div key={s.id} style={{display:"flex",alignItems:"center",gap:12,margin:"0 16px 8px",padding:"12px 14px",background:"rgba(124,92,191,0.1)",borderRadius:12,border:"1px solid rgba(124,92,191,0.25)"}}><span style={{fontSize:20}}>🏋️</span><div style={{flex:1}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1}}>{s.time}</div><div style={{fontSize:11,color:"var(--muted)"}}>{fmtDate(s.date)}</div></div><button onClick={()=>onCancel(s.id)} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"var(--muted)",fontSize:12}}>Cancel</button></div>)}</>}
-      <div className="section-label">{fmtDate(sel)}{isWeekend(sel)&&" — REST DAY"}</div>
-      {isWeekend(sel)?<div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)"}}><div style={{fontSize:40,marginBottom:8}}>😴</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2}}>GYM CLOSED ON WEEKENDS</div></div>:
-        GYM_HOURS.map(time=>{
-          const booked=daySlots.filter(s=>s.time===time),mine=booked.find(s=>s.bookedBy===currentUser),full=booked.length>=2;
-          return<div key={time} style={{display:"flex",alignItems:"center",gap:10,margin:"0 16px 8px",padding:"12px 14px",background:"var(--card)",borderRadius:12,border:`1px solid ${mine?"rgba(124,92,191,0.3)":full?"rgba(231,76,60,0.2)":"var(--border)"}`}}><div style={{width:68,fontFamily:"'Bebas Neue',cursive",fontSize:13,color:mine?"var(--accent2)":full?"var(--red)":"var(--text)"}}>{time}</div><div style={{flex:1,display:"flex",gap:5,flexWrap:"wrap"}}>{booked.map(s=><span key={s.id} style={{fontSize:12,background:"var(--bg3)",padding:"2px 8px",borderRadius:8,color:"var(--muted)"}}>{s.bookedBy}</span>)}{booked.length===0&&<span style={{fontSize:12,color:"var(--muted)"}}>Open</span>}</div>{mine?<button onClick={()=>onCancel(mine.id)} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"var(--muted)",fontSize:12}}>Cancel</button>:full?<span style={{fontSize:12,color:"var(--red)",fontWeight:700}}>FULL</span>:<button onClick={()=>onBook(sel,time)} style={{background:"linear-gradient(135deg,var(--accent),var(--orange))",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",color:"#fff",fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>BOOK</button>}</div>;
-        })
-      }
+
+      {/* My reservations */}
+      {mySlots.length>0&&(
+        <>
+          <div className="section-label">MY RESERVATIONS</div>
+          {mySlots.map(s=>(
+            <div key={s.id} style={{display:"flex",alignItems:"center",gap:12,margin:"0 16px 8px",padding:"12px 14px",background:"rgba(124,92,191,0.1)",borderRadius:12,border:"1px solid rgba(124,92,191,0.25)"}}>
+              <span style={{fontSize:20}}>🏋️</span>
+              <div style={{flex:1}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1}}>{s.displayTime||s.time}</div>
+                <div style={{fontSize:11,color:"var(--muted)"}}>{fmtDate(s.date)}</div>
+              </div>
+              <button onClick={()=>onCancel(s.id)} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"var(--muted)",fontSize:12}}>Cancel</button>
+            </div>
+          ))}
+        </>
+      )}
+
+      <div className="section-label">{fmtDate(sel)}{isWeekend(sel)?" — REST DAY":" — 6:00 AM – 8:00 PM"}</div>
+
+      {isWeekend(sel)||(!isGymOpen()&&sel===todayStr())?(
+        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)"}}>
+          <div style={{fontSize:40,marginBottom:8}}>{isWeekend(sel)?"😴":"🔒"}</div>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2}}>{isWeekend(sel)?"GYM CLOSED ON WEEKENDS":"GARAGE GYM CLOSED"}</div>
+          <div style={{fontSize:12,color:"var(--muted)",marginTop:6}}>Hours: 6:00 AM – 8:00 PM</div>
+        </div>
+      ):(
+        <>
+          {/* Book button */}
+          {!bookingOpen&&(
+            <div style={{padding:"0 16px 12px"}}>
+              <button className="btn-primary" onClick={()=>setBookingOpen(true)}>🏋️ RESERVE GYM TIME</button>
+            </div>
+          )}
+
+          {/* Booking picker */}
+          {bookingOpen&&(
+            <div style={{margin:"0 16px 12px",padding:"14px",background:"var(--card)",borderRadius:14,border:"1px solid var(--border)"}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2,marginBottom:10}}>PICK START TIME</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:12,maxHeight:180,overflowY:"auto"}}>
+                {GYM_HOURS.map((slot,i)=>{
+                  const booking=getSlotBooking(slot);
+                  const taken=!!booking&&booking.bookedBy!==currentUser;
+                  const mine=isSlotMine(slot);
+                  const sel2=selStartIdx===i;
+                  return(
+                    <button key={i} onClick={()=>!taken&&setSelStartIdx(i)} style={{
+                      padding:"6px 4px",borderRadius:8,cursor:taken?"default":"pointer",textAlign:"center",
+                      background:sel2?"rgba(124,92,191,0.3)":taken?"rgba(231,76,60,0.1)":mine?"rgba(124,92,191,0.1)":"var(--bg3)",
+                      border:sel2?"1px solid var(--accent)":taken?"1px solid rgba(231,76,60,0.3)":mine?"1px solid rgba(124,92,191,0.3)":"1px solid var(--border)",
+                      opacity:taken?0.7:1,
+                    }}>
+                      <div style={{fontSize:11,color:sel2?"var(--accent2)":taken?"var(--red)":mine?"var(--accent2)":"var(--text)"}}>{slot.label}</div>
+                      {taken&&<div style={{fontSize:9,color:"var(--red)",fontWeight:700}}>BOOKED</div>}
+                      {mine&&<div style={{fontSize:9,color:"var(--accent2)"}}>YOURS</div>}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,marginBottom:8}}>DURATION</div>
+              <div style={{display:"flex",gap:8,marginBottom:12}}>
+                {GYM_DURATIONS.map((d,i)=>(
+                  <button key={i} onClick={()=>setSelDuration(i)} style={{flex:1,padding:"8px 4px",borderRadius:8,cursor:"pointer",fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,background:selDuration===i?"rgba(124,92,191,0.2)":"var(--bg3)",border:selDuration===i?"1px solid var(--accent)":"1px solid var(--border)",color:selDuration===i?"var(--accent2)":"var(--muted)"}}>{d}</button>
+                ))}
+              </div>
+              {selStartIdx!==null&&(
+                <div style={{fontSize:12,color:"var(--accent2)",marginBottom:10,padding:"8px 10px",background:"rgba(124,92,191,0.1)",borderRadius:8}}>
+                  📅 {GYM_HOURS[selStartIdx].label} – {formatEndTime(GYM_HOURS[selStartIdx].h,GYM_HOURS[selStartIdx].m,GYM_DURATION_MINS[selDuration])} ({GYM_DURATIONS[selDuration]})
+                </div>
+              )}
+              {conflictErr&&<div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,fontSize:12,color:"var(--red)",marginBottom:8}}>⚠️ That time overlaps with an existing booking. Pick a different time.</div>}
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn-primary" onClick={handleBook} disabled={selStartIdx===null} style={{flex:1}}>CONFIRM BOOKING</button>
+                <button className="btn-ghost" onClick={()=>{setBookingOpen(false);setSelStartIdx(null);setConflictErr(false);}} style={{flex:1}}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* Timeline view */}
+          <div style={{padding:"0 16px 16px"}}>
+            {GYM_HOURS.map((slot,i)=>{
+              const booking=getSlotBooking(slot);
+              const taken=!!booking;
+              const mine=taken&&booking.bookedBy===currentUser;
+              // Only show on-the-hour slots to keep it clean, or booked slots
+              if(!taken&&slot.m!==0)return null;
+              return(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,padding:"10px 12px",background:mine?"rgba(124,92,191,0.1)":taken?"rgba(231,76,60,0.08)":"var(--card)",borderRadius:10,border:mine?"1px solid rgba(124,92,191,0.3)":taken?"1px solid rgba(231,76,60,0.25)":"1px solid var(--border)"}}>
+                  <div style={{width:60,fontFamily:"'Bebas Neue',cursive",fontSize:12,color:mine?"var(--accent2)":taken?"var(--red)":"var(--muted)"}}>{slot.label}</div>
+                  <div style={{flex:1,fontSize:12,color:mine?"var(--accent2)":taken?"var(--text)":"var(--muted)"}}>
+                    {taken?`${booking.bookedBy} · ${booking.displayTime||booking.time}`:"Open"}
+                  </div>
+                  {taken&&<div style={{padding:"3px 10px",borderRadius:20,background:mine?"rgba(124,92,191,0.2)":"rgba(231,76,60,0.15)",border:mine?"1px solid rgba(124,92,191,0.4)":"1px solid rgba(231,76,60,0.3)",fontSize:11,color:mine?"var(--accent2)":"var(--red)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{mine?"YOURS":"BOOKED"}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -888,6 +1093,8 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
   const [endDate,setEndDate]=useState(challenge.endDate||"");
   const [penalty,setPenalty]=useState(challenge.penalty||"");
   const [penaltyAmt,setPenaltyAmt]=useState(challenge.penaltyAmt||"");
+  const [forfeitCap,setForfeitCap]=useState(challenge.forfeitCap||"");
+  const [paymentRecipient,setPaymentRecipient]=useState(challenge.paymentRecipient||"creator");
   const [parts,setParts]=useState(Object.keys(challenge.participants||{}));
   const toggle=m=>setParts(p=>p.includes(m)?p.filter(x=>x!==m):[...p,m]);
 
@@ -902,7 +1109,7 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
     });
     Object.keys(np).forEach(m=>{if(!parts.includes(m))delete np[m];});
     const newGoal=isDR&&startDate&&endDate?getWeekdays(startDate,endDate).length:Number(goal);
-    onSave({...challenge,title:title.trim(),goal:newGoal,unit:isDR?"days":unit,startDate:isDR?startDate:challenge.startDate,endDate:isDR?endDate:challenge.endDate,penalty:penalty.trim(),penaltyAmt:penaltyAmt?Number(penaltyAmt):0,participants:np});
+    onSave({...challenge,title:title.trim(),goal:newGoal,unit:isDR?"days":unit,startDate:isDR?startDate:challenge.startDate,endDate:isDR?endDate:challenge.endDate,penalty:penalty.trim(),penaltyAmt:penaltyAmt?Number(penaltyAmt):0,forfeitCap:forfeitCap?Number(forfeitCap):0,participants:np});
     onClose();
   };
 
@@ -930,6 +1137,15 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
           )}
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Penalty</div><input className="input" placeholder='e.g. "Buys lunch"' value={penalty} onChange={e=>setPenalty(e.target.value)} maxLength={80}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout <span style={{fontSize:11}}>(optional)</span></div><input className="input" type="number" placeholder="optional — e.g. 5" value={penaltyAmt} onChange={e=>setPenaltyAmt(e.target.value)} min={0}/></div>
+          <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Forfeit cap $ (optional)</div><input className="input" type="number" placeholder="e.g. 50" value={forfeitCap} onChange={e=>setForfeitCap(e.target.value)} min={0}/></div>
+          <div>
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Payments go to</div>
+            <div style={{display:"flex",gap:8}}>
+              {[{v:"creator",l:"Creator"},{v:"admin",l:"Admin"}].map(({v,l})=>(
+                <button key={v} onClick={()=>setPaymentRecipient(v)} style={{flex:1,padding:"8px",borderRadius:10,cursor:"pointer",fontSize:12,background:paymentRecipient===v?"rgba(124,92,191,0.2)":"var(--bg3)",border:paymentRecipient===v?"1px solid var(--accent)":"1px solid var(--border)",color:paymentRecipient===v?"var(--accent2)":"var(--muted)"}}>{l}</button>
+              ))}
+            </div>
+          </div>
           <div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>Participants</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -948,94 +1164,236 @@ function EditChallengeModal({challenge,members,onSave,onClose}){
   );
 }
 
-function PenaltyTracker({challenge:c,history,profiles}){
-  // Show tracker for date-range challenges always — with or without penalty amount
+function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMarkPaid,onLogPayment}){
   if(!c.startDate||!c.endDate)return null;
   const acceptedParts=Object.keys(c.participants||{}).filter(m=>c.participants[m]?.status!=="pending");
   if(acceptedParts.length===0)return null;
   const hasPenalty=c.penaltyAmt>0;
-  const penalties=hasPenalty?calcPenalties(c,history,profiles):{};
-  const cap=todayStr()<c.endDate?todayStr():c.endDate;
-  const wks=[...new Set(getDateRange(c.startDate,cap).map(d=>getWeekStart(d)))].sort();
+  if(!hasPenalty)return null;
+
+  const penalties=calcPenalties(c,history,profiles);
+  const payments=c.payments||{}; // {memberName: [{amount, method, date, ts}]}
+  const isAdmin=currentUser===adminName||currentUser===c.createdBy;
+
+  // Total earned (all missed workouts regardless of payments) = prize pot
+  const grandTotal=acceptedParts.reduce((sum,m)=>{
+    const p=penalties[m]||{};
+    return sum+(p.forfeited?c.forfeitCap||0:p.totalOwed||0);
+  },0);
+
+  // How much each person has paid
+  const paidAmount=m=>(payments[m]||[]).reduce((s,p)=>s+p.amount,0);
+  const isFullyPaid=m=>paidAmount(m)>=(penalties[m]?.totalOwed||0)&&(penalties[m]?.totalOwed||0)>0;
+
+  const [expandedMember,setExpandedMember]=useState(null);
+  const [partialAmt,setPartialAmt]=useState("");
+
+  const [zelleConfirm,setZelleConfirm]=useState(false);
+  const [zelleAmt,setZelleAmt]=useState(0);
+
+  const [zelleCopied,setZelleCopied]=useState(false);
+  const handleZelle=(amt)=>{
+    // Just open Zelle website + show confirmation — no auto-copy
+    window.open("https://www.zellepay.com","_blank");
+    setZelleAmt(amt);
+    setZelleConfirm(true);
+    setZelleCopied(false);
+  };
+  const copyZelleContact=()=>{
+    const recipientName=c.paymentRecipient==="admin"?adminName:c.createdBy;
+    const zelleContact=profiles[recipientName]?.zelleContact||"";
+    if(zelleContact){
+      navigator.clipboard?.writeText(zelleContact).then(()=>{
+        setZelleCopied(true);
+      }).catch(()=>{setZelleCopied(true);}); // still show copied even if clipboard API fails
+    }
+  };
+
+  const confirmZellePayment=()=>{
+    onLogPayment(c.id,currentUser,zelleAmt,"Zelle");
+    setZelleConfirm(false);setZelleAmt(0);setPartialAmt("");
+  };
+
+
 
   return(
     <div style={{marginTop:12,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
-      {/* Header */}
-      <div style={{padding:"8px 12px",background:"rgba(255,255,255,0.03)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:6}}>
-        <span>📊</span>
-        <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--muted)"}}>
-          TRACKER{hasPenalty?` — $${c.penaltyAmt}/MISS`:""}
-        </span>
-      </div>
-      {/* Column headers */}
-      <div style={{display:"grid",gridTemplateColumns:`1fr repeat(${wks.length},56px) 60px`,borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
-        <div style={{padding:"5px 10px",fontSize:10,color:"var(--muted)"}}>Member</div>
-        {wks.map(w=>{
-          const d=new Date(w+"T00:00:00");
-          const isCurrentWk=getWeekStart(todayStr())===w;
-          return(
-            <div key={w} style={{padding:"5px 3px",fontSize:9,color:isCurrentWk?"var(--accent2)":"var(--muted)",textAlign:"center",fontWeight:isCurrentWk?700:400}}>
-              {d.toLocaleDateString("en-US",{month:"short",day:"numeric"})}
-              {isCurrentWk&&<div style={{fontSize:8,color:"var(--accent2)"}}>NOW</div>}
-            </div>
-          );
-        })}
-        <div style={{padding:"5px 4px",fontSize:10,color:hasPenalty?"var(--red)":"var(--accent2)",textAlign:"center",fontWeight:700}}>
-          {hasPenalty?"OWES":"DONE"}
+
+      {/* ── EVERYONE VIEW: summary table ── */}
+      <div style={{padding:"8px 12px",background:"rgba(255,255,255,0.03)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <span>💸</span>
+          <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--muted)"}}>PENALTY TRACKER — ${c.penaltyAmt}/MISS</span>
         </div>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:"var(--gold)"}}>🏆 POT: ${grandTotal}</div>
       </div>
-      {/* Member rows */}
+
+      {/* Column headers */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 70px 60px",padding:"5px 12px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+        <span style={{fontSize:10,color:"var(--muted)"}}>Member</span>
+        <span style={{fontSize:10,color:"var(--muted)",textAlign:"center"}}>This week</span>
+        <span style={{fontSize:10,color:"var(--red)",textAlign:"right",fontWeight:700}}>Total</span>
+      </div>
+
+
       {acceptedParts.map(m=>{
-        const p=penalties[m]||{totalOwed:0,byWeek:{},forfeited:false};
+        const p=penalties[m]||{totalOwed:0,byWeek:{}};
         const forfeited=c.participants[m]?.forfeited||false;
-        // Per-week workout count
-        const wkWorkouts={};
-        wks.forEach(w=>{
-          const days=getDateRange(w,new Date(new Date(w+"T00:00:00").setDate(new Date(w+"T00:00:00").getDate()+6)).toISOString().split("T")[0]);
-          wkWorkouts[w]=days.filter(d=>d<=cap&&history[d]?.[m]?.done).length;
-        });
+        // Only count days that are fully over — yesterday and before
+    const yesterday=(()=>{const d=new Date();d.setDate(d.getDate()-1);return localDateStr(d);})();
+    const cap=yesterday<c.endDate?yesterday:c.endDate;
+        const currentWk=getWeekStart(todayStr());
+        const wkAmt=p.byWeek?.[currentWk]||0;
+        const totalAmt=forfeited?c.forfeitCap||0:p.totalOwed||0;
+        const paid=paidAmount(m);
+        const fullPaid=isFullyPaid(m);
+        const isMe=m===currentUser;
+        const myPayments=payments[m]||[];
+
         return(
-          <div key={m} style={{display:"grid",gridTemplateColumns:`1fr repeat(${wks.length},56px) 60px`,borderBottom:"1px solid rgba(255,255,255,0.03)",alignItems:"center"}}>
-            <div style={{padding:"8px 10px",display:"flex",alignItems:"center",gap:5}}>
-              <AvatarDisplay profile={profiles[m]} size={20}/>
-              <span style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m}</span>
-              {forfeited&&<span style={{fontSize:10}}>🏳️</span>}
+          <div key={m}>
+            {/* Summary row — visible to everyone */}
+            <div onClick={()=>isMe||isAdmin?setExpandedMember(expandedMember===m?null:m):null}
+              style={{display:"grid",gridTemplateColumns:"1fr 70px 60px",padding:"9px 12px",borderBottom:"1px solid rgba(255,255,255,0.04)",alignItems:"center",cursor:isMe||isAdmin?"pointer":"default",background:expandedMember===m?"rgba(255,255,255,0.03)":"transparent"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <AvatarDisplay profile={profiles[m]} size={22}/>
+                <span style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:100}}>{m}</span>
+                {forfeited&&<span style={{fontSize:10}}>🏳️</span>}
+                {fullPaid&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700}}>✓</span>}
+                {isMe&&<span style={{fontSize:9,color:"var(--accent2)",background:"rgba(124,92,191,0.2)",padding:"1px 4px",borderRadius:3}}>you</span>}
+              </div>
+              <div style={{textAlign:"center"}}>
+                {wkAmt>0?<span style={{fontSize:12,color:"var(--red)",fontWeight:700}}>${wkAmt}</span>:<span style={{fontSize:12,color:"var(--green)"}}>✓</span>}
+              </div>
+              <div style={{textAlign:"right"}}>
+                {totalAmt>0?(
+                  <span style={{fontSize:12,fontWeight:700,color:fullPaid?"var(--green)":"var(--red)"}}>
+                    {fullPaid?"✓ Paid":`$${totalAmt}`}
+                  </span>
+                ):<span style={{fontSize:12,color:"var(--green)"}}>$0</span>}
+              </div>
             </div>
-            {wks.map(w=>{
-              const penAmt=p.byWeek?.[w]||0;
-              const worked=wkWorkouts[w]||0;
-              return(
-                <div key={w} style={{textAlign:"center",padding:"2px"}}>
-                  {hasPenalty?(
-                    <span style={{fontSize:12,color:penAmt>0?"var(--red)":"var(--green)",fontWeight:penAmt>0?700:400}}>
-                      {penAmt>0?`$${penAmt}`:"✓"}
-                    </span>
-                  ):(
-                    <span style={{fontSize:12,color:worked>0?"var(--green)":"var(--muted)"}}>
-                      {worked>0?`${worked}x`:"—"}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-            {/* Total column */}
-            <div style={{textAlign:"center",padding:"8px 4px"}}>
-              {forfeited?(
-                <span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>${c.forfeitCap||0}</span>
-              ):hasPenalty?(
-                <span style={{fontSize:12,fontWeight:700,color:p.totalOwed>0?"var(--red)":"var(--green)"}}>{p.totalOwed>0?`$${p.totalOwed}`:"$0"}</span>
-              ):(
-                <span style={{fontSize:12,color:"var(--accent2)",fontWeight:700}}>{Object.values(wkWorkouts).reduce((a,b)=>a+b,0)}</span>
-              )}
-            </div>
+
+            {/* Expanded detail — only for the member themselves or admin */}
+            {expandedMember===m&&(isMe||isAdmin)&&totalAmt>0&&(
+              <div style={{padding:"12px 14px",background:"rgba(0,0,0,0.15)",borderBottom:"1px solid var(--border)"}}>
+
+                {/* Progress */}
+                {paid>0&&<div style={{marginBottom:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:11,color:"var(--muted)"}}>${paid} paid of ${totalAmt}</span>
+                    <span style={{fontSize:11,color:"var(--muted)"}}>{Math.round((paid/totalAmt)*100)}%</span>
+                  </div>
+                  <div style={{height:5,background:"var(--bg2)",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{width:`${Math.min(100,Math.round((paid/totalAmt)*100))}%`,height:"100%",background:"var(--green)",borderRadius:3}}/>
+                  </div>
+                </div>}
+
+                {/* Payment history */}
+                {myPayments.length>0&&(
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:10,color:"var(--muted)",fontWeight:600,letterSpacing:1,marginBottom:6}}>PAYMENT HISTORY</div>
+                    {myPayments.map((pay,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                        <div style={{width:24,height:24,borderRadius:"50%",background:pay.method==="Zelle"?"#1d4ed8":"#555",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          <span style={{fontSize:9,color:"#fff",fontWeight:700}}>{pay.method==="Zelle"?"Z":"$"}</span>
+                        </div>
+                        <div style={{flex:1}}>
+                          <span style={{fontSize:12,color:"var(--text)"}}>${pay.amount} via {pay.method}</span>
+                          <span style={{fontSize:10,color:"var(--muted)",marginLeft:6}}>{pay.date}</span>
+                        </div>
+                        <span style={{fontSize:11,color:"var(--green)"}}>✓</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pay buttons — only for the member themselves */}
+                {isMe&&!fullPaid&&(
+                  <div>
+                    {/* Zelle confirmation overlay */}
+                    {zelleConfirm&&(
+                      <div style={{padding:"12px",background:"rgba(37,99,235,0.1)",border:"1px solid rgba(37,99,235,0.3)",borderRadius:10,marginBottom:10}}>
+                        <div style={{fontSize:13,marginBottom:8,fontWeight:600,color:"#60a5fa"}}>Send ${zelleAmt} via Zelle then confirm below</div>
+                        {(()=>{
+                          const rn=c.paymentRecipient==="admin"?adminName:c.createdBy;
+                          const rc=profiles[rn]?.zelleContact;
+                          return rc?(
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"8px 10px",background:"rgba(0,0,0,0.2)",borderRadius:8}}>
+                              <div style={{flex:1}}>
+                                <div style={{fontSize:10,color:"var(--muted)",marginBottom:2}}>Send to:</div>
+                                <div style={{fontSize:13,color:"var(--text)",fontWeight:600}}>{rc}</div>
+                              </div>
+                              <button onClick={copyZelleContact} style={{
+                                padding:"6px 12px",borderRadius:8,cursor:"pointer",flexShrink:0,
+                                background:zelleCopied?"rgba(46,204,113,0.2)":"rgba(255,255,255,0.08)",
+                                border:zelleCopied?"1px solid var(--green)":"1px solid var(--border)",
+                                color:zelleCopied?"var(--green)":"var(--muted)",
+                                fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,
+                              }}>
+                                {zelleCopied?"✓ COPIED TO CLIPBOARD":"COPY"}
+                              </button>
+                            </div>
+                          ):<div style={{fontSize:12,color:"var(--orange)",marginBottom:8}}>⚠️ No Zelle contact set yet.</div>;
+                        })()}
+                        <div style={{display:"flex",gap:8}}>
+                          <button onClick={confirmZellePayment} style={{flex:1,padding:"9px",background:"#1d4ed8",border:"none",borderRadius:8,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1}}>YES, I PAID</button>
+                          <button onClick={()=>setZelleConfirm(false)} style={{flex:1,padding:"9px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--muted)",fontSize:13}}>NOT YET</button>
+                        </div>
+                      </div>
+                    )}
+                    {!zelleConfirm&&<>
+                    <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>
+                      Pay remaining <strong style={{color:"var(--red)"}}>${totalAmt-paid}</strong>:
+                    </div>
+                    <div style={{display:"flex",gap:8,marginBottom:8}}>
+                      <button onClick={()=>handleZelle(totalAmt-paid)} style={{flex:1,padding:"9px 8px",borderRadius:8,border:"1px solid #2563eb",background:"rgba(37,99,235,0.1)",color:"#60a5fa",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                        PAY ${totalAmt-paid} VIA ZELLE
+                      </button>
+                    </div>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <input type="number" placeholder="Partial amount..." value={partialAmt} onChange={e=>setPartialAmt(e.target.value)} min={1} max={totalAmt-paid} style={{flex:1,padding:"7px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg2)",color:"var(--text)",fontSize:12}}/>
+                      <button onClick={()=>handleZelle(Number(partialAmt))} disabled={!partialAmt} style={{padding:"7px 10px",borderRadius:6,border:"1px solid #2563eb",background:"rgba(37,99,235,0.1)",color:"#60a5fa",fontSize:11,cursor:"pointer"}}>Zelle</button>
+                    </div>
+                    </>}
+                  </div>
+                )}
+
+                {/* Admin mark as paid */}
+                {isAdmin&&!isMe&&!fullPaid&&(
+                  <div>
+                    <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>Admin — mark payment received:</div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>onMarkPaid(c.id,m,totalAmt-paid,"Cash")} style={{flex:1,padding:"8px",borderRadius:8,border:"1px solid var(--green)",background:"rgba(46,204,113,0.1)",color:"var(--green)",fontSize:12,cursor:"pointer",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                        MARK ${totalAmt-paid} PAID
+                      </button>
+                    </div>
+                    <div style={{display:"flex",gap:6,alignItems:"center",marginTop:6}}>
+                      <input type="number" placeholder="Partial amount..." value={partialAmt} onChange={e=>setPartialAmt(e.target.value)} min={1} style={{flex:1,padding:"7px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg2)",color:"var(--text)",fontSize:12}}/>
+                      <button onClick={()=>{onMarkPaid(c.id,m,Number(partialAmt),"Cash");setPartialAmt("");}} disabled={!partialAmt} style={{padding:"7px 10px",borderRadius:6,border:"1px solid var(--green)",background:"rgba(46,204,113,0.1)",color:"var(--green)",fontSize:11,cursor:"pointer"}}>Mark Paid</button>
+                    </div>
+                  </div>
+                )}
+
+                {fullPaid&&<div style={{textAlign:"center",color:"var(--green)",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2}}>✓ FULLY PAID UP</div>}
+              </div>
+            )}
           </div>
         );
       })}
+
+      {/* Grand total row */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 70px 60px",padding:"10px 12px",background:"rgba(241,196,15,0.05)",borderTop:"1px solid rgba(241,196,15,0.15)"}}>
+        <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,color:"var(--gold)"}}>🏆 PRIZE POT</span>
+        <div/>
+        <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,color:"var(--gold)",textAlign:"right",fontWeight:700}}>${grandTotal}</span>
+      </div>
     </div>
   );
 }
 
-function ChallengeCard({challenge:c,currentUser,members,profiles,onLog,onDelete,onEdit,onForfeit,history,completed}){
+
+function ChallengeCard({challenge:c,currentUser,adminName,members,profiles,onLog,onDelete,onEdit,onForfeit,onMarkPaid,onLogPayment,history,completed}){
   const [logOpen,setLogOpen]=useState(false);
   const [editOpen,setEditOpen]=useState(false);
   const [forfeitConfirm,setForfeitConfirm]=useState(false);
@@ -1129,7 +1487,7 @@ function ChallengeCard({challenge:c,currentUser,members,profiles,onLog,onDelete,
         </div>
       ))}
 
-      <PenaltyTracker challenge={c} history={history} profiles={profiles}/>
+      <PenaltyTracker challenge={c} history={history} profiles={profiles} currentUser={currentUser} adminName={adminName} onMarkPaid={onMarkPaid} onLogPayment={onLogPayment}/>
 
       {/* Auto-forfeit prompt when at cap */}
       {!completed&&amI&&!myForfeited&&atForfeitCap&&(
@@ -1221,10 +1579,10 @@ function ChallengeInvites({currentUser,challenges,profiles,onAccept,onDecline,on
   );
 }
 
-function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,onLogProgress,onDelete,onEditChallenge,onForfeit,onAccept,onDecline,onOpenProfile}){
+function ChallengesTab({currentUser,adminName,members,profiles,challenges,history,onAdd,onLogProgress,onDelete,onEditChallenge,onForfeit,onAccept,onDecline,onOpenProfile,onMarkPaid,onLogPayment}){
   const [open,setOpen]=useState(false);
-  const defEnd=()=>{const e=new Date();e.setDate(e.getDate()+30);return e.toISOString().split("T")[0];};
-  const [form,setForm]=useState({title:"",useDateRange:false,goal:30,unit:"reps",startDate:todayStr(),endDate:defEnd(),penalty:"",penaltyAmt:"",forfeitCap:"",maxRestDays:2,participants:[]});
+  const defEnd=()=>{const e=new Date();e.setDate(e.getDate()+30);return localDateStr(e);};
+  const [form,setForm]=useState({title:"",useDateRange:false,goal:30,unit:"reps",startDate:todayStr(),endDate:defEnd(),penalty:"",penaltyAmt:"",forfeitCap:"",maxRestDays:2,participants:[],paymentRecipient:"creator"});
   useEffect(()=>setForm(f=>({...f,participants:members})),[members]);
   const toggleP=m=>setForm(f=>({...f,participants:f.participants.includes(m)?f.participants.filter(x=>x!==m):[...f.participants,m]}));
   const sub=()=>{
@@ -1248,9 +1606,9 @@ function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,on
       <ChallengeInvites currentUser={currentUser} challenges={challenges} profiles={profiles} onAccept={onAccept} onDecline={onDecline} onOpenProfile={onOpenProfile}/>
       {active.filter(c=>c.participants?.[currentUser]?.status!=="pending").length===0&&done.length===0&&challenges.filter(c=>c.participants?.[currentUser]?.status==="pending").length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}><div style={{fontSize:40,marginBottom:12}}>⚔️</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2}}>NO ACTIVE CHALLENGES</div></div>}
       {active.filter(c=>c.participants?.[currentUser]?.status!=="pending").length>0&&<div className="section-label">ACTIVE</div>}
-      {active.filter(c=>c.participants?.[currentUser]?.status!=="pending").map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} onForfeit={onForfeit} history={history}/>)}
+      {active.filter(c=>c.participants?.[currentUser]?.status!=="pending").map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} onForfeit={onForfeit} onMarkPaid={onMarkPaid} onLogPayment={onLogPayment} history={history}/>)}
       {done.length>0&&<div className="section-label" style={{marginTop:8}}>COMPLETED</div>}
-      {done.map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} onForfeit={onForfeit} history={history} completed/>)}
+      {done.map(c=><ChallengeCard key={c.id} challenge={c} currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} onLog={onLogProgress} onDelete={onDelete} onEdit={onEditChallenge} onForfeit={onForfeit} onMarkPaid={onMarkPaid} onLogPayment={onLogPayment} history={history} completed/>)}
       {open&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setOpen(false)}><div className="modal">
         <div className="modal-handle"/>
         <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:14}}>NEW CHALLENGE</div>
@@ -1277,6 +1635,14 @@ function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,on
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Penalty (optional)</div><input className="input" placeholder='e.g. "Buys lunch"' value={form.penalty} onChange={e=>setForm({...form,penalty:e.target.value})} maxLength={80}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>$ per missed workout <span style={{color:"var(--bg3)",fontSize:11}}>(optional)</span></div><input className="input" type="number" placeholder="optional — e.g. 5" value={form.penaltyAmt} onChange={e=>setForm({...form,penaltyAmt:e.target.value})} min={0}/></div>
           <div><div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Forfeit cap $ (optional — max they'll ever owe)</div><input className="input" type="number" placeholder="e.g. 50" value={form.forfeitCap} onChange={e=>setForm({...form,forfeitCap:e.target.value})} min={0}/></div>
+          <div>
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Payments go to</div>
+            <div style={{display:"flex",gap:8}}>
+              {[{v:"creator",l:"Me (challenge creator)"},{v:"admin",l:`Admin (${adminName})`}].map(({v,l})=>(
+                <button key={v} onClick={()=>setForm({...form,paymentRecipient:v})} style={{flex:1,padding:"8px",borderRadius:10,cursor:"pointer",fontSize:12,background:(form.paymentRecipient||"creator")===v?"rgba(124,92,191,0.2)":"var(--bg3)",border:(form.paymentRecipient||"creator")===v?"1px solid var(--accent)":"1px solid var(--border)",color:(form.paymentRecipient||"creator")===v?"var(--accent2)":"var(--muted)"}}>{l}</button>
+              ))}
+            </div>
+          </div>
           {form.useDateRange&&<div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>Max rest days per week allowed</div>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -1297,7 +1663,7 @@ function ChallengesTab({currentUser,members,profiles,challenges,history,onAdd,on
 }
 
 function StatsTab({currentUser,members,profiles,history,challenges,feed}){
-  const last30=Array.from({length:30},(_,i)=>{const d=new Date();d.setDate(d.getDate()-29+i);return{date:d.toISOString().split("T")[0],day:d.getDate()};});
+  const last30=Array.from({length:30},(_,i)=>{const d=new Date();d.setDate(d.getDate()-29+i);return{date:localDateStr(d),day:d.getDate()};});
   const mb=computeBadges(currentUser,history,feed,challenges,profiles[currentUser]);
   return(
     <div>
@@ -1321,6 +1687,30 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed}){
         const t=getTotalWorkouts(history,m),s=getStreak(history,m),mx=Math.max(...members.map(x=>getTotalWorkouts(history,x)),1);
         return<div key={m} className="member-row" style={{margin:"0 16px 8px"}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,color:"var(--muted)",width:22}}>{i+1}</div><AvatarDisplay profile={profiles[m]} size={36}/><div style={{flex:1}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1}}>{m}{m===currentUser&&" (you)"}</span><span style={{fontSize:12,color:"var(--muted)"}}>{t} workouts</span></div><div className="progress-bar" style={{height:4}}><div className="progress-fill" style={{width:`${(t/mx)*100}%`}}/></div><div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>🔥{s} day streak</div></div></div>;
       })}
+      <div className="section-label">MY WORKOUT HISTORY</div>
+      <div style={{padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8}}>
+        {(()=>{
+          const entries=Object.entries(history)
+            .filter(([,d])=>d?.[currentUser]?.done)
+            .sort((a,b)=>b[0].localeCompare(a[0]))
+            .slice(0,60);
+          if(entries.length===0)return<div style={{textAlign:"center",padding:"20px",color:"var(--muted)",fontSize:13}}>No workouts logged yet.</div>;
+          return entries.map(([date,dayData])=>{
+            const entry=dayData[currentUser];
+            const summary=Array.isArray(entry.summary)?entry.summary:[entry.workoutLabel||"Workout"];
+            return(
+              <div key={date} style={{padding:"12px 14px",background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1,color:"var(--accent2)"}}>{fmtDate(date)}</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>{entry.time||""}</div>
+                </div>
+                {summary.map((line,i)=><div key={i} style={{fontSize:12,color:"var(--green)",lineHeight:1.6}}>{line}</div>)}
+                {entry.note&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>"{entry.note}"</div>}
+              </div>
+            );
+          });
+        })()}
+      </div>
     </div>
   );
 }
@@ -1371,6 +1761,18 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
     showRestSaved(true);setTimeout(()=>showRestSaved(false),2000);
   };
   const [restSaved,showRestSaved]=useState(false);
+  const [zelleInfo,setZelleInfo]=useState(profile?.zelleContact||"");
+  const [zelleSaved,setZelleSaved]=useState(false);
+  const saveZelle=async()=>{
+    const np={...profiles,[currentUser]:{...profiles[currentUser],zelleContact:zelleInfo.trim()}};
+    await fsSet("wolfpack/profiles",{users:np});if(onSaveProfile)onSaveProfile(np);
+    setZelleSaved(true);setTimeout(()=>setZelleSaved(false),2000);
+  };
+  const onSaveZelle=async(val)=>{
+    const np={...profiles,[currentUser]:{...profiles[currentUser],zelleContact:val}};
+    await fsSet("wolfpack/profiles",{users:np});if(onSaveProfile)onSaveProfile(np);
+    setZelleInfo(val);
+  };
   const [pbExercise,setPbExercise]=useState("");
   const [pbValue,setPbValue]=useState("");
   const [pbUnit,setPbUnit]=useState("lbs");
@@ -1420,7 +1822,7 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
   const backfillDates=Array.from({length:7},(_,i)=>{
     const d=new Date();
     d.setDate(d.getDate()-(i+1));
-    return d.toISOString().split("T")[0];
+    return localDateStr(d);
   });
 
   const toggleBackfillWorkout=w=>setBackfillWorkouts(s=>s.find(x=>x.id===w.id)?s.filter(x=>x.id!==w.id):[...s,w]);
@@ -1445,7 +1847,7 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
     const base=new Date();
     for(let i=365;i>=0;i--){
       const d=new Date(base);d.setDate(base.getDate()-i);
-      const k=d.toISOString().split("T")[0];
+      const k=localDateStr(d);
       if(isRestDay(k,profile))continue;
       if(history[k]?.[currentUser]?.done){cur++;best=Math.max(best,cur);}
       else cur=0;
@@ -1580,7 +1982,6 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)",marginBottom:8}}>MY GOAL</div>
                 <div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>Set a personal goal. Private by default — toggle to share with the pack.</div>
                 <textarea className="input" rows={3} placeholder="e.g. Run a 5K by June, lose 15 lbs, bench 225..." value={goal} onChange={e=>setGoal(e.target.value)} maxLength={120} style={{resize:"none",marginBottom:8}}/>
-                {/* Share toggle */}
                 <div onClick={()=>setShareGoal(s=>!s)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)",marginBottom:8,cursor:"pointer"}}>
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,color:"var(--text)"}}>Share with the pack</div>
@@ -1618,6 +2019,17 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
                     ))}
                   </div>
                 )}
+              </div>
+              <div style={{height:1,background:"var(--border)",margin:"4px 0"}}/>
+              {/* Zelle contact — private */}
+              <div>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)",marginBottom:4}}>ZELLE CONTACT <span style={{fontSize:10,letterSpacing:1}}>— private, for challenge payments</span></div>
+                <input className="input" placeholder="Phone or email for Zelle" value={zelleInfo} onChange={e=>setZelleInfo(e.target.value)} maxLength={50}/>
+                <div style={{display:"flex",gap:8,marginTop:8}}>
+                  <button className="btn-primary" onClick={saveZelle} disabled={zelleInfo===profile?.zelleContact}>{zelleSaved?"✓ SAVED!":"SAVE ZELLE"}</button>
+                  {profile?.zelleContact&&<button className="btn-ghost" onClick={()=>{setZelleInfo("");onSaveZelle("");}}>Clear</button>}
+                </div>
+                <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>Only used when someone taps "Pay via Zelle" on a challenge you created. Never shown to others.</div>
               </div>
             </div>
           )}
@@ -1752,14 +2164,15 @@ function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete})
 }
 
 // Per-type field definitions
+const LIFT_FOCUS = ["Legs","Arms","Chest","Back","Shoulders","Full Body","Core"];
 const WORKOUT_FIELDS = {
-  lift:   [{key:"sets",label:"Sets",placeholder:"e.g. 4"},{key:"reps",label:"Reps",placeholder:"e.g. 10"},{key:"weight",label:"Weight (lbs)",placeholder:"e.g. 135"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 60"}],
+  lift:   [{key:"focus",label:"Focus",placeholder:"e.g. Legs",text:true,isSelect:true,options:LIFT_FOCUS},{key:"rounds",label:"Rounds",placeholder:"e.g. 3",text:true},{key:"sets",label:"Sets",placeholder:"e.g. 4-6",text:true},{key:"reps",label:"Reps",placeholder:"e.g. 10-12",text:true},{key:"weight",label:"Weight (lbs)",placeholder:"e.g. 135-185",text:true},{key:"duration",label:"Duration (min)",placeholder:"e.g. 60"}],
   run:    [{key:"distance",label:"Distance (mi)",placeholder:"e.g. 3.1"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 30"}],
   bike:   [{key:"distance",label:"Distance (mi)",placeholder:"e.g. 10"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 45"}],
-  hiit:   [{key:"duration",label:"Duration (min)",placeholder:"e.g. 20"},{key:"rounds",label:"Rounds",placeholder:"e.g. 5"}],
+  hiit:   [{key:"rounds",label:"Rounds",placeholder:"e.g. 5",text:true},{key:"duration",label:"Duration (min)",placeholder:"e.g. 20"}],
   cardio: [{key:"duration",label:"Duration (min)",placeholder:"e.g. 30"},{key:"distance",label:"Distance (mi)",placeholder:"e.g. 2"}],
   walk:   [{key:"distance",label:"Distance (mi)",placeholder:"e.g. 1.5"},{key:"duration",label:"Duration (min)",placeholder:"e.g. 25"}],
-  other:  [{key:"duration",label:"Duration (min)",placeholder:"e.g. 45"}],
+  other:  [{key:"rounds",label:"Rounds",placeholder:"e.g. 3",text:true},{key:"duration",label:"Duration (min)",placeholder:"e.g. 45"}],
 };
 
 function formatWorkoutSummary(workouts, details){
@@ -1767,12 +2180,13 @@ function formatWorkoutSummary(workouts, details){
   return workouts.map(w=>{
     const d=details[w.id]||{};
     const parts=[];
+    if(d.focus) parts.push(d.focus);
     if(d.distance) parts.push(`${d.distance} mi`);
+    if(d.rounds) parts.push(`${d.rounds} rounds`);
     if(d.sets&&d.reps) parts.push(`${d.sets} sets × ${d.reps} reps`);
     else if(d.sets) parts.push(`${d.sets} sets`);
     else if(d.reps) parts.push(`${d.reps} reps`);
     if(d.weight) parts.push(`${d.weight} lbs`);
-    if(d.rounds) parts.push(`${d.rounds} rounds`);
     if(d.duration) parts.push(`${d.duration} min`);
     return {label:w.label, detail:parts.join(" · ")};
   });
@@ -1790,7 +2204,7 @@ function WorkoutSummaryDisplay({summary, workoutLabel, style={}}){
   );
 }
 
-function WorkoutModal({onClose,onSubmit}){
+function WorkoutModal({onClose,onSubmit,loading}){
   const [selected,setSelected]=useState([]);
   const [details,setDetails]=useState({}); // {workoutId: {sets,reps,weight,duration,distance,...}}
   const [note,setNote]=useState("");
@@ -1854,12 +2268,26 @@ function WorkoutModal({onClose,onSubmit}){
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     {fields.map(f=>(
-                      <div key={f.key}>
+                      <div key={f.key} style={{gridColumn:f.isSelect?"1/-1":"auto"}}>
                         <div style={{fontSize:11,color:"var(--muted)",marginBottom:4}}>{f.label}</div>
-                        <input className="input" type="number" placeholder={f.placeholder}
-                          value={details[w.id]?.[f.key]||""}
-                          onChange={e=>setField(w.id,f.key,e.target.value)}
-                          style={{padding:"10px 12px"}} min={0} step="any"/>
+                        {f.isSelect?(
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                            {f.options.map(opt=>(
+                              <button key={opt} onClick={()=>setField(w.id,f.key,details[w.id]?.[f.key]===opt?"":opt)}
+                                style={{padding:"6px 14px",borderRadius:20,cursor:"pointer",fontSize:12,
+                                  background:details[w.id]?.[f.key]===opt?"rgba(124,92,191,0.25)":"var(--bg2)",
+                                  border:details[w.id]?.[f.key]===opt?"1px solid var(--accent)":"1px solid var(--border)",
+                                  color:details[w.id]?.[f.key]===opt?"var(--accent2)":"var(--muted)"}}>
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        ):(
+                          <input className="input" type={f.text?"text":"number"} placeholder={f.placeholder}
+                            value={details[w.id]?.[f.key]||""}
+                            onChange={e=>setField(w.id,f.key,e.target.value)}
+                            style={{padding:"10px 12px"}} min={f.text?undefined:0} step={f.text?undefined:"any"}/>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1873,11 +2301,18 @@ function WorkoutModal({onClose,onSubmit}){
             </div>
 
             {/* Preview */}
-            <div style={{padding:"10px 14px",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.2)",borderRadius:10,marginBottom:12,fontSize:13,color:"var(--accent2)"}}>
-              {formatWorkoutSummary(selected,details)||"Your workout summary will appear here"}
+            <div style={{padding:"10px 14px",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.2)",borderRadius:10,marginBottom:12}}>
+              {formatWorkoutSummary(selected,details).length===0
+                ?<div style={{fontSize:13,color:"var(--muted)"}}>Fill in details above to see preview</div>
+                :formatWorkoutSummary(selected,details).map((w,i)=>(
+                  <div key={i} style={{fontSize:13,color:"var(--accent2)",lineHeight:1.6}}>
+                    <span style={{fontWeight:600}}>{w.label}</span>{w.detail?`: ${w.detail}`:""}
+                  </div>
+                ))
+              }
             </div>
 
-            <button className="btn-primary" onClick={handleSubmit}>LOG IT 💪</button>
+            <button className="btn-primary" onClick={handleSubmit} disabled={loading}>{loading?"LOGGING...":"LOG IT 💪"}</button>
           </>
         )}
       </div>
@@ -1959,6 +2394,9 @@ export default function App(){
     const entry={done:true,workouts:workouts.map(w=>({id:w.id,icon:w.icon,label:w.label})),workoutIcon:icons,workoutLabel:labels,note:"(admin backfill)",time,ts:new Date(date+"T12:00:00").getTime()};
     const newHistory={...history,[date]:{...(history[date]||{}),[member]:entry}};
     await fsSet("wolfpack/workouts",{byDate:newHistory});
+    // Update local state immediately so streak/recap reflect the change
+    setHistory(newHistory);
+    setSharedData(newHistory);
 
     // Also update acceptedAt for any active challenge this member is in
     // so their goal recalculates from challenge start
@@ -1988,7 +2426,7 @@ export default function App(){
   };
 
   const handleAddPackGoal=async t=>{
-    const goal={id:Date.now().toString(),author:currentUser,text:t,cheers:[],ts:Date.now()};
+    const goal={id:Date.now().toString(),author:currentUser,text:t,cheers:[],ts:Date.now(),date:todayStr()};
     await fsSet("wolfpack/packgoals",{list:[goal,...packGoals]});
   };
   const handleCheerGoal=async(id,user)=>{
@@ -2014,6 +2452,8 @@ export default function App(){
   const handleSaveEditedWorkout=async(date,entry)=>{
     const newHistory={...history,[date]:{...(history[date]||{}),[currentUser]:entry}};
     await fsSet("wolfpack/workouts",{byDate:newHistory});
+    setHistory(newHistory);
+    setSharedData(newHistory);
     setEditWorkout(null);showToast("Workout updated!");
   };
   const handleDeleteWorkout=async(date)=>{
@@ -2021,7 +2461,11 @@ export default function App(){
     delete newDay[currentUser];
     const newHistory={...history,[date]:newDay};
     await fsSet("wolfpack/workouts",{byDate:newHistory});
-    setEditWorkout(null);showToast("Workout deleted.");
+    // Force local state update immediately
+    setHistory(newHistory);
+    setSharedData(newHistory);
+    setEditWorkout(null);
+    showToast("Workout deleted.");
   };
 
   // Weekly recap — compute on Monday
@@ -2031,9 +2475,9 @@ export default function App(){
     if(today.getDay()!==1)return; // only on Monday
     const lastWeekStart=new Date(today);lastWeekStart.setDate(today.getDate()-7);
     const lastWeekEnd=new Date(today);lastWeekEnd.setDate(today.getDate()-1);
-    const days=getDateRange(lastWeekStart.toISOString().split("T")[0],lastWeekEnd.toISOString().split("T")[0]);
+    const days=getDateRange(localDateStr(lastWeekStart),localDateStr(lastWeekEnd));
     const stats=members.map(m=>({name:m,days:days.filter(d=>history[d]?.[m]?.done).length})).sort((a,b)=>b.days-a.days);
-    setWeeklyRecap({stats,week:lastWeekStart.toISOString().split("T")[0],dismissed:false});
+    setWeeklyRecap({stats,week:localDateStr(lastWeekStart),dismissed:false});
   },[currentUser,members,history]);
 
   // Milestone auto-posts — check after logging
@@ -2105,30 +2549,40 @@ export default function App(){
     showToast(`Name updated to ${newName.trim()}!`);
   };
 
+  const [loggingWorkout,setLoggingWorkout]=useState(false);
   const handleLogWorkout=async(workouts,note,duration,details,summary)=>{
+    if(loggingWorkout)return; // prevent double-tap
+    setLoggingWorkout(true);
+    if(loggingWorkout)return; // prevent double-tap
+    setLoggingWorkout(true);
     const key=todayStr(),time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
     // Support multiple workout types - merge with existing entries for today
     const existing=history[key]?.[currentUser]||{};
     const prevWorkouts=existing.workouts||[];
+    const prevDetails=existing.details||{};
     const newWorkouts=[...prevWorkouts,...workouts.map(w=>({id:w.id,icon:w.icon,label:w.label}))];
+    // Merge details preserving existing ones
+    const mergedDetails={...prevDetails,...(details||{})};
     const icons=newWorkouts.map(w=>w.icon).join("");
     const labels=newWorkouts.map(w=>w.label).join(" + ");
-    // Build clean stacked summary text for display
+    // Build summary using MERGED details so previous workout details are preserved
     const summaryLines=newWorkouts.map(w=>{
-      const d=details?.[w.id]||{};
+      const d=mergedDetails?.[w.id]||{};
       const parts=[];
+      if(d.focus) parts.push(d.focus);
       if(d.distance) parts.push(`${d.distance} mi`);
+      if(d.rounds) parts.push(`${d.rounds} rounds`);
       if(d.sets&&d.reps) parts.push(`${d.sets} sets x ${d.reps} reps`);
       else if(d.sets) parts.push(`${d.sets} sets`);
       else if(d.reps) parts.push(`${d.reps} reps`);
       if(d.weight) parts.push(`${d.weight} lbs`);
-      if(d.rounds) parts.push(`${d.rounds} rounds`);
       if(d.duration) parts.push(`${d.duration} min`);
       return parts.length>0?`${w.label}: ${parts.join(" · ")}`:w.label;
     });
-    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration,details,time,ts:Date.now()};
+    const totalDur=newWorkouts.reduce((s,w)=>s+(Number(mergedDetails?.[w.id]?.duration)||0),0)||null;
+    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:mergedDetails,time,ts:Date.now()};
     await fsSet("wolfpack/workouts",{byDate:{...history,[key]:{...(history[key]||{}),[currentUser]:entry}}});
-    setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
+    setLoggingWorkout(false);setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
     await checkMilestones(newData);
   };
 
@@ -2155,12 +2609,16 @@ export default function App(){
     });
     await fsSet("wolfpack/feed",{posts:newFeed});
   };
-  const handleBookGym=async(date,time)=>{
-    const ex=gymSlots.filter(s=>s.date===date&&s.time===time);
-    if(ex.length>=2){showToast("That slot is full!");return;}
-    if(ex.find(s=>s.bookedBy===currentUser)){showToast("You already have that slot!");return;}
-    await fsSet("wolfpack/gym",{slots:[...gymSlots,{id:Date.now().toString(),date,time,bookedBy:currentUser,createdAt:Date.now()}]});
-    showToast(`Gym booked for ${time}! 💪`);
+  const handleBookGym=async(date,slot,durationMins,displayTime)=>{
+    // Check for conflicts
+    const daySlots=gymSlots.filter(s=>s.date===date);
+    const conflict=daySlots.find(s=>s.bookedBy!==currentUser&&slotOverlaps(slot.h,slot.m,s));
+    if(conflict){showToast("That time overlaps with an existing booking!");return;}
+    const myConflict=daySlots.find(s=>s.bookedBy===currentUser&&slotOverlaps(slot.h,slot.m,s));
+    if(myConflict){showToast("You already have a booking that overlaps!");return;}
+    const booking={id:Date.now().toString(),date,time:slot.label,displayTime,startH:slot.h,startM:slot.m,durationMins,bookedBy:currentUser,createdAt:Date.now()};
+    await fsSet("wolfpack/gym",{slots:[...gymSlots,booking]});
+    showToast(`Gym booked: ${displayTime}! 💪`);
   };
   const handleCancelGym=async id=>{await fsSet("wolfpack/gym",{slots:gymSlots.filter(s=>s.id!==id)});showToast("Cancelled.");};
   const handleAddChallenge=async c=>{await fsSet("wolfpack/challenges",{list:[c,...challenges]});showToast("Challenge created! ⚔️");};
@@ -2198,6 +2656,20 @@ export default function App(){
     await fsSet("wolfpack/challenges",{list:newList});
     showToast("Challenge declined.");
   };
+  const handleMarkPaid=async(challengeId,member,amount,method)=>{
+    const payment={amount,method,date:todayStr(),ts:Date.now()};
+    const newList=challenges.map(c=>{
+      if(c.id!==challengeId)return c;
+      const existingPayments=c.payments?.[member]||[];
+      return{...c,payments:{...c.payments,[member]:[...existingPayments,payment]}};
+    });
+    await fsSet("wolfpack/challenges",{list:newList});
+    showToast(`✓ $${amount} ${method} payment recorded for ${member}`);
+  };
+  const handleLogPayment=async(challengeId,member,amount,method)=>{
+    await handleMarkPaid(challengeId,member,amount,method);
+  };
+
   const handleForfeit=async(challengeId,member)=>{
     const newList=challenges.map(c=>{
       if(c.id!==challengeId)return c;
@@ -2254,7 +2726,7 @@ export default function App(){
         {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>}
         {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost} onComment={handleComment} onDeleteComment={handleDeleteComment}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
-        {view==="challenges"&&<ChallengesTab currentUser={currentUser} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)}/>}
+        {view==="challenges"&&<ChallengesTab currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)} onMarkPaid={handleMarkPaid} onLogPayment={handleLogPayment}/>}
         {view==="stats"&&<StatsTab currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed}/>}
       </div>
       <nav className="nav">
@@ -2290,7 +2762,7 @@ export default function App(){
           );
         })}
       </nav>
-      {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout}/>}
+      {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)}/>}
