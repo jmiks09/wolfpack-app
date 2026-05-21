@@ -214,6 +214,23 @@ const AI_MUSCLE_GROUPS = [
   {id:"fullbody",  label:"Full Body",   icon:"⚡"},
 ];
 
+// Secondary goals — shape the programming style, not the muscle focus
+const AI_SECONDARY_GOALS = [
+  {id:"none",      label:"None",                icon:"—",  desc:"Just my primary goal"},
+  {id:"fatloss",   label:"Also losing fat",     icon:"🔥", desc:"More circuits, shorter rest, cardio finishers"},
+  {id:"strength",  label:"Also getting stronger",icon:"⚡", desc:"Heavier compounds, longer rest, lower reps"},
+  {id:"athletic",  label:"Balanced & athletic", icon:"🏃", desc:"Mix of strength, power, and conditioning"},
+  {id:"endurance", label:"Build endurance",     icon:"💨", desc:"Higher reps, less rest, muscular stamina"},
+];
+
+// Effort ratings for post-workout check-in
+const EFFORT_RATINGS = [
+  {id:"easy",    emoji:"😴", label:"Too Easy",  color:"#3498db", advice:"bump weights next time"},
+  {id:"normal",  emoji:"💪", label:"Just Right",color:"#2ecc71", advice:"keep it up"},
+  {id:"hard",    emoji:"🔥", label:"Tough",     color:"#e67e22", advice:"hold weights next session"},
+  {id:"wrecked", emoji:"💀", label:"Wrecked",   color:"#e74c3c", advice:"reduce volume next time"},
+];
+
 // ── AI Coach (Nutrition + Supplements) constants ────────────────────────────
 const AI_BULK_CUT = [
   {id:"bulk",     label:"Bulk",     icon:"📈", desc:"Build muscle, eat in surplus"},
@@ -410,6 +427,52 @@ function bumpRegenCount(userName){
     localStorage.setItem(k,String(n));
     return n;
   }catch{return 0;}
+}
+
+// ── TRAINING LOG HELPERS ────────────────────────────────────────────────────
+// Key: wolfpack/training_log  →  {users: {userName: {exercises: {exerciseName: {lastWeight, lastReps, effortHistory: [{date,weight,reps,effort}]}}}}}
+
+async function saveTrainingLog(userName, exercises, effortRating){
+  try{
+    const existing=await fsGet("wolfpack/training_log")||{users:{}};
+    const userLog=existing.users?.[userName]?.exercises||{};
+    const today=todayStr();
+    exercises.forEach(ex=>{
+      if(!ex.name)return;
+      const prev=userLog[ex.name]||{effortHistory:[]};
+      const entry={date:today,weight:ex.weightUsed||null,reps:ex.reps||null,effort:effortRating};
+      userLog[ex.name]={
+        lastWeight:ex.weightUsed||prev.lastWeight||null,
+        lastReps:ex.reps||prev.lastReps||null,
+        lastEffort:effortRating,
+        lastDate:today,
+        effortHistory:[...(prev.effortHistory||[]).slice(-9),entry], // keep last 10
+      };
+    });
+    await fsSet("wolfpack/training_log",{users:{...(existing.users||{}),[userName]:{exercises:userLog}}});
+  }catch(e){console.error("Training log save error:",e);}
+}
+
+async function getTrainingLog(userName){
+  try{
+    const data=await fsGet("wolfpack/training_log");
+    return data?.users?.[userName]?.exercises||{};
+  }catch{return {};}
+}
+
+// Build a prior performance string for the AI prompt
+function buildPriorPerformanceString(trainingLog, muscleGroup){
+  if(!trainingLog||Object.keys(trainingLog).length===0) return "No prior weight data yet.";
+  const entries=Object.entries(trainingLog)
+    .filter(([,v])=>v.lastDate) // only exercises with history
+    .slice(0,8) // cap at 8 to keep prompt short
+    .map(([name,v])=>{
+      const effort=EFFORT_RATINGS.find(r=>r.id===v.lastEffort);
+      const effortNote=effort?` — rated ${effort.label} (${effort.advice})`:"";
+      const weightNote=v.lastWeight?` @ ${v.lastWeight} lbs`:"";
+      return `${name}${weightNote}${v.lastReps?` × ${v.lastReps}`:""}${effortNote}`;
+    });
+  return entries.length>0?entries.join("\n"):"No prior weight data yet.";
 }
 
 // ── ONBOARDING ────────────────────────────────────────────────────────────────
@@ -2425,6 +2488,7 @@ function WorkoutSummaryDisplay({summary, workoutLabel, style={}}){
 function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile}){
   const cur=profile?.aiTrainer||{};
   const [goal,setGoal]=useState(cur.goal||"");
+  const [secondaryGoal,setSecondaryGoal]=useState(cur.secondaryGoal||"none");
   const [experience,setExperience]=useState(cur.experience||"");
   const [injuries,setInjuries]=useState(cur.injuries||[]);
   const [usualSetup,setUsualSetup]=useState(cur.usualSetup||"home");
@@ -2450,6 +2514,7 @@ function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile}){
       aiTrainer:{
         ...cur,
         goal,
+        secondaryGoal:secondaryGoal==="none"?null:secondaryGoal,
         experience,
         injuries,
         usualSetup,
@@ -2484,6 +2549,33 @@ function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile}){
                 }}>
                 <span style={{fontSize:18}}>{g.icon}</span>
                 <span style={{fontSize:12,color:sel?"var(--accent2)":"#fff"}}>{g.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Secondary Goal */}
+      <div>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--accent2)",marginBottom:4}}>➕ SECONDARY FOCUS <span style={{fontSize:9,color:"var(--muted)",fontFamily:"inherit",letterSpacing:1}}>(OPTIONAL)</span></div>
+        <div style={{fontSize:10,color:"var(--muted)",marginBottom:8}}>Shapes how workouts are programmed — primary goal still drives muscle focus.</div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {AI_SECONDARY_GOALS.map(s=>{
+            const sel=(secondaryGoal||"none")===s.id;
+            return(
+              <button key={s.id} onClick={()=>{setSecondaryGoal(s.id);setSaved(false);}}
+                style={{
+                  padding:"10px 12px",borderRadius:10,cursor:"pointer",textAlign:"left",
+                  background:sel?"rgba(124,92,191,0.15)":"var(--bg3)",
+                  border:sel?"1px solid var(--accent)":"1px solid var(--border)",
+                  display:"flex",alignItems:"center",gap:10,
+                }}>
+                <span style={{fontSize:16,flexShrink:0}}>{s.icon}</span>
+                <div>
+                  <div style={{fontSize:12,color:sel?"var(--accent2)":"#fff",marginBottom:1}}>{s.label}</div>
+                  <div style={{fontSize:10,color:"var(--muted)"}}>{s.desc}</div>
+                </div>
+                {sel&&<div style={{marginLeft:"auto",color:"var(--accent)",fontSize:14}}>✓</div>}
               </button>
             );
           })}
@@ -3313,9 +3405,15 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     const equipment=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
     const bulkCut=profile?.aiTrainer?.coach?.stats?.bulkCut;
     const muscleLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label:"AI's choice based on history";
+    const secondaryGoal=profile?.aiTrainer?.secondaryGoal;
+    const secondaryLabel=secondaryGoal?AI_SECONDARY_GOALS.find(s=>s.id===secondaryGoal)?.label:null;
+    // Fetch prior weight/effort history for this user
+    const trainingLog=await getTrainingLog(currentUser);
+    const priorPerformance=buildPriorPerformanceString(trainingLog,muscleLabel);
     const result=await aiGenerateWorkout({
       userName:currentUser,
       goal:goalLabel+(bulkCut?` (currently ${bulkCut==="bulk"?"bulking":bulkCut==="cut"?"cutting":"maintaining"})`:""),
+      secondaryGoal:secondaryLabel||null,
       experience:experience||"intermediate",
       injuries:injuries||"None",
       equipment,
@@ -3323,6 +3421,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
       muscleGroup:muscleLabel,
       numExercises,
       setsPerExercise,
+      priorPerformance,
     });
     if(result.ok){
       setWorkout(result.workout);
@@ -3338,7 +3437,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     if(!workout)return;
     const summary=workout.exercises.map(e=>`${e.name}: ${e.sets}×${e.reps}${e.weight&&e.weight!=="bodyweight"?` @ ${e.weight}`:""}`).join(" + ");
     const note=`WOLFMODE: ${workout.title}`;
-    onUseWorkout({summary,note,minutes:workout.estimatedMinutes});
+    onUseWorkout({summary,note,minutes:workout.estimatedMinutes,exercises:workout.exercises,muscleGroup:muscleGroup||"fullbody"});
     onClose();
   };
 
@@ -3562,6 +3661,165 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
   );
 }
 
+// ── EFFORT RATING MODAL ──────────────────────────────────────────────────────
+function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose}){
+  const [selected,setSelected]=useState(null);
+  const [showWeightLog,setShowWeightLog]=useState(false);
+  const [saving,setSaving]=useState(false);
+
+  const handleRate=async(effortId)=>{
+    setSelected(effortId);
+  };
+
+  const handleSave=async()=>{
+    if(!selected)return;
+    setSaving(true);
+    // Save effort rating to training log (no weights yet)
+    await saveTrainingLog(currentUser, exercises.map(e=>({
+      name:e.name,
+      reps:e.reps,
+      weightUsed:e.weight&&e.weight!=="bodyweight"?e.weight:null,
+    })), selected);
+    setSaving(false);
+    onRate(selected);
+  };
+
+  if(showWeightLog){
+    return(
+      <WeightLogModal
+        exercises={exercises}
+        effortId={selected}
+        currentUser={currentUser}
+        onSave={async(loggedExercises)=>{
+          setSaving(true);
+          await saveTrainingLog(currentUser, loggedExercises, selected||"normal");
+          setSaving(false);
+          onRate(selected||"normal");
+        }}
+        onSkip={()=>setShowWeightLog(false)}
+        onClose={onClose}
+      />
+    );
+  }
+
+  return(
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()} style={{zIndex:1200}}>
+      <div className="modal" style={{maxHeight:"80dvh",overflowY:"auto"}}>
+        <div className="modal-handle"/>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:28,marginBottom:6}}>🔥</div>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>HOW'D IT GO?</div>
+          <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>WOLFMODE uses this to get smarter over time</div>
+        </div>
+
+        {/* Effort buttons */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+          {EFFORT_RATINGS.map(r=>{
+            const sel=selected===r.id;
+            return(
+              <button key={r.id} onClick={()=>handleRate(r.id)} style={{
+                padding:"14px 8px",borderRadius:14,cursor:"pointer",textAlign:"center",
+                background:sel?`rgba(${r.color.replace("#","").match(/.{2}/g).map(h=>parseInt(h,16)).join(",")},0.2)`:"var(--bg3)",
+                border:sel?`1px solid ${r.color}`:"1px solid var(--border)",
+                transition:"all 0.15s",
+              }}>
+                <div style={{fontSize:28,marginBottom:4}}>{r.emoji}</div>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1.5,color:sel?r.color:"#fff"}}>{r.label}</div>
+                {sel&&<div style={{fontSize:9,color:"var(--muted)",marginTop:2}}>{r.advice}</div>}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{display:"flex",gap:8}}>
+          <button className="btn-primary" onClick={handleSave} disabled={!selected||saving}
+            style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+            {saving?"SAVING...":"SAVE"}
+          </button>
+          <button className="btn-ghost" onClick={()=>{if(selected)setShowWeightLog(true);else onClose();}}
+            style={{flex:"0 0 auto",padding:"0 14px",fontSize:11}}>
+            📝 Log weights
+          </button>
+        </div>
+        <button onClick={onClose} style={{
+          width:"100%",marginTop:8,padding:8,background:"transparent",border:"none",
+          color:"var(--muted)",fontSize:11,cursor:"pointer",
+        }}>Skip — don't rate this one</button>
+      </div>
+    </div>
+  );
+}
+
+// ── WEIGHT LOG MODAL ─────────────────────────────────────────────────────────
+function WeightLogModal({exercises, effortId, currentUser, onSave, onSkip, onClose}){
+  const [weights,setWeights]=useState(()=>{
+    const init={};
+    exercises.forEach(e=>{
+      // Pre-fill with AI suggestion if available, strip "lbs" etc
+      const w=e.weight&&e.weight!=="bodyweight"?e.weight.replace(/[^0-9.]/g,""):"";
+      init[e.name]=w;
+    });
+    return init;
+  });
+  const [saving,setSaving]=useState(false);
+
+  const save=async()=>{
+    setSaving(true);
+    const logged=exercises.map(e=>({
+      name:e.name,
+      reps:e.reps,
+      weightUsed:weights[e.name]?`${weights[e.name]} lbs`:null,
+    }));
+    await onSave(logged);
+  };
+
+  return(
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()} style={{zIndex:1300}}>
+      <div className="modal" style={{maxHeight:"90dvh",overflowY:"auto"}}>
+        <div className="modal-handle"/>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,marginBottom:4}}>LOG WEIGHTS</div>
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:14}}>Optional — helps WOLFMODE suggest better weights next time. Pre-filled with AI's suggestion.</div>
+
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+          {exercises.map((ex,i)=>(
+            <div key={i} style={{
+              padding:"10px 12px",background:"var(--bg3)",
+              border:"1px solid var(--border)",borderRadius:12,
+              display:"flex",alignItems:"center",gap:10,
+            }}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1.5,color:"#fff",marginBottom:2}}>{ex.name}</div>
+                <div style={{fontSize:10,color:"var(--muted)"}}>{ex.sets} sets × {ex.reps}</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                <input
+                  type="number"
+                  value={weights[ex.name]||""}
+                  onChange={e=>setWeights(p=>({...p,[ex.name]:e.target.value}))}
+                  placeholder="—"
+                  style={{
+                    width:60,padding:"6px 8px",textAlign:"center",
+                    background:"var(--bg2)",border:"1px solid var(--border)",
+                    borderRadius:8,color:"#fff",fontSize:13,
+                  }}
+                />
+                <span style={{fontSize:11,color:"var(--muted)"}}>lbs</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{display:"flex",gap:8}}>
+          <button className="btn-primary" onClick={save} disabled={saving}
+            style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+            {saving?"SAVING...":"SAVE WEIGHTS"}
+          </button>
+          <button className="btn-ghost" onClick={onSkip} style={{flex:"0 0 auto",padding:"0 14px",fontSize:11}}>Skip</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function WorkoutModal({onClose,onSubmit,loading}){
   const [selected,setSelected]=useState([]);
@@ -3701,6 +3959,7 @@ export default function App(){
   const [weeklyRecap,setWeeklyRecap]=useState(null);
   const [aiTrainerOpen,setAiTrainerOpen]=useState(false);
   const [nutritionOpen,setNutritionOpen]=useState(false);
+  const [pendingEffortRating,setPendingEffortRating]=useState(null);
   const [toast,setToast]=useState("");
   const unsubs=useRef([]);const tt=useRef(null);
   const showToast=useCallback(msg=>{setToast(msg);clearTimeout(tt.current);tt.current=setTimeout(()=>setToast(""),3000);},[]);
@@ -3947,7 +4206,7 @@ export default function App(){
   };
 
   // ── AI Trainer: log the AI-generated workout as a lift entry ──────────────
-  const handleLogAIWorkout=async({summary,note,minutes})=>{
+  const handleLogAIWorkout=async({summary,note,minutes,exercises,muscleGroup})=>{
     if(loggingWorkout)return;
     setLoggingWorkout(true);
     const key=todayStr(),time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
@@ -3956,29 +4215,39 @@ export default function App(){
     const prevDetails=existing.details||{};
     const aiLift={id:"lift",icon:"🏋️",label:"Lifting"};
     const newWorkouts=[...prevWorkouts,aiLift];
-    const newDetails={...prevDetails,lift:{...(prevDetails.lift||{}),duration:String(minutes||45),focus:"Full Body"}};
+    const newDetails={...prevDetails,lift:{...(prevDetails.lift||{}),duration:String(minutes||45),focus:muscleGroup||"Full Body"}};
     const icons=newWorkouts.map(w=>w.icon).join("");
     const summaryLines=newWorkouts.map(w=>{
-      if(w.id==="lift"&&w===aiLift) return `${w.label}: ${summary}`;
+      if(w.id==="lift"&&w===aiLift) return `WOLFMODE: ${summary}`;
       const d=newDetails?.[w.id]||{};
       const parts=[];
       if(d.focus) parts.push(d.focus);
-      if(d.distance) parts.push(`${d.distance} mi`);
-      if(d.rounds) parts.push(`${d.rounds} rounds`);
-      if(d.sets&&d.reps) parts.push(`${d.sets} sets x ${d.reps} reps`);
-      else if(d.sets) parts.push(`${d.sets} sets`);
-      else if(d.reps) parts.push(`${d.reps} reps`);
-      if(d.weight) parts.push(`${d.weight} lbs`);
       if(d.duration) parts.push(`${d.duration} min`);
       return parts.length>0?`${w.label}: ${parts.join(" · ")}`:w.label;
     });
-    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note:note||"",duration:minutes||null,details:newDetails,time,ts:Date.now()};
+    // Store structured wolfmode session data for AI learning
+    const wolfmodeSession={
+      title:note?.replace("WOLFMODE: ",""),
+      muscleGroup:muscleGroup||"fullbody",
+      generatedAt:Date.now(),
+      exercises:(exercises||[]).map(e=>({
+        name:e.name,
+        sets:e.sets,
+        reps:e.reps,
+        suggestedWeight:e.weight,
+        weightUsed:null, // filled in optionally later
+        effortRating:null, // filled in by effort check-in
+      })),
+    };
+    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note:note||"",duration:minutes||null,details:newDetails,time,ts:Date.now(),wolfmodeSession};
     const newData={...history,[key]:{...(history[key]||{}),[currentUser]:entry}};
     await fsSet("wolfpack/workouts",{byDate:newData});
     setLoggingWorkout(false);
     launchConfetti();
-    showToast(`🤖 AI workout logged! Get after it! 🐺`);
+    showToast(`🔥 WOLFMODE logged! Rate it when you're done! 🐺`);
     await checkMilestones(newData);
+    // Show effort rating prompt after a short delay
+    setPendingEffortRating({exercises:exercises||[],date:key,muscleGroup:muscleGroup||"fullbody"});
   };
 
   const handlePost=async(t,photo)=>{
@@ -4160,6 +4429,7 @@ export default function App(){
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
       {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={null} onClose={()=>{setAiTrainerOpen(false);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={handleLogAIWorkout} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)}/>}
+      {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={(effortId)=>{setPendingEffortRating(null);showToast(`${EFFORT_RATINGS.find(r=>r.id===effortId)?.emoji} Got it — WOLFMODE will adjust next time!`);}} onClose={()=>setPendingEffortRating(null)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)}/>}
