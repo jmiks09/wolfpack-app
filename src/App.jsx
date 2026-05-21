@@ -4137,8 +4137,13 @@ function WeightLogModal({exercises, effortId, currentUser, onSave, onSkip, onClo
 // ── ACTIVE WORKOUT CARD ──────────────────────────────────────────────────────
 // Shows on Pack tab — persists all day via localStorage, clears at midnight Central
 function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, userName, experience, injuries}){
-  const data=getActiveWorkout(currentUser, targetDate);
+  const [data,setData]=useState(()=>getActiveWorkout(currentUser, targetDate));
   const [expanded,setExpanded]=useState(true);
+
+  // Re-check localStorage whenever the card mounts or key props change
+  useEffect(()=>{
+    setData(getActiveWorkout(currentUser, targetDate));
+  },[currentUser, targetDate]);
 
   if(!data)return null;
 
@@ -4186,7 +4191,7 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
             color:"var(--muted)",fontSize:18,padding:"0 4px",
             transition:"transform .2s",transform:expanded?"rotate(180deg)":"rotate(0)",
           }}>▾</button>
-          <button onClick={()=>onDismiss(targetDate)} style={{
+          <button onClick={()=>{onDismiss(targetDate);setData(null);}} style={{
             background:"none",border:"none",cursor:"pointer",
             color:"var(--muted)",fontSize:20,padding:"0 4px",lineHeight:1,
           }}>×</button>
@@ -4217,7 +4222,7 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
 
           {/* Mark complete button — only for today, only if not done */}
           {isToday&&!completed&&(
-            <button className="btn-primary" onClick={()=>onComplete(data)}
+            <button className="btn-primary" onClick={()=>{onComplete(data);setData({...data,completed:true});}}
               style={{
                 width:"100%",marginTop:8,
                 background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none",
@@ -4898,7 +4903,7 @@ export default function App(){
         })}
       </nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
-      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
+      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)}/>}
       {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={(effortId)=>{setPendingEffortRating(null);showToast(`${EFFORT_RATINGS.find(r=>r.id===effortId)?.emoji} Got it — WOLFMODE will adjust next time!`);}} onClose={()=>setPendingEffortRating(null)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
