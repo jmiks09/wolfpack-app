@@ -18,7 +18,6 @@ function getDb() {
 async function checkRateLimit(userName, action, maxPerDay) {
   if (!userName) throw new HttpsError("invalid-argument", "Missing user name.");
   const {FieldValue: FV} = require("firebase-admin/firestore");
-  // Reset at midnight Central time (CDT = UTC-5)
   const now = new Date();
   const centralDate = new Date(now.getTime() + (-5 * 60 * 60 * 1000));
   const today = centralDate.toISOString().slice(0, 10);
@@ -51,45 +50,36 @@ function parseJSON(text) {
 }
 
 exports.generateWorkout = onCall({secrets: [ANTHROPIC_API_KEY], cors: true}, async (request) => {
-  const {userName, goal, experience, injuries, equipment, recentHistory, muscleGroup, numExercises, setsPerExercise} = request.data || {};
+  const {userName, goal, experience, injuries, equipment, recentHistory, muscleGroup} = request.data || {};
 
   console.log("=== WOLFMODE REQUEST ===");
   console.log("userName:", userName);
   console.log("muscleGroup:", muscleGroup);
   console.log("goal:", goal);
-  console.log("numExercises:", numExercises);
-  console.log("setsPerExercise:", setsPerExercise);
   console.log("=======================");
 
   await checkRateLimit(userName, "workouts", MAX_WORKOUTS_PER_DAY);
 
   const hasMuscleTarget = muscleGroup && muscleGroup !== "AI's choice based on history";
-  const exCount = numExercises || 5;
-  const sets = setsPerExercise || 4;
 
-  // MUSCLE GROUP IS RULE #1 — stated before everything else
-  // Volume (count + sets) is rule #2 — simple numbers, stated once
-  // Goal/equipment/injuries follow — they shape HOW to train, not WHAT to train
   const sys = `You are a personal trainer. Build a workout JSON.
 
 RULE 1 — MUSCLE (most important): ${hasMuscleTarget
     ? `Train ${muscleGroup.toUpperCase()} ONLY. Every exercise must target ${muscleGroup}. Nothing else.`
     : `Pick the muscle group least trained recently.`}
 
-RULE 2 — VOLUME: Exactly ${exCount} exercises. Each exercise has exactly ${sets} sets.
+RULE 2 — EQUIPMENT: Only use exercises possible with: ${equipment}
 
-RULE 3 — EQUIPMENT: Only use exercises possible with: ${equipment}
+RULE 3 — GOAL STYLE: ${goal} — use this for rep ranges and intensity only, not muscle selection.
 
-RULE 4 — GOAL STYLE: ${goal} — use this for rep ranges and intensity only, not muscle selection.
-
-RULE 5 — INJURIES: Never suggest exercises that aggravate: ${injuries||"none"}
+RULE 4 — INJURIES: Never suggest exercises that aggravate: ${injuries||"none"}
 
 Return ONLY this JSON, no other text:
-{"title":"","reasoning":"","estimatedMinutes":0,"exercises":[{"name":"","sets":${sets},"reps":"","weight":"","restSeconds":0,"primaryMuscle":"${hasMuscleTarget?muscleGroup:""}","notes":""}]}`;
+{"title":"","reasoning":"","estimatedMinutes":0,"exercises":[{"name":"","sets":0,"reps":"","weight":"","restSeconds":0,"primaryMuscle":"${hasMuscleTarget?muscleGroup:""}","notes":""}]}`;
 
   const usr = `Athlete: ${userName}, experience: ${experience||"intermediate"}
 Recent training (last 3 days): ${recentHistory||"none"}
-Build exactly ${exCount} ${hasMuscleTarget ? muscleGroup : "balanced"} exercises now.`;
+Build a ${hasMuscleTarget ? muscleGroup : "balanced"} workout now.`;
 
   const responseText = await callClaude(sys, usr, ANTHROPIC_API_KEY.value());
   console.log("=== AI RESPONSE ===");
