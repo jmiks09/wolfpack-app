@@ -3640,8 +3640,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
   const [muscleGroup,setMuscleGroup]=useState(null); // null = AI picks
   const [aiPickingMuscle,setAiPickingMuscle]=useState(false);
   const [aiMuscleReason,setAiMuscleReason]=useState("");
-  const [numExercises,setNumExercises]=useState(5);
-  const [setsPerExercise,setSetsPerExercise]=useState(4);
+  // muscle group state only — volume controlled by AI
 
   const goal=profile?.aiTrainer?.goal;
   const experience=profile?.aiTrainer?.experience;
@@ -3699,8 +3698,6 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
       equipment,
       recentHistory:getRecentHistoryString(history,currentUser).split("|").slice(0,3).join("|"),
       muscleGroup:muscleLabel,
-      numExercises,
-      setsPerExercise,
     });
     if(result.ok){
       setWorkout(result.workout);
@@ -3799,41 +3796,6 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
               </button>
             </div>
 
-            {/* ── WORKOUT VOLUME ── */}
-            <div style={{marginBottom:14}}>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⚙️ WORKOUT VOLUME</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div>
-                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Exercises</div>
-                  <div style={{display:"flex",gap:4}}>
-                    {[3,4,5].map(n=>(
-                      <button key={n} onClick={()=>setNumExercises(n)} style={{
-                        flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",
-                        background:numExercises===n?"rgba(255,107,53,0.2)":"var(--bg3)",
-                        border:numExercises===n?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",
-                        color:numExercises===n?"#ff6b35":"var(--muted)",
-                        fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1,
-                      }}>{n}</button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Sets each</div>
-                  <div style={{display:"flex",gap:4}}>
-                    {[3,4].map(n=>(
-                      <button key={n} onClick={()=>setSetsPerExercise(n)} style={{
-                        flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",
-                        background:setsPerExercise===n?"rgba(255,107,53,0.2)":"var(--bg3)",
-                        border:setsPerExercise===n?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",
-                        color:setsPerExercise===n?"#ff6b35":"var(--muted)",
-                        fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1,
-                      }}>{n}</button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* ── EQUIPMENT ── */}
             <div style={{marginBottom:14}}>
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🏠 WHERE ARE YOU TRAINING?</div>
@@ -3910,7 +3872,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
               <div style={{fontSize:22}}>🔥</div>
               <div style={{flex:1}}>
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:2,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.1}}>{workout.title}</div>
-                <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>~{workout.estimatedMinutes} min · {workout.exercises?.length||numExercises} exercises · {setsPerExercise} sets each</div>
+                <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>~{workout.estimatedMinutes} min · {workout.exercises?.length} exercises</div>
               </div>
             </div>
             {workout.reasoning&&(
