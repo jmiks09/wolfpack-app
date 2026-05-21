@@ -48,45 +48,52 @@ function parseJSON(text) {
   }
 }
 
-// ── generateWorkout ──────────────────────────────────────────────────────────
 exports.generateWorkout = onCall({secrets: [ANTHROPIC_API_KEY], cors: true}, async (request) => {
   const {userName, goal, experience, injuries, equipment, recentHistory, muscleGroup} = request.data || {};
+
+  // LOG everything so we can see exactly what arrives
+  console.log("=== WOLFMODE REQUEST ===");
+  console.log("userName:", userName);
+  console.log("muscleGroup:", muscleGroup);
+  console.log("goal:", goal);
+  console.log("experience:", experience);
+  console.log("injuries:", injuries);
+  console.log("=======================");
+
   await checkRateLimit(userName, "workouts", MAX_WORKOUTS_PER_DAY);
 
   const hasMuscleTarget = muscleGroup && muscleGroup !== "AI's choice based on history";
 
-  // CRITICAL SEPARATION:
-  // muscleGroup = which muscles to train (chosen by user TODAY — always wins)
-  // goal = how to train them (rep ranges, intensity, weight style)
-  // These are separate concerns. The goal NEVER changes which muscle group is trained.
-  const muscleInstruction = hasMuscleTarget
-    ? `TODAY'S TARGET MUSCLE: ${muscleGroup.toUpperCase()}. Every single exercise must target ${muscleGroup}. This overrides everything else.`
-    : `Choose the muscle group least trained recently: ${recentHistory||"no history — pick any"}.`;
+  const sys = `You are a personal trainer building a workout.
 
-  const sys = `You are a personal trainer building a single-muscle workout.
+TODAY'S MUSCLE TARGET: ${hasMuscleTarget ? muscleGroup.toUpperCase() : "choose from history"}
+${hasMuscleTarget ? `ALL exercises must target ${muscleGroup}. Every single one. No other muscle groups.` : ""}
 
-${muscleInstruction}
+Equipment available: ${equipment}
+Training goal (affects reps/intensity only, NOT muscle selection): ${goal}
+Injuries to avoid: ${injuries||"none"}
 
-RULES (in priority order):
-1. MUSCLE FOCUS: All exercises target ${hasMuscleTarget ? muscleGroup : "the chosen muscle group"} only.
-2. EQUIPMENT: Only use exercises possible with available equipment.
-3. TRAINING STYLE: Use ${goal} to decide rep ranges and weight intensity only — not which muscles to train.
-4. INJURIES: Skip any exercise that aggravates: ${injuries||"none"}.
-5. Return ONLY valid JSON, no other text.`;
-
-  const usr = `Athlete: ${userName}
-Experience: ${experience||"intermediate"}
-Available equipment: ${equipment}
-Recent training (last 3 days): ${recentHistory||"none"}
-
-Return this JSON with 4-6 exercises, all targeting ${hasMuscleTarget ? muscleGroup : "the chosen muscle group"}:
+Return ONLY valid JSON, no other text:
 {"title":"","reasoning":"","estimatedMinutes":0,"exercises":[{"name":"","sets":0,"reps":"","weight":"","restSeconds":0,"primaryMuscle":"${hasMuscleTarget?muscleGroup:""}","notes":""}]}`;
 
-  const workout = parseJSON(await callClaude(sys, usr, ANTHROPIC_API_KEY.value()));
+  const usr = `Athlete: ${userName}, experience: ${experience||"intermediate"}
+Recent training: ${recentHistory||"none"}
+Build a ${hasMuscleTarget ? muscleGroup : "balanced"} workout now.`;
+
+  console.log("=== SYSTEM PROMPT ===");
+  console.log(sys);
+  console.log("=== USER PROMPT ===");
+  console.log(usr);
+
+  const responseText = await callClaude(sys, usr, ANTHROPIC_API_KEY.value());
+
+  console.log("=== AI RESPONSE ===");
+  console.log(responseText);
+
+  const workout = parseJSON(responseText);
   return {workout};
 });
 
-// ── generateFormCues ─────────────────────────────────────────────────────────
 exports.generateFormCues = onCall({secrets: [ANTHROPIC_API_KEY], cors: true}, async (request) => {
   const {userName, exerciseName, experience, injuries} = request.data || {};
   const cacheKey = `${exerciseName}__${experience||"any"}__${injuries||"none"}`.toLowerCase().replace(/[^a-z0-9_]/g, "_");
@@ -103,7 +110,6 @@ JSON: {"setup":"","execution":"","commonMistakes":["","",""],"breathing":""}`;
   return {cues, cached: false};
 });
 
-// ── generateNutritionPlan ────────────────────────────────────────────────────
 exports.generateNutritionPlan = onCall({secrets: [ANTHROPIC_API_KEY], cors: true}, async (request) => {
   const {userName, age, heightInches, weightLbs, gender, bulkCut, activityLevel, dietaryRestrictions, goal} = request.data || {};
   await checkRateLimit(userName, "nutritionPlans", MAX_NUTRITION_PLANS_PER_DAY);
