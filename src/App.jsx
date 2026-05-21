@@ -1109,6 +1109,25 @@ function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteA
           </button>
         </div>
 
+        {/* ── ADMIN TOOLS ── */}
+        <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid var(--border)"}}>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--accent2)",marginBottom:10}}>🛠️ ADMIN TOOLS</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <button className="btn-ghost" onClick={()=>{
+              Object.keys(localStorage).filter(k=>k.startsWith("wp_regen")).forEach(k=>localStorage.removeItem(k));
+              alert("✅ All regens reset for everyone!");
+            }} style={{justifyContent:"flex-start",fontSize:12,padding:"10px 12px"}}>
+              🔄 Reset all WOLFMODE regens
+            </button>
+            <button className="btn-ghost" onClick={()=>{
+              Object.keys(localStorage).filter(k=>k.startsWith("wp_active")).forEach(k=>localStorage.removeItem(k));
+              alert("✅ All active workouts cleared!");
+            }} style={{justifyContent:"flex-start",fontSize:12,padding:"10px 12px"}}>
+              🗑️ Clear all active workouts
+            </button>
+          </div>
+        </div>
+
         <button className="btn-ghost" style={{width:"100%",marginTop:8}} onClick={onClose}>Close</button>
       </div>
     </div>
