@@ -204,13 +204,13 @@ const MAX_DAILY_REGENS = 5;
 
 // ── Muscle groups for WOLFMODE picker ───────────────────────────────────────
 const AI_MUSCLE_GROUPS = [
-  {id:"chest",     label:"Chest",       icon:"💪"},
-  {id:"back",      label:"Back",        icon:"🔙"},
+  {id:"chest",     label:"Chest",       icon:"🫁"},
+  {id:"back",      label:"Back",        icon:"🔺"},
   {id:"legs",      label:"Legs",        icon:"🦵"},
   {id:"glutes",    label:"Glutes",      icon:"🍑"},
-  {id:"shoulders", label:"Shoulders",   icon:"🏋️"},
+  {id:"shoulders", label:"Shoulders",   icon:"🏹"},
   {id:"arms",      label:"Arms",        icon:"💪"},
-  {id:"core",      label:"Core",        icon:"🎯"},
+  {id:"core",      label:"Core & Abs",  icon:"🎯"},
   {id:"fullbody",  label:"Full Body",   icon:"⚡"},
 ];
 
@@ -388,29 +388,285 @@ function buildEquipmentString(presetId, customEquipment, packHomeGym){
   return AI_PRESET_DESCRIPTIONS[presetId]||AI_PRESET_DESCRIPTIONS.bodyweight;
 }
 
-// Fetch a looping GIF for an exercise from ExerciseDB-style sources.
-// We try wger.de's open library first (free, no auth), then fall back to
-// a YouTube search link if nothing matches.
-const gifCache={}; // in-memory cache per session
-async function fetchExerciseGif(exerciseName){
-  if(gifCache[exerciseName]!==undefined) return gifCache[exerciseName];
-  try{
-    const q=encodeURIComponent(exerciseName);
-    // wger.de open API — public, no auth needed
-    const r=await fetch(`https://wger.de/api/v2/exercise/search/?language=2&term=${q}`);
-    if(r.ok){
-      const data=await r.json();
-      const first=data?.suggestions?.[0]?.data;
-      if(first?.image_thumbnail||first?.image){
-        const url=`https://wger.de${first.image||first.image_thumbnail}`;
-        gifCache[exerciseName]=url;
-        return url;
-      }
-    }
-  }catch(e){/* ignore, fall through */}
-  // No gif found — return null so the UI shows a "Search YouTube" button instead
-  gifCache[exerciseName]=null;
-  return null;
+// ── EXERCISE SVG ILLUSTRATIONS ───────────────────────────────────────────────
+// Generates animated SVG diagrams based on the primary muscle group.
+// Zero external dependencies — always works, never cuts music.
+
+function getExerciseSVG(exerciseName, primaryMuscle){
+  const name=(exerciseName||"").toLowerCase();
+  const muscle=(primaryMuscle||"").toLowerCase();
+
+  // Determine movement pattern from exercise name + muscle
+  let pattern="push";
+  if(name.includes("squat")||name.includes("lunge")||name.includes("leg press")||name.includes("step")) pattern="squat";
+  else if(name.includes("deadlift")||name.includes("rdl")||name.includes("hip hinge")||name.includes("good morning")) pattern="hinge";
+  else if(name.includes("row")||name.includes("pull")||name.includes("chin")||name.includes("lat")) pattern="pull";
+  else if(name.includes("hip thrust")||name.includes("glute bridge")||name.includes("bridge")) pattern="thrust";
+  else if(name.includes("curl")||name.includes("bicep")) pattern="curl";
+  else if(name.includes("tricep")||name.includes("extension")||name.includes("pushdown")) pattern="tricep";
+  else if(name.includes("press")&&(name.includes("bench")||name.includes("chest")||name.includes("incline")||name.includes("decline"))) pattern="bench";
+  else if(name.includes("press")&&(name.includes("shoulder")||name.includes("overhead")||name.includes("ohp")||name.includes("military"))) pattern="overhead";
+  else if(name.includes("plank")||name.includes("hollow")||name.includes("dead bug")) pattern="plank";
+  else if(name.includes("crunch")||name.includes("situp")||name.includes("sit-up")||name.includes("ab")) pattern="crunch";
+  else if(name.includes("lateral")||name.includes("raise")||name.includes("fly")||name.includes("flye")) pattern="raise";
+  else if(muscle.includes("glute")||muscle.includes("hip")) pattern="thrust";
+  else if(muscle.includes("back")||muscle.includes("lat")) pattern="pull";
+  else if(muscle.includes("leg")||muscle.includes("quad")||muscle.includes("hamstring")) pattern="squat";
+  else if(muscle.includes("chest")) pattern="bench";
+  else if(muscle.includes("shoulder")||muscle.includes("delt")) pattern="overhead";
+  else if(muscle.includes("bicep")) pattern="curl";
+  else if(muscle.includes("tricep")) pattern="tricep";
+  else if(muscle.includes("core")||muscle.includes("abs")) pattern="crunch";
+
+  const svgs={
+    squat:`<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes squat{0%,100%{transform:translateY(0)}50%{transform:translateY(14px)}}
+        .mover{animation:squat 1.8s ease-in-out infinite;}
+      </style>
+      <g class="mover" transform-origin="60 50">
+        <!-- head --><circle cx="60" cy="22" r="7" class="dot" fill-opacity="0.8"/>
+        <!-- torso --><line x1="60" y1="29" x2="60" y2="55" class="body"/>
+        <!-- arms --><line x1="60" y1="35" x2="42" y2="48" class="body"/><line x1="60" y1="35" x2="78" y2="48" class="body"/>
+        <!-- bar --><line x1="30" y1="37" x2="90" y2="37" class="accent"/>
+        <!-- left leg --><line x1="60" y1="55" x2="48" y2="75" class="body"/><line x1="48" y1="75" x2="44" y2="90" class="body"/>
+        <!-- right leg --><line x1="60" y1="55" x2="72" y2="75" class="body"/><line x1="72" y1="75" x2="76" y2="90" class="body"/>
+      </g>
+      <!-- floor --><line x1="20" y1="94" x2="100" y2="94" stroke="#444" stroke-width="1.5"/>
+      <!-- arrows --><text x="60" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↕ drive through heels</text>
+    </svg>`,
+
+    hinge:`<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes hinge{0%,100%{transform:rotate(0deg)}50%{transform:rotate(38deg)}}
+        .mover{animation:hinge 2s ease-in-out infinite;transform-origin:60px 72px;}
+      </style>
+      <g class="mover">
+        <circle cx="60" cy="28" r="7" class="dot" fill-opacity="0.8"/>
+        <line x1="60" y1="35" x2="60" y2="62" class="body"/>
+        <line x1="60" y1="40" x2="44" y2="52" class="body"/>
+        <line x1="60" y1="40" x2="76" y2="52" class="body"/>
+        <line x1="44" y1="52" x2="40" y2="68" class="accent"/>
+        <line x1="76" y1="52" x2="80" y2="68" class="accent"/>
+      </g>
+      <line x1="48" y1="72" x2="72" y2="72" class="body"/>
+      <line x1="48" y1="72" x2="46" y2="88" class="body"/>
+      <line x1="72" y1="72" x2="74" y2="88" class="body"/>
+      <line x1="20" y1="92" x2="100" y2="92" stroke="#444" stroke-width="1.5"/>
+      <text x="60" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↕ hinge at hips</text>
+    </svg>`,
+
+    thrust:`<svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes thrust{0%,100%{transform:translateY(0)}50%{transform:translateY(-16px)}}
+        .hips{animation:thrust 1.8s ease-in-out infinite;transform-origin:65px 60px;}
+      </style>
+      <!-- bench --><rect x="10" y="62" width="40" height="10" rx="3" fill="#333" stroke="#555" stroke-width="1"/>
+      <!-- upper body on bench --><line x1="12" y1="58" x2="48" y2="58" class="body"/>
+      <circle cx="10" cy="54" r="6" class="dot" fill-opacity="0.8"/>
+      <!-- arms --><line x1="30" y1="58" x2="30" y2="48" class="body"/><line x1="42" y1="58" x2="42" y2="48" class="body"/>
+      <!-- bar --><line x1="22" y1="48" x2="50" y2="48" class="accent"/>
+      <g class="hips">
+        <!-- hips+legs --><line x1="48" y1="58" x2="65" y2="58" class="body"/>
+        <line x1="65" y1="58" x2="75" y2="76" class="body"/><line x1="75" y1="76" x2="80" y2="90" class="body"/>
+        <line x1="65" y1="58" x2="85" y2="66" class="body"/><line x1="85" y1="66" x2="90" y2="82" class="body"/>
+      </g>
+      <line x1="20" y1="93" x2="110" y2="93" stroke="#444" stroke-width="1.5"/>
+      <text x="65" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ drive hips up, squeeze</text>
+    </svg>`,
+
+    pull:`<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes pull{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+        .mover{animation:pull 1.8s ease-in-out infinite;}
+      </style>
+      <!-- bar --><line x1="20" y1="18" x2="100" y2="18" class="accent" stroke-width="3"/>
+      <g class="mover" transform-origin="60 18">
+        <circle cx="60" cy="42" r="7" class="dot" fill-opacity="0.8"/>
+        <line x1="60" y1="49" x2="60" y2="72" class="body"/>
+        <line x1="60" y1="55" x2="44" y2="44" class="body"/><line x1="44" y1="44" x2="36" y2="26" class="body"/>
+        <line x1="60" y1="55" x2="76" y2="44" class="body"/><line x1="76" y1="44" x2="84" y2="26" class="body"/>
+        <line x1="60" y1="72" x2="50" y2="88" class="body"/><line x1="60" y1="72" x2="70" y2="88" class="body"/>
+      </g>
+      <text x="60" y="104" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ pull elbows to hips</text>
+    </svg>`,
+
+    push:`<svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes push{0%,100%{transform:translateY(0)}50%{transform:translateY(10px)}}
+        .mover{animation:push 1.8s ease-in-out infinite;}
+      </style>
+      <g class="mover" transform-origin="65 55">
+        <circle cx="65" cy="22" r="7" class="dot" fill-opacity="0.8"/>
+        <line x1="65" y1="29" x2="65" y2="56" class="body"/>
+        <line x1="65" y1="36" x2="44" y2="48" class="body"/><line x1="44" y1="48" x2="38" y2="38" class="body"/>
+        <line x1="65" y1="36" x2="86" y2="48" class="body"/><line x1="86" y1="48" x2="92" y2="38" class="body"/>
+        <line x1="38" y1="38" x2="92" y2="38" class="accent"/>
+        <line x1="65" y1="56" x2="55" y2="76" class="body"/><line x1="55" y1="76" x2="52" y2="92" class="body"/>
+        <line x1="65" y1="56" x2="75" y2="76" class="body"/><line x1="75" y1="76" x2="78" y2="92" class="body"/>
+      </g>
+      <line x1="20" y1="95" x2="110" y2="95" stroke="#444" stroke-width="1.5"/>
+      <text x="65" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↕ controlled press</text>
+    </svg>`,
+
+    bench:`<svg viewBox="0 0 140 100" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes bench{0%,100%{transform:translateY(0)}50%{transform:translateY(12px)}}
+        .arms{animation:bench 1.8s ease-in-out infinite;}
+      </style>
+      <rect x="15" y="54" width="90" height="10" rx="3" fill="#333" stroke="#555" stroke-width="1"/>
+      <circle cx="20" cy="48" r="7" class="dot" fill-opacity="0.8"/>
+      <line x1="25" y1="50" x2="100" y2="50" class="body"/>
+      <line x1="100" y1="50" x2="110" y2="64" class="body"/><line x1="110" y1="64" x2="116" y2="78" class="body"/>
+      <g class="arms" transform-origin="70 38">
+        <line x1="45" y1="50" x2="40" y2="36" class="body"/><line x1="75" y1="50" x2="80" y2="36" class="body"/>
+        <line x1="28" y1="36" x2="92" y2="36" class="accent" stroke-width="3"/>
+      </g>
+      <line x1="10" y1="92" x2="130" y2="92" stroke="#444" stroke-width="1.5"/>
+      <text x="70" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↕ lower to chest, press up</text>
+    </svg>`,
+
+    overhead:`<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes ohp{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+        .arms{animation:ohp 1.8s ease-in-out infinite;}
+      </style>
+      <circle cx="60" cy="20" r="7" class="dot" fill-opacity="0.8"/>
+      <line x1="60" y1="27" x2="60" y2="58" class="body"/>
+      <line x1="60" y1="62" x2="48" y2="80" class="body"/><line x1="48" y1="80" x2="45" y2="95" class="body"/>
+      <line x1="60" y1="62" x2="72" y2="80" class="body"/><line x1="72" y1="80" x2="75" y2="95" class="body"/>
+      <g class="arms" transform-origin="60 40">
+        <line x1="60" y1="40" x2="36" y2="52" class="body"/><line x1="36" y1="52" x2="30" y2="38" class="body"/>
+        <line x1="60" y1="40" x2="84" y2="52" class="body"/><line x1="84" y1="52" x2="90" y2="38" class="body"/>
+        <line x1="22" y1="38" x2="98" y2="38" class="accent" stroke-width="3"/>
+      </g>
+      <line x1="20" y1="98" x2="100" y2="98" stroke="#444" stroke-width="1.5"/>
+      <text x="60" y="108" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ press overhead, lock out</text>
+    </svg>`,
+
+    curl:`<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes curl{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-70deg)}}
+        .forearm{animation:curl 1.8s ease-in-out infinite;transform-origin:72px 55px;}
+      </style>
+      <circle cx="60" cy="18" r="7" class="dot" fill-opacity="0.8"/>
+      <line x1="60" y1="25" x2="60" y2="55" class="body"/>
+      <line x1="60" y1="55" x2="48" y2="75" class="body"/><line x1="48" y1="75" x2="45" y2="90" class="body"/>
+      <line x1="60" y1="55" x2="72" y2="75" class="body"/><line x1="72" y1="75" x2="75" y2="90" class="body"/>
+      <line x1="60" y1="36" x2="48" y2="48" class="body"/>
+      <g class="forearm">
+        <line x1="72" y1="55" x2="85" y2="48" class="body"/>
+        <line x1="85" y1="48" x2="90" y2="36" class="accent" stroke-width="3"/>
+      </g>
+      <line x1="20" y1="93" x2="100" y2="93" stroke="#444" stroke-width="1.5"/>
+      <text x="60" y="8" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ curl, squeeze bicep</text>
+    </svg>`,
+
+    tricep:`<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes tricep{0%,100%{transform:rotate(0deg)}50%{transform:rotate(55deg)}}
+        .forearm{animation:tricep 1.8s ease-in-out infinite;transform-origin:75px 42px;}
+      </style>
+      <circle cx="60" cy="18" r="7" class="dot" fill-opacity="0.8"/>
+      <line x1="60" y1="25" x2="60" y2="55" class="body"/>
+      <line x1="60" y1="55" x2="48" y2="75" class="body"/><line x1="48" y1="75" x2="45" y2="90" class="body"/>
+      <line x1="60" y1="55" x2="72" y2="75" class="body"/><line x1="72" y1="75" x2="75" y2="90" class="body"/>
+      <line x1="60" y1="36" x2="48" y2="46" class="body"/>
+      <line x1="60" y1="36" x2="75" y2="42" class="body"/>
+      <g class="forearm">
+        <line x1="75" y1="42" x2="78" y2="60" class="accent" stroke-width="3"/>
+      </g>
+      <line x1="20" y1="93" x2="100" y2="93" stroke="#444" stroke-width="1.5"/>
+      <text x="60" y="8" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↓ extend, lock out tricep</text>
+    </svg>`,
+
+    plank:`<svg viewBox="0 0 140 80" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes plank{0%,100%{opacity:1}50%{opacity:0.5}}
+        .core{animation:plank 2s ease-in-out infinite;}
+      </style>
+      <circle cx="24" cy="32" r="7" class="dot" fill-opacity="0.8"/>
+      <line x1="30" y1="35" x2="100" y2="44" class="body"/>
+      <line x1="36" y1="36" x2="30" y2="50" class="body"/><line x1="30" y1="50" x2="26" y2="62" class="body"/>
+      <line x1="100" y1="44" x2="104" y2="58" class="body"/><line x1="104" y1="58" x2="106" y2="68" class="body"/>
+      <line x1="96" y1="44" x2="100" y2="58" class="body"/><line x1="100" y1="58" x2="102" y2="68" class="body"/>
+      <g class="core"><line x1="50" y1="38" x2="80" y2="42" class="accent" stroke-width="3"/></g>
+      <line x1="10" y1="70" x2="130" y2="70" stroke="#444" stroke-width="1.5"/>
+      <text x="70" y="12" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">hold tight — brace your core</text>
+    </svg>`,
+
+    crunch:`<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes crunch{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-25deg)}}
+        .upper{animation:crunch 1.8s ease-in-out infinite;transform-origin:60px 62px;}
+      </style>
+      <line x1="20" y1="88" x2="100" y2="88" stroke="#444" stroke-width="1.5"/>
+      <line x1="45" y1="88" x2="55" y2="70" class="body"/><line x1="75" y1="88" x2="65" y2="70" class="body"/>
+      <line x1="55" y1="70" x2="60" y2="62" class="body"/><line x1="65" y1="70" x2="60" y2="62" class="body"/>
+      <g class="upper">
+        <line x1="60" y1="62" x2="60" y2="42" class="body"/>
+        <line x1="60" y1="50" x2="44" y2="58" class="body"/><line x1="60" y1="50" x2="76" y2="58" class="body"/>
+        <circle cx="60" cy="34" r="7" class="dot" fill-opacity="0.8"/>
+        <line x1="44" y1="58" x2="48" y2="44" class="accent"/><line x1="76" y1="58" x2="72" y2="44" class="accent"/>
+      </g>
+      <text x="60" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ curl shoulders up, exhale</text>
+    </svg>`,
+
+    raise:`<svg viewBox="0 0 140 100" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
+        .dot{fill:#c084fc;}
+        @keyframes raise{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-45deg)}}
+        .larm{animation:raise 1.8s ease-in-out infinite;transform-origin:46px 42px;}
+        @keyframes raise2{0%,100%{transform:rotate(0deg)}50%{transform:rotate(45deg)}}
+        .rarm{animation:raise2 1.8s ease-in-out infinite;transform-origin:76px 42px;}
+      </style>
+      <circle cx="61" cy="18" r="7" class="dot" fill-opacity="0.8"/>
+      <line x1="61" y1="25" x2="61" y2="58" class="body"/>
+      <line x1="61" y1="58" x2="50" y2="78" class="body"/><line x1="50" y1="78" x2="47" y2="92" class="body"/>
+      <line x1="61" y1="58" x2="72" y2="78" class="body"/><line x1="72" y1="78" x2="75" y2="92" class="body"/>
+      <g class="larm"><line x1="61" y1="42" x2="30" y2="52" class="accent" stroke-width="3"/></g>
+      <g class="rarm"><line x1="61" y1="42" x2="92" y2="52" class="accent" stroke-width="3"/></g>
+      <line x1="10" y1="95" x2="130" y2="95" stroke="#444" stroke-width="1.5"/>
+      <text x="61" y="8" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ raise to shoulder height</text>
+    </svg>`,
+  };
+
+  return svgs[pattern]||svgs.push;
 }
 
 // Count today's regenerations from localStorage (per user)
@@ -3194,7 +3450,6 @@ function ExerciseCard({exercise, userName, experience, injuries, idx}){
   const [cues,setCues]=useState(null);
   const [cuesLoading,setCuesLoading]=useState(false);
   const [cuesError,setCuesError]=useState(null);
-  const [gifUrl,setGifUrl]=useState(undefined); // undefined=not fetched, null=not found
 
   const handleExpand=async()=>{
     const next=!expanded;
@@ -3202,60 +3457,50 @@ function ExerciseCard({exercise, userName, experience, injuries, idx}){
     if(next&&!cues&&!cuesLoading){
       setCuesLoading(true);
       setCuesError(null);
-      // Fetch GIF and cues in parallel
-      const [gif,cueRes]=await Promise.all([
-        fetchExerciseGif(exercise.name),
-        aiGenerateFormCues({
-          userName,
-          exerciseName:exercise.name,
-          experience:experience||"intermediate",
-          injuries:injuries||"",
-        }),
-      ]);
-      setGifUrl(gif);
-      if(cueRes.ok){
-        setCues(cueRes.cues);
-      }else{
-        setCuesError(cueRes.error||"Couldn't load form cues.");
-      }
+      const cueRes=await aiGenerateFormCues({
+        userName,
+        exerciseName:exercise.name,
+        experience:experience||"intermediate",
+        injuries:injuries||"",
+      });
+      if(cueRes.ok){setCues(cueRes.cues);}
+      else{setCuesError(cueRes.error||"Couldn't load form cues.");}
       setCuesLoading(false);
     }
   };
 
+  // Capitalise primary muscle for display
+  const muscleLabel=exercise.primaryMuscle
+    ? exercise.primaryMuscle.charAt(0).toUpperCase()+exercise.primaryMuscle.slice(1)
+    : null;
+
   return(
-    <div style={{
-      marginBottom:10,
-      background:"var(--bg3)",
-      border:"1px solid var(--border)",
-      borderRadius:14,
-      overflow:"hidden",
-    }}>
+    <div style={{marginBottom:10,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:14,overflow:"hidden"}}>
       {/* Header row */}
-      <div onClick={handleExpand} style={{
-        padding:"12px 14px",
-        cursor:"pointer",
-        display:"flex",
-        alignItems:"center",
-        gap:10,
-      }}>
+      <div onClick={handleExpand} style={{padding:"12px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
         <div style={{
           width:28,height:28,borderRadius:"50%",
-          background:"rgba(124,92,191,0.2)",
-          border:"1px solid rgba(124,92,191,0.4)",
-          color:"var(--accent2)",
-          display:"flex",alignItems:"center",justifyContent:"center",
-          fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1,
-          flexShrink:0,
+          background:"rgba(124,92,191,0.2)",border:"1px solid rgba(124,92,191,0.4)",
+          color:"var(--accent2)",display:"flex",alignItems:"center",justifyContent:"center",
+          fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1,flexShrink:0,
         }}>{idx+1}</div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1.5,color:"#fff",marginBottom:2}}>
             {exercise.name}
           </div>
-          <div style={{fontSize:12,color:"var(--muted)"}}>
-            {exercise.sets} × {exercise.reps}
-            {exercise.weight&&exercise.weight!=="bodyweight"?` · ${exercise.weight}`:""}
-            {exercise.weight==="bodyweight"?" · bodyweight":""}
-            {exercise.restSeconds?` · ${exercise.restSeconds}s rest`:""}
+          <div style={{fontSize:11,color:"var(--muted)",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+            <span>{exercise.sets} × {exercise.reps}</span>
+            {exercise.weight&&exercise.weight!=="bodyweight"&&<span>· {exercise.weight}</span>}
+            {exercise.weight==="bodyweight"&&<span>· bodyweight</span>}
+            {exercise.restSeconds&&<span>· {exercise.restSeconds}s rest</span>}
+            {muscleLabel&&(
+              <span style={{
+                padding:"1px 7px",borderRadius:10,fontSize:10,
+                background:"rgba(255,107,53,0.12)",
+                border:"1px solid rgba(255,107,53,0.25)",
+                color:"#ff6b35",
+              }}>{muscleLabel}</span>
+            )}
           </div>
         </div>
         <div style={{fontSize:18,color:"var(--muted)",transition:"transform .2s",transform:expanded?"rotate(180deg)":"rotate(0)"}}>▾</div>
@@ -3265,51 +3510,27 @@ function ExerciseCard({exercise, userName, experience, injuries, idx}){
       {expanded&&(
         <div style={{padding:"0 14px 14px",borderTop:"1px solid var(--border)"}}>
           {exercise.notes&&(
-            <div style={{
-              marginTop:12,padding:"8px 12px",
-              background:"rgba(255,107,53,0.08)",
-              border:"1px solid rgba(255,107,53,0.2)",
-              borderRadius:10,fontSize:12,color:"var(--orange)",
-            }}>
+            <div style={{marginTop:12,padding:"8px 12px",background:"rgba(255,107,53,0.08)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:10,fontSize:12,color:"var(--orange)"}}>
               💡 {exercise.notes}
             </div>
           )}
 
-          {/* GIF or YouTube fallback */}
-          <div style={{marginTop:12}}>
-            {gifUrl===undefined?(
-              <div style={{textAlign:"center",padding:20,color:"var(--muted)",fontSize:12}}>Loading visual...</div>
-            ):gifUrl?(
-              <img src={gifUrl} alt={exercise.name} style={{
-                width:"100%",maxHeight:240,objectFit:"contain",
-                borderRadius:10,background:"#000",
-              }} onError={()=>setGifUrl(null)}/>
-            ):(
-              <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name+" form")}`}
-                 target="_blank" rel="noreferrer"
-                 style={{
-                   display:"block",textAlign:"center",
-                   padding:"12px 14px",
-                   background:"rgba(255,0,0,0.08)",
-                   border:"1px solid rgba(255,0,0,0.2)",
-                   borderRadius:10,
-                   color:"#ff5555",fontSize:13,textDecoration:"none",
-                 }}>
-                ▶️ Watch on YouTube
-              </a>
-            )}
-          </div>
+          {/* SVG illustration — always works, no network, no music interruption */}
+          <div style={{
+            marginTop:12,padding:8,
+            background:"rgba(0,0,0,0.3)",
+            border:"1px solid var(--border)",
+            borderRadius:12,
+            display:"flex",justifyContent:"center",alignItems:"center",
+            minHeight:110,
+          }}
+            dangerouslySetInnerHTML={{__html:getExerciseSVG(exercise.name,exercise.primaryMuscle)}}
+          />
 
           {/* Form cues */}
           <div style={{marginTop:12}}>
-            {cuesLoading&&(
-              <div style={{textAlign:"center",padding:14,color:"var(--muted)",fontSize:12}}>
-                Writing form cues...
-              </div>
-            )}
-            {cuesError&&(
-              <div style={{padding:10,color:"var(--red)",fontSize:12,textAlign:"center"}}>{cuesError}</div>
-            )}
+            {cuesLoading&&<div style={{textAlign:"center",padding:14,color:"var(--muted)",fontSize:12}}>Writing form cues...</div>}
+            {cuesError&&<div style={{padding:10,color:"var(--red)",fontSize:12,textAlign:"center"}}>{cuesError}</div>}
             {cues&&(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {cues.setup&&(
@@ -3324,7 +3545,7 @@ function ExerciseCard({exercise, userName, experience, injuries, idx}){
                     <div style={{fontSize:13,color:"rgba(255,255,255,0.85)",lineHeight:1.5}}>{cues.execution}</div>
                   </div>
                 )}
-                {cues.commonMistakes&&cues.commonMistakes.length>0&&(
+                {cues.commonMistakes?.length>0&&(
                   <div>
                     <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--red)",marginBottom:4}}>AVOID</div>
                     <ul style={{margin:0,paddingLeft:18,fontSize:13,color:"rgba(255,255,255,0.75)",lineHeight:1.6}}>
