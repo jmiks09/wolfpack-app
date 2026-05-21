@@ -179,23 +179,24 @@ const AI_INJURIES = [
   "No overhead pressing","No deadlifts","No jumping","Hernia","Recovering from surgery",
 ];
 // Default equipment for the home gym (admin-editable per pack)
-const HOME_GYM_DEFAULT = {
-  bench:"Adjustable bench (flat/incline/decline)",
-  barbell:"Rogue 45 lb Olympic barbell + CAP 6ft bar",
-  plates:"2×45, 2×25, 4×10 lb (160 lbs total, max loaded 205 lbs)",
-  dumbbells:"Pairs up to 25 lbs",
-  rack:"Squat rack",
-  landmine:"Landmine attachment",
-  boxes:"Plyo boxes (12in, 24in)",
-};
+const HOME_GYM_DEFAULT = [
+  "Rogue 45 lb Olympic barbell",
+  "CAP 6ft bar with Olympic sleeve adapters",
+  "Plates: 2×45 lb, 2×25 lb, 4×10 lb (160 lbs total, max loaded barbell 205 lbs)",
+  "Adjustable bench (flat/incline/decline)",
+  "Dumbbells: pairs up to 25 lbs",
+  "Squat rack",
+  "Landmine attachment",
+  "Plyo boxes: 12 inch and 24 inch",
+];
 const AI_EQUIPMENT_PRESETS = [
-  {id:"home",       icon:"🏠", label:"Home Gym",      desc:"WOLFPACK garage setup"},
+  {id:"home",       icon:"🏠", label:"Garage Gym",    desc:"WOLFPACK home setup"},
   {id:"commercial", icon:"🏋️", label:"Commercial Gym",desc:"Full gym access"},
   {id:"travel",     icon:"✈️", label:"Travel/Hotel",  desc:"Limited dumbbells, basic"},
   {id:"bodyweight", icon:"🛋️", label:"Bodyweight",    desc:"No equipment at all"},
 ];
 const AI_PRESET_DESCRIPTIONS = {
-  home:"", // filled in from pack settings
+  home:"", // filled from Firestore pack settings — falls back to HOME_GYM_DEFAULT
   commercial:"Full commercial gym: barbells up to 45lb Olympic, plates to 100s of lbs, full dumbbell rack to 100+ lbs, adjustable benches, squat racks, leg press, hack squat, lat pulldown, cable machine, Smith machine, leg curl/extension, calf raise, hyperextension bench, dip station, pull-up bar, kettlebells, resistance bands.",
   travel:"Hotel/travel gym: dumbbells typically up to 50 lbs, treadmill, sometimes a cable machine or adjustable bench. Assume no barbell and no squat rack.",
   bodyweight:"No equipment whatsoever. Bodyweight exercises only.",
@@ -382,8 +383,15 @@ function buildEquipmentString(presetId, customEquipment, packHomeGym){
     return customEquipment;
   }
   if(presetId==="home"){
-    const hg=packHomeGym||HOME_GYM_DEFAULT;
-    return `Home gym: ${Object.values(hg).join(", ")}.`;
+    // packHomeGym comes from Firestore — array of strings
+    const items=Array.isArray(packHomeGym)&&packHomeGym.length>0
+      ? packHomeGym
+      : HOME_GYM_DEFAULT;
+    return `Garage gym equipment: ${items.join(", ")}.`;
+  }
+  // Check saved presets (saved_0, saved_1, etc.)
+  if(presetId.startsWith("saved_")){
+    return customEquipment||"Custom equipment.";
   }
   return AI_PRESET_DESCRIPTIONS[presetId]||AI_PRESET_DESCRIPTIONS.bodyweight;
 }
@@ -861,7 +869,7 @@ function Login({members,profiles,onLogin,adminName}){
 
 // ── ADMIN PANEL ───────────────────────────────────────────────────────────────
 // Reset PIN = clears their PIN from Firestore. They can log in freely until they set a new one.
-function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteAccount,onAdminBackfill,onClose}){
+function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteAccount,onAdminBackfill,onClose,garageEquipment,onSaveGarageEquipment}){
   const [confirmDel,setConfirmDel]=useState(null);
   const [busy,setBusy]=useState(null);
   const [resetDone,setResetDone]=useState([]);
@@ -870,6 +878,10 @@ function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteA
   const [backfillWorkouts,setBackfillWorkouts]=useState([]);
   const [backfillSaving,setBackfillSaving]=useState(false);
   const [backfillDone,setBackfillDone]=useState(false);
+  // Garage equipment editor state
+  const [equipList,setEquipList]=useState(Array.isArray(garageEquipment)?garageEquipment:[...HOME_GYM_DEFAULT]);
+  const [newItem,setNewItem]=useState("");
+  const [equipSaved,setEquipSaved]=useState(false);
 
   const backfillDates=Array.from({length:7},(_,i)=>{
     const d=new Date();d.setDate(d.getDate()-(i+1));
@@ -999,6 +1011,44 @@ function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteA
             )}
           </div>
         ))}
+        {/* ── GARAGE GYM EQUIPMENT ── */}
+        <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid var(--border)"}}>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--accent2)",marginBottom:4}}>🏠 GARAGE GYM EQUIPMENT</div>
+          <div style={{fontSize:11,color:"var(--muted)",marginBottom:10,lineHeight:1.5}}>
+            This list is what WOLFMODE uses when members pick "Garage Gym". Add or remove items as your setup changes.
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+            {equipList.map((item,i)=>(
+              <div key={i} style={{
+                display:"flex",alignItems:"center",gap:8,
+                padding:"8px 10px",background:"var(--bg3)",
+                border:"1px solid var(--border)",borderRadius:10,
+              }}>
+                <span style={{fontSize:13,color:"rgba(255,255,255,0.85)",flex:1}}>{item}</span>
+                <button onClick={()=>setEquipList(l=>l.filter((_,j)=>j!==i))} style={{
+                  background:"none",border:"none",cursor:"pointer",
+                  color:"var(--muted)",fontSize:16,padding:"0 4px",lineHeight:1,
+                }}>×</button>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:6,marginBottom:10}}>
+            <input className="input" placeholder="Add equipment (e.g. Cable machine)"
+              value={newItem} onChange={e=>setNewItem(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter"&&newItem.trim()){setEquipList(l=>[...l,newItem.trim()]);setNewItem("");setEquipSaved(false);}}}
+              style={{flex:1,padding:"8px 12px",fontSize:13}}/>
+            <button className="btn-ghost" onClick={()=>{if(newItem.trim()){setEquipList(l=>[...l,newItem.trim()]);setNewItem("");setEquipSaved(false);}}}
+              style={{padding:"8px 14px",fontSize:12,flexShrink:0}}>+ Add</button>
+          </div>
+          <button className="btn-primary" onClick={async()=>{
+            await onSaveGarageEquipment(equipList);
+            setEquipSaved(true);
+            setTimeout(()=>setEquipSaved(false),2000);
+          }} style={{width:"100%",marginBottom:8}}>
+            {equipSaved?"✓ SAVED":"SAVE EQUIPMENT LIST"}
+          </button>
+        </div>
+
         <button className="btn-ghost" style={{width:"100%",marginTop:8}} onClick={onClose}>Close</button>
       </div>
     </div>
@@ -3590,6 +3640,8 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
   const [muscleGroup,setMuscleGroup]=useState(null); // null = AI picks
   const [aiPickingMuscle,setAiPickingMuscle]=useState(false);
   const [aiMuscleReason,setAiMuscleReason]=useState("");
+  const [numExercises,setNumExercises]=useState(5);
+  const [setsPerExercise,setSetsPerExercise]=useState(4);
 
   const goal=profile?.aiTrainer?.goal;
   const experience=profile?.aiTrainer?.experience;
@@ -3645,8 +3697,10 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
       experience:experience||"intermediate",
       injuries:injuries||"None",
       equipment,
-      recentHistory:getRecentHistoryString(history,currentUser).split("|").slice(0,3).join("|"), // last 3 days only
+      recentHistory:getRecentHistoryString(history,currentUser).split("|").slice(0,3).join("|"),
       muscleGroup:muscleLabel,
+      numExercises,
+      setsPerExercise,
     });
     if(result.ok){
       setWorkout(result.workout);
@@ -3745,6 +3799,41 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
               </button>
             </div>
 
+            {/* ── WORKOUT VOLUME ── */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⚙️ WORKOUT VOLUME</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Exercises</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {[3,4,5].map(n=>(
+                      <button key={n} onClick={()=>setNumExercises(n)} style={{
+                        flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",
+                        background:numExercises===n?"rgba(255,107,53,0.2)":"var(--bg3)",
+                        border:numExercises===n?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",
+                        color:numExercises===n?"#ff6b35":"var(--muted)",
+                        fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1,
+                      }}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Sets each</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {[3,4].map(n=>(
+                      <button key={n} onClick={()=>setSetsPerExercise(n)} style={{
+                        flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",
+                        background:setsPerExercise===n?"rgba(255,107,53,0.2)":"var(--bg3)",
+                        border:setsPerExercise===n?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",
+                        color:setsPerExercise===n?"#ff6b35":"var(--muted)",
+                        fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1,
+                      }}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* ── EQUIPMENT ── */}
             <div style={{marginBottom:14}}>
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🏠 WHERE ARE YOU TRAINING?</div>
@@ -3821,7 +3910,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
               <div style={{fontSize:22}}>🔥</div>
               <div style={{flex:1}}>
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:2,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.1}}>{workout.title}</div>
-                <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>~{workout.estimatedMinutes} min · {workout.exercises.length} exercises</div>
+                <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>~{workout.estimatedMinutes} min · {workout.exercises?.length||numExercises} exercises · {setsPerExercise} sets each</div>
               </div>
             </div>
             {workout.reasoning&&(
@@ -4141,6 +4230,7 @@ export default function App(){
   const [profileOpen,setProfileOpen]=useState(false);
   const [lastSeen,setLastSeen]=useState({feed:0,challenges:0,gym:0});
   const [packGoals,setPackGoals]=useState([]);
+  const [garageEquipment,setGarageEquipment]=useState(HOME_GYM_DEFAULT);
   const [reactions,setReactions]=useState({});
   const [editWorkout,setEditWorkout]=useState(null);
   const [weeklyRecap,setWeeklyRecap]=useState(null);
@@ -4160,6 +4250,7 @@ export default function App(){
       const u4=fsListen("wolfpack/challenges",d=>{if(d)setChallenges(d.list||[]);});
       const u5=fsListen("wolfpack/gym",d=>{if(d)setGymSlots(d.slots||[]);});
       const u6=fsListen("wolfpack/packgoals",d=>{if(d)setPackGoals(d.list||[]);});
+      const u8=fsListen("wolfpack/settings",d=>{if(d?.garageEquipment)setGarageEquipment(d.garageEquipment);});
       const u7=fsListen("wolfpack/reactions",d=>{if(d)setReactions(d.data||{});});
       unsubs.current=[u1,u2,u3,u4,u5,u6,u7];
       const ad=await fsGet("wolfpack/admin");if(ad?.name)setAdminName(ad.name);
@@ -4614,12 +4705,12 @@ export default function App(){
         })}
       </nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
-      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={null} onClose={()=>{setAiTrainerOpen(false);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={handleLogAIWorkout} showToast={showToast}/>}
+      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={handleLogAIWorkout} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)}/>}
       {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={(effortId)=>{setPendingEffortRating(null);showToast(`${EFFORT_RATINGS.find(r=>r.id===effortId)?.emoji} Got it — WOLFMODE will adjust next time!`);}} onClose={()=>setPendingEffortRating(null)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
-      {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)}/>}
+      {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet("wolfpack/settings",{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
     </div>
   );
 }
