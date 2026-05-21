@@ -3515,17 +3515,24 @@ function ExerciseCard({exercise, userName, experience, injuries, idx}){
             </div>
           )}
 
-          {/* SVG illustration — always works, no network, no music interruption */}
-          <div style={{
-            marginTop:12,padding:8,
-            background:"rgba(0,0,0,0.3)",
-            border:"1px solid var(--border)",
-            borderRadius:12,
-            display:"flex",justifyContent:"center",alignItems:"center",
-            minHeight:110,
-          }}
-            dangerouslySetInnerHTML={{__html:getExerciseSVG(exercise.name,exercise.primaryMuscle)}}
-          />
+          {/* YouTube form guide — opens in external browser so music keeps playing */}
+          <a
+            href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name+" exercise form")}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display:"flex",alignItems:"center",gap:10,
+              marginTop:12,padding:"10px 14px",
+              background:"rgba(255,0,0,0.06)",
+              border:"1px solid rgba(255,0,0,0.15)",
+              borderRadius:10,textDecoration:"none",
+            }}>
+            <span style={{fontSize:20}}>▶️</span>
+            <div>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1.5,color:"#ff5555"}}>WATCH FORM GUIDE</div>
+              <div style={{fontSize:10,color:"var(--muted)"}}>{exercise.name} · opens in browser</div>
+            </div>
+          </a>
 
           {/* Form cues */}
           <div style={{marginTop:12}}>
@@ -3579,12 +3586,10 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
   const [error,setError]=useState(null);
   const [regenCount,setRegenCount]=useState(getRegenCount(currentUser));
 
-  // Muscle group + structure state
+  // Muscle group state
   const [muscleGroup,setMuscleGroup]=useState(null); // null = AI picks
   const [aiPickingMuscle,setAiPickingMuscle]=useState(false);
   const [aiMuscleReason,setAiMuscleReason]=useState("");
-  const [numExercises,setNumExercises]=useState(5);
-  const [setsPerExercise,setSetsPerExercise]=useState(4);
 
   const goal=profile?.aiTrainer?.goal;
   const experience=profile?.aiTrainer?.experience;
@@ -3628,21 +3633,20 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     const muscleLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label:"AI's choice based on history";
     const secondaryGoal=profile?.aiTrainer?.secondaryGoal;
     const secondaryLabel=secondaryGoal?AI_SECONDARY_GOALS.find(s=>s.id===secondaryGoal)?.label:null;
-    // Fetch prior weight/effort history for this user
-    const trainingLog=await getTrainingLog(currentUser);
-    const priorPerformance=buildPriorPerformanceString(trainingLog,muscleLabel);
+    // Build a single clean goal string — fold bulk/cut and secondary goal in here
+    const fullGoal=[
+      goalLabel,
+      bulkCut?`(${bulkCut==="bulk"?"bulking":bulkCut==="cut"?"cutting":"maintaining"})`:null,
+      secondaryLabel?`+ ${secondaryLabel}`:null,
+    ].filter(Boolean).join(" ");
     const result=await aiGenerateWorkout({
       userName:currentUser,
-      goal:goalLabel+(bulkCut?` (currently ${bulkCut==="bulk"?"bulking":bulkCut==="cut"?"cutting":"maintaining"})`:""),
-      secondaryGoal:secondaryLabel||null,
+      goal:fullGoal,
       experience:experience||"intermediate",
       injuries:injuries||"None",
       equipment,
-      recentHistory:getRecentHistoryString(history,currentUser),
+      recentHistory:getRecentHistoryString(history,currentUser).split("|").slice(0,3).join("|"), // last 3 days only
       muscleGroup:muscleLabel,
-      numExercises,
-      setsPerExercise,
-      priorPerformance,
     });
     if(result.ok){
       setWorkout(result.workout);
@@ -3741,44 +3745,6 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
               </button>
             </div>
 
-            {/* ── WORKOUT STRUCTURE ── */}
-            <div style={{marginBottom:14}}>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⚙️ WORKOUT STRUCTURE</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div>
-                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Exercises</div>
-                  <div style={{display:"flex",gap:4}}>
-                    {[3,4,5,6].map(n=>(
-                      <button key={n} onClick={()=>setNumExercises(n)} style={{
-                        flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",
-                        background:numExercises===n?"rgba(255,107,53,0.2)":"var(--bg3)",
-                        border:numExercises===n?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",
-                        color:numExercises===n?"#ff6b35":"var(--muted)",
-                        fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1,
-                      }}>{n}</button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Sets each</div>
-                  <div style={{display:"flex",gap:4}}>
-                    {[2,3,4,5].map(n=>(
-                      <button key={n} onClick={()=>setSetsPerExercise(n)} style={{
-                        flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",
-                        background:setsPerExercise===n?"rgba(255,107,53,0.2)":"var(--bg3)",
-                        border:setsPerExercise===n?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",
-                        color:setsPerExercise===n?"#ff6b35":"var(--muted)",
-                        fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1,
-                      }}>{n}</button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div style={{fontSize:10,color:"var(--muted)",marginTop:6,textAlign:"center"}}>
-                AI picks exercises + reps. You set the volume.
-              </div>
-            </div>
-
             {/* ── EQUIPMENT ── */}
             <div style={{marginBottom:14}}>
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🏠 WHERE ARE YOU TRAINING?</div>
@@ -3855,7 +3821,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
               <div style={{fontSize:22}}>🔥</div>
               <div style={{flex:1}}>
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:2,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.1}}>{workout.title}</div>
-                <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>~{workout.estimatedMinutes} min · {workout.exercises.length} exercises · {setsPerExercise} sets each</div>
+                <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>~{workout.estimatedMinutes} min · {workout.exercises.length} exercises</div>
               </div>
             </div>
             {workout.reasoning&&(
