@@ -49,27 +49,38 @@ function parseJSON(text) {
 }
 
 // ── generateWorkout ──────────────────────────────────────────────────────────
-// Lean prompt — 5 rules only so Haiku can focus on what matters
 exports.generateWorkout = onCall({secrets: [ANTHROPIC_API_KEY], cors: true}, async (request) => {
   const {userName, goal, experience, injuries, equipment, recentHistory, muscleGroup} = request.data || {};
   await checkRateLimit(userName, "workouts", MAX_WORKOUTS_PER_DAY);
 
   const hasMuscleTarget = muscleGroup && muscleGroup !== "AI's choice based on history";
 
-  const sys = `You are a personal trainer. Build a workout and return JSON only.
+  // CRITICAL SEPARATION:
+  // muscleGroup = which muscles to train (chosen by user TODAY — always wins)
+  // goal = how to train them (rep ranges, intensity, weight style)
+  // These are separate concerns. The goal NEVER changes which muscle group is trained.
+  const muscleInstruction = hasMuscleTarget
+    ? `TODAY'S TARGET MUSCLE: ${muscleGroup.toUpperCase()}. Every single exercise must target ${muscleGroup}. This overrides everything else.`
+    : `Choose the muscle group least trained recently: ${recentHistory||"no history — pick any"}.`;
 
-RULE 1 — MUSCLE: ${hasMuscleTarget
-    ? `Every exercise MUST target ${muscleGroup}. No other muscle groups.`
-    : `Pick the muscle group least trained recently.`}
-RULE 2 — EQUIPMENT: Only use exercises possible with: ${equipment}
-RULE 3 — GOAL: ${goal}. Match rep ranges and intensity to this goal.
-RULE 4 — INJURIES: Never suggest exercises that aggravate: ${injuries||"none"}
-RULE 5 — OUTPUT: Return ONLY this JSON, no other text:
+  const sys = `You are a personal trainer building a single-muscle workout.
+
+${muscleInstruction}
+
+RULES (in priority order):
+1. MUSCLE FOCUS: All exercises target ${hasMuscleTarget ? muscleGroup : "the chosen muscle group"} only.
+2. EQUIPMENT: Only use exercises possible with available equipment.
+3. TRAINING STYLE: Use ${goal} to decide rep ranges and weight intensity only — not which muscles to train.
+4. INJURIES: Skip any exercise that aggravates: ${injuries||"none"}.
+5. Return ONLY valid JSON, no other text.`;
+
+  const usr = `Athlete: ${userName}
+Experience: ${experience||"intermediate"}
+Available equipment: ${equipment}
+Recent training (last 3 days): ${recentHistory||"none"}
+
+Return this JSON with 4-6 exercises, all targeting ${hasMuscleTarget ? muscleGroup : "the chosen muscle group"}:
 {"title":"","reasoning":"","estimatedMinutes":0,"exercises":[{"name":"","sets":0,"reps":"","weight":"","restSeconds":0,"primaryMuscle":"${hasMuscleTarget?muscleGroup:""}","notes":""}]}`;
-
-  const usr = `Athlete: ${userName}, experience: ${experience||"intermediate"}
-Recent training: ${recentHistory||"none"}
-Build the workout now.`;
 
   const workout = parseJSON(await callClaude(sys, usr, ANTHROPIC_API_KEY.value()));
   return {workout};
