@@ -693,6 +693,66 @@ function bumpRegenCount(userName){
   }catch{return 0;}
 }
 
+// ── ACTIVE WORKOUT HELPERS (localStorage, Central time) ─────────────────────
+// Central time date string (CDT = UTC-5)
+function centralDateStr(offsetDays=0){
+  const now=new Date();
+  const central=new Date(now.getTime()+(-5*60*60*1000));
+  if(offsetDays){central.setDate(central.getDate()+offsetDays);}
+  return central.toISOString().slice(0,10);
+}
+
+// Save an active workout plan to localStorage
+// targetDate: "today" | "tomorrow"
+function saveActiveWorkout(userName, workout, muscleGroup, targetDate="today"){
+  try{
+    const date=targetDate==="tomorrow"?centralDateStr(1):centralDateStr(0);
+    const key=`wp_active_${userName}_${date}`;
+    const data={workout,muscleGroup,date,savedAt:Date.now(),completed:false};
+    localStorage.setItem(key,JSON.stringify(data));
+    return true;
+  }catch{return false;}
+}
+
+// Get active workout for a specific date
+function getActiveWorkout(userName, targetDate="today"){
+  try{
+    const date=targetDate==="tomorrow"?centralDateStr(1):centralDateStr(0);
+    const key=`wp_active_${userName}_${date}`;
+    const raw=localStorage.getItem(key);
+    if(!raw)return null;
+    const data=JSON.parse(raw);
+    // Auto-clear if the date has passed
+    if(data.date<centralDateStr(0)){
+      localStorage.removeItem(key);
+      return null;
+    }
+    return data;
+  }catch{return null;}
+}
+
+// Mark active workout as completed
+function markActiveWorkoutComplete(userName, targetDate="today"){
+  try{
+    const date=targetDate==="tomorrow"?centralDateStr(1):centralDateStr(0);
+    const key=`wp_active_${userName}_${date}`;
+    const raw=localStorage.getItem(key);
+    if(!raw)return;
+    const data=JSON.parse(raw);
+    data.completed=true;
+    localStorage.setItem(key,JSON.stringify(data));
+  }catch{}
+}
+
+// Dismiss (delete) active workout
+function dismissActiveWorkout(userName, targetDate="today"){
+  try{
+    const date=targetDate==="tomorrow"?centralDateStr(1):centralDateStr(0);
+    const key=`wp_active_${userName}_${date}`;
+    localStorage.removeItem(key);
+  }catch{}
+}
+
 // ── TRAINING LOG HELPERS ────────────────────────────────────────────────────
 // Key: wolfpack/training_log  →  {users: {userName: {exercises: {exerciseName: {lastWeight, lastReps, effortHistory: [{date,weight,reps,effort}]}}}}}
 
@@ -3709,11 +3769,12 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     }
   };
 
-  const handleUseWorkout=()=>{
+  const handlePlanWorkout=(targetDate)=>{
     if(!workout)return;
-    const summary=workout.exercises.map(e=>`${e.name}: ${e.sets}×${e.reps}${e.weight&&e.weight!=="bodyweight"?` @ ${e.weight}`:""}`).join(" + ");
-    const note=`WOLFMODE: ${workout.title}`;
-    onUseWorkout({summary,note,minutes:workout.estimatedMinutes,exercises:workout.exercises,muscleGroup:muscleGroup||"fullbody"});
+    saveActiveWorkout(currentUser, workout, muscleGroup||"fullbody", targetDate);
+    showToast(targetDate==="tomorrow"
+      ?"📋 Planned for tomorrow! It'll be waiting for you."
+      :"🔥 Workout saved! Tap it on the Pack tab when you're ready.");
     onClose();
   };
 
@@ -3884,11 +3945,25 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
               <ExerciseCard key={i} exercise={ex} userName={currentUser} experience={experience} injuries={injuries} idx={i}/>
             ))}
             <div style={{display:"flex",gap:8,marginTop:12}}>
-              <button className="btn-primary" onClick={handleUseWorkout} style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>USE THIS WORKOUT</button>
+              <button className="btn-primary" onClick={()=>handlePlanWorkout("today")}
+                style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+                🔥 TRAIN TODAY
+              </button>
               <button className="btn-ghost" onClick={()=>generate(true)} disabled={regenCount>=MAX_DAILY_REGENS} style={{flex:"0 0 auto",padding:"0 14px"}}>
                 🔄 ({MAX_DAILY_REGENS-regenCount})
               </button>
             </div>
+            <button onClick={()=>handlePlanWorkout("tomorrow")}
+              style={{
+                width:"100%",marginTop:8,padding:"10px",
+                background:"rgba(124,92,191,0.1)",
+                border:"1px solid rgba(124,92,191,0.3)",
+                borderRadius:12,cursor:"pointer",
+                color:"var(--accent2)",fontSize:12,
+                fontFamily:"'Bebas Neue',cursive",letterSpacing:2,
+              }}>
+              📋 PLAN FOR TOMORROW
+            </button>
             <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:6}}>
               {regenCount>=MAX_DAILY_REGENS?"No more regens today.":`${MAX_DAILY_REGENS-regenCount} regens left today`}
             </div>
@@ -4059,6 +4134,119 @@ function WeightLogModal({exercises, effortId, currentUser, onSave, onSkip, onClo
   );
 }
 
+// ── ACTIVE WORKOUT CARD ──────────────────────────────────────────────────────
+// Shows on Pack tab — persists all day via localStorage, clears at midnight Central
+function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, userName, experience, injuries}){
+  const data=getActiveWorkout(currentUser, targetDate);
+  const [expanded,setExpanded]=useState(true);
+
+  if(!data)return null;
+
+  const {workout,muscleGroup,completed}=data;
+  const isToday=targetDate==="today";
+  const mgObj=AI_MUSCLE_GROUPS?.find(m=>m.id===muscleGroup);
+
+  return(
+    <div style={{
+      margin:"0 16px 10px",
+      background:isToday
+        ?"linear-gradient(135deg, rgba(255,107,53,0.12), rgba(124,92,191,0.08))"
+        :"rgba(124,92,191,0.06)",
+      border:isToday?"1px solid rgba(255,107,53,0.35)":"1px solid rgba(124,92,191,0.25)",
+      borderRadius:16,
+      overflow:"hidden",
+    }}>
+      {/* Header */}
+      <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:10}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{
+            fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,
+            color:isToday?"#ff6b35":"var(--accent2)",marginBottom:2,
+          }}>
+            {isToday?"🔥 TODAY'S WORKOUT":"📋 TOMORROW'S PLAN"}
+          </div>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:17,letterSpacing:1.5,color:"#fff",lineHeight:1.1}}>
+            {workout.title}
+          </div>
+          <div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>
+            ~{workout.estimatedMinutes} min · {workout.exercises?.length} exercises
+            {mgObj?` · ${mgObj.label}`:""}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+          {completed&&(
+            <span style={{
+              padding:"3px 10px",borderRadius:20,fontSize:10,
+              background:"rgba(46,204,113,0.15)",border:"1px solid var(--green)",
+              color:"var(--green)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1,
+            }}>✓ DONE</span>
+          )}
+          <button onClick={()=>setExpanded(e=>!e)} style={{
+            background:"none",border:"none",cursor:"pointer",
+            color:"var(--muted)",fontSize:18,padding:"0 4px",
+            transition:"transform .2s",transform:expanded?"rotate(180deg)":"rotate(0)",
+          }}>▾</button>
+          <button onClick={()=>onDismiss(targetDate)} style={{
+            background:"none",border:"none",cursor:"pointer",
+            color:"var(--muted)",fontSize:20,padding:"0 4px",lineHeight:1,
+          }}>×</button>
+        </div>
+      </div>
+
+      {/* Exercise list */}
+      {expanded&&(
+        <div style={{padding:"0 14px 14px"}}>
+          <div style={{
+            padding:"8px 12px",marginBottom:10,
+            background:"rgba(0,0,0,0.2)",borderRadius:10,
+            fontSize:12,color:"rgba(255,255,255,0.7)",lineHeight:1.5,fontStyle:"italic",
+          }}>
+            💭 {workout.reasoning}
+          </div>
+
+          {workout.exercises?.map((ex,i)=>(
+            <ExerciseCard
+              key={i}
+              exercise={ex}
+              userName={userName}
+              experience={experience}
+              injuries={injuries}
+              idx={i}
+            />
+          ))}
+
+          {/* Mark complete button — only for today, only if not done */}
+          {isToday&&!completed&&(
+            <button className="btn-primary" onClick={()=>onComplete(data)}
+              style={{
+                width:"100%",marginTop:8,
+                background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none",
+              }}>
+              ✓ MARK COMPLETE
+            </button>
+          )}
+          {isToday&&completed&&(
+            <div style={{
+              textAlign:"center",padding:"10px",
+              fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,
+              color:"var(--green)",
+            }}>
+              ✓ CRUSHED IT TODAY 🐺
+            </div>
+          )}
+          {!isToday&&(
+            <div style={{
+              textAlign:"center",padding:"8px",fontSize:11,color:"var(--muted)",
+            }}>
+              This becomes today's workout at midnight Central
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WorkoutModal({onClose,onSubmit,loading}){
   const [selected,setSelected]=useState([]);
   const [details,setDetails]=useState({}); // {workoutId: {sets,reps,weight,duration,distance,...}}
@@ -4199,6 +4387,7 @@ export default function App(){
   const [aiTrainerOpen,setAiTrainerOpen]=useState(false);
   const [nutritionOpen,setNutritionOpen]=useState(false);
   const [pendingEffortRating,setPendingEffortRating]=useState(null);
+  const [activeWorkoutRefresh,setActiveWorkoutRefresh]=useState(0); // bump to re-render cards
   const [toast,setToast]=useState("");
   const unsubs=useRef([]);const tt=useRef(null);
   const showToast=useCallback(msg=>{setToast(msg);clearTimeout(tt.current);tt.current=setTimeout(()=>setToast(""),3000);},[]);
@@ -4484,10 +4673,8 @@ export default function App(){
     await fsSet("wolfpack/workouts",{byDate:newData});
     setLoggingWorkout(false);
     launchConfetti();
-    showToast(`🔥 WOLFMODE logged! Rate it when you're done! 🐺`);
+    showToast(`🔥 WOLFMODE logged! 🐺`);
     await checkMilestones(newData);
-    // Show effort rating prompt after a short delay
-    setPendingEffortRating({exercises:exercises||[],date:key,muscleGroup:muscleGroup||"fullbody"});
   };
 
   const handlePost=async(t,photo)=>{
@@ -4627,7 +4814,51 @@ export default function App(){
         </div>
       </div>
       <div className="scroll">
-        {view==="pack"&&<PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>}
+        {view==="pack"&&(
+          <>
+            {/* Active workout cards — show above everything when present */}
+            <ActiveWorkoutCard
+              key={`today-${activeWorkoutRefresh}`}
+              currentUser={currentUser}
+              targetDate="today"
+              userName={currentUser}
+              experience={profiles[currentUser]?.aiTrainer?.experience}
+              injuries={(profiles[currentUser]?.aiTrainer?.injuries||[]).join(", ")}
+              onComplete={(data)=>{
+                markActiveWorkoutComplete(currentUser,"today");
+                setActiveWorkoutRefresh(r=>r+1);
+                // Log the workout
+                handleLogAIWorkout({
+                  summary:data.workout.exercises.map(e=>`${e.name}: ${e.sets}×${e.reps}${e.weight&&e.weight!=="bodyweight"?` @ ${e.weight}`:""}`).join(" + "),
+                  note:`WOLFMODE: ${data.workout.title}`,
+                  minutes:data.workout.estimatedMinutes,
+                  exercises:data.workout.exercises,
+                  muscleGroup:data.muscleGroup,
+                });
+                // Show effort rating after completing
+                setPendingEffortRating({exercises:data.workout.exercises,muscleGroup:data.muscleGroup});
+              }}
+              onDismiss={(targetDate)=>{
+                dismissActiveWorkout(currentUser,targetDate);
+                setActiveWorkoutRefresh(r=>r+1);
+              }}
+            />
+            <ActiveWorkoutCard
+              key={`tomorrow-${activeWorkoutRefresh}`}
+              currentUser={currentUser}
+              targetDate="tomorrow"
+              userName={currentUser}
+              experience={profiles[currentUser]?.aiTrainer?.experience}
+              injuries={(profiles[currentUser]?.aiTrainer?.injuries||[]).join(", ")}
+              onComplete={()=>{}}
+              onDismiss={(targetDate)=>{
+                dismissActiveWorkout(currentUser,targetDate);
+                setActiveWorkoutRefresh(r=>r+1);
+              }}
+            />
+            <PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
+          </>
+        )}
         {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost} onComment={handleComment} onDeleteComment={handleDeleteComment}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
         {view==="challenges"&&<ChallengesTab currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)} onMarkPaid={handleMarkPaid} onLogPayment={handleLogPayment}/>}
@@ -4667,7 +4898,7 @@ export default function App(){
         })}
       </nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
-      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={handleLogAIWorkout} showToast={showToast}/>}
+      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)}/>}
       {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={(effortId)=>{setPendingEffortRating(null);showToast(`${EFFORT_RATINGS.find(r=>r.id===effortId)?.emoji} Got it — WOLFMODE will adjust next time!`);}} onClose={()=>setPendingEffortRating(null)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
