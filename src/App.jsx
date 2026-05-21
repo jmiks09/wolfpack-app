@@ -4138,7 +4138,7 @@ function WeightLogModal({exercises, effortId, currentUser, onSave, onSkip, onClo
 // Shows on Pack tab — persists all day via localStorage, clears at midnight Central
 function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, userName, experience, injuries}){
   const [data,setData]=useState(()=>getActiveWorkout(currentUser, targetDate));
-  const [expanded,setExpanded]=useState(true);
+  const [expanded,setExpanded]=useState(false);
 
   // Re-check localStorage whenever the card mounts or key props change
   useEffect(()=>{
@@ -4161,8 +4161,8 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
       borderRadius:16,
       overflow:"hidden",
     }}>
-      {/* Header */}
-      <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:10}}>
+      {/* Header — tap anywhere to expand */}
+      <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setExpanded(e=>!e)}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{
             fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,
@@ -4186,12 +4186,12 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
               color:"var(--green)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1,
             }}>✓ DONE</span>
           )}
-          <button onClick={()=>setExpanded(e=>!e)} style={{
+          <button onClick={e=>{e.stopPropagation();setExpanded(ex=>!ex);}} style={{
             background:"none",border:"none",cursor:"pointer",
             color:"var(--muted)",fontSize:18,padding:"0 4px",
             transition:"transform .2s",transform:expanded?"rotate(180deg)":"rotate(0)",
           }}>▾</button>
-          <button onClick={()=>{onDismiss(targetDate);setData(null);}} style={{
+          <button onClick={e=>{e.stopPropagation();onDismiss(targetDate);setData(null);}} style={{
             background:"none",border:"none",cursor:"pointer",
             color:"var(--muted)",fontSize:20,padding:"0 4px",lineHeight:1,
           }}>×</button>
