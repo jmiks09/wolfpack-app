@@ -3573,6 +3573,163 @@ function CoachPlanModal({currentUser, profile, coach, onPlanGenerated, onClose})
   );
 }
 
+// ── MUSCLE ANATOMY DIAGRAM ───────────────────────────────────────────────────
+// Front + back body silhouette with muscle groups as SVG paths.
+// Primary muscle = bright orange. Secondary = dim highlight.
+
+const MUSCLE_MAP = {
+  // Maps primaryMuscle string → {front:[ids], back:[ids], secondary:[ids]}
+  chest:        {front:["chest"],       back:[],              secondary:["front-delt","triceps"]},
+  pecs:         {front:["chest"],       back:[],              secondary:["front-delt","triceps"]},
+  back:         {front:[],              back:["lats","traps"], secondary:["biceps","rear-delt"]},
+  lats:         {front:[],              back:["lats"],         secondary:["biceps","rear-delt"]},
+  traps:        {front:[],              back:["traps"],        secondary:["rear-delt"]},
+  shoulders:    {front:["front-delt"],  back:["rear-delt"],    secondary:["traps","chest"]},
+  delts:        {front:["front-delt"],  back:["rear-delt"],    secondary:["traps"]},
+  biceps:       {front:["biceps"],      back:[],              secondary:["forearms"]},
+  triceps:      {front:[],              back:["triceps"],      secondary:[]},
+  arms:         {front:["biceps"],      back:["triceps"],      secondary:["forearms"]},
+  forearms:     {front:["forearms"],    back:[],              secondary:[]},
+  abs:          {front:["abs"],         back:[],              secondary:["obliques"]},
+  core:         {front:["abs","obliques"],back:[],            secondary:[]},
+  obliques:     {front:["obliques"],    back:[],              secondary:["abs"]},
+  quads:        {front:["quads"],       back:[],              secondary:["glutes"]},
+  hamstrings:   {front:[],             back:["hamstrings"],   secondary:["glutes","calves"]},
+  glutes:       {front:[],             back:["glutes"],       secondary:["hamstrings"]},
+  calves:       {front:[],             back:["calves"],       secondary:[]},
+  legs:         {front:["quads"],      back:["hamstrings","glutes"], secondary:["calves"]},
+  "full body":  {front:["chest","abs","quads","biceps"],back:["lats","glutes","hamstrings"],secondary:[]},
+  fullbody:     {front:["chest","abs","quads","biceps"],back:["lats","glutes","hamstrings"],secondary:[]},
+};
+
+function getMuscleMapping(primaryMuscle){
+  if(!primaryMuscle)return {front:[],back:[],secondary:[]};
+  const key=primaryMuscle.toLowerCase().trim();
+  return MUSCLE_MAP[key]||{front:[key],back:[],secondary:[]};
+}
+
+function AnatomyDiagram({primaryMuscle}){
+  const mapping=getMuscleMapping(primaryMuscle);
+  const allPrimary=[...mapping.front,...mapping.back];
+  const secondary=mapping.secondary||[];
+
+  const getFill=(muscleId, view)=>{
+    const relevantPrimary=view==="front"?mapping.front:mapping.back;
+    if(relevantPrimary.includes(muscleId)) return "#ff6b35"; // primary — orange
+    if(secondary.includes(muscleId)) return "rgba(255,107,53,0.3)"; // secondary — dim
+    return "rgba(255,255,255,0.06)"; // inactive
+  };
+  const getOpacity=(muscleId, view)=>{
+    const relevantPrimary=view==="front"?mapping.front:mapping.back;
+    if(relevantPrimary.includes(muscleId)) return 1;
+    if(secondary.includes(muscleId)) return 0.6;
+    return 1;
+  };
+
+  const FrontBody=()=>(
+    <svg viewBox="0 0 100 220" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",maxWidth:90}}>
+      {/* Body outline */}
+      <ellipse cx="50" cy="18" rx="12" ry="13" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.2)" strokeWidth="0.8"/>
+      {/* Neck */}
+      <rect x="44" y="28" width="12" height="8" rx="3" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.15)" strokeWidth="0.8"/>
+      {/* Shoulders */}
+      <ellipse id="front-delt-l" cx="30" cy="42" rx="9" ry="7" fill={getFill("front-delt","front")} opacity={getOpacity("front-delt","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <ellipse id="front-delt-r" cx="70" cy="42" rx="9" ry="7" fill={getFill("front-delt","front")} opacity={getOpacity("front-delt","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Chest */}
+      <path id="chest-l" d="M38,36 Q50,34 50,48 Q44,52 36,48 Z" fill={getFill("chest","front")} opacity={getOpacity("chest","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <path id="chest-r" d="M62,36 Q50,34 50,48 Q56,52 64,48 Z" fill={getFill("chest","front")} opacity={getOpacity("chest","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Biceps */}
+      <ellipse id="biceps-l" cx="24" cy="62" rx="6" ry="10" fill={getFill("biceps","front")} opacity={getOpacity("biceps","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <ellipse id="biceps-r" cx="76" cy="62" rx="6" ry="10" fill={getFill("biceps","front")} opacity={getOpacity("biceps","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Forearms */}
+      <ellipse id="forearms-l" cx="20" cy="84" rx="5" ry="10" fill={getFill("forearms","front")} opacity={getOpacity("forearms","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <ellipse id="forearms-r" cx="80" cy="84" rx="5" ry="10" fill={getFill("forearms","front")} opacity={getOpacity("forearms","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Abs */}
+      <rect id="abs" x="41" y="52" width="18" height="26" rx="4" fill={getFill("abs","front")} opacity={getOpacity("abs","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Obliques */}
+      <path id="obliques-l" d="M36,52 Q40,52 41,58 Q38,68 36,72 Q32,68 33,58 Z" fill={getFill("obliques","front")} opacity={getOpacity("obliques","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <path id="obliques-r" d="M64,52 Q60,52 59,58 Q62,68 64,72 Q68,68 67,58 Z" fill={getFill("obliques","front")} opacity={getOpacity("obliques","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Quads */}
+      <ellipse id="quads-l" cx="40" cy="110" rx="9" ry="22" fill={getFill("quads","front")} opacity={getOpacity("quads","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <ellipse id="quads-r" cx="60" cy="110" rx="9" ry="22" fill={getFill("quads","front")} opacity={getOpacity("quads","front")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Knees */}
+      <ellipse cx="40" cy="136" rx="7" ry="5" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5"/>
+      <ellipse cx="60" cy="136" rx="7" ry="5" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5"/>
+      {/* Calves front */}
+      <ellipse cx="40" cy="162" rx="7" ry="16" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <ellipse cx="60" cy="162" rx="7" ry="16" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Feet */}
+      <ellipse cx="40" cy="182" rx="8" ry="5" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5"/>
+      <ellipse cx="60" cy="182" rx="8" ry="5" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5"/>
+      {/* Label */}
+      <text x="50" y="200" textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="7" fontFamily="sans-serif">FRONT</text>
+    </svg>
+  );
+
+  const BackBody=()=>(
+    <svg viewBox="0 0 100 220" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",maxWidth:90}}>
+      {/* Head */}
+      <ellipse cx="50" cy="18" rx="12" ry="13" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.2)" strokeWidth="0.8"/>
+      {/* Neck */}
+      <rect x="44" y="28" width="12" height="8" rx="3" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.15)" strokeWidth="0.8"/>
+      {/* Traps */}
+      <path id="traps" d="M38,34 Q50,30 62,34 Q58,44 50,46 Q42,44 38,34 Z" fill={getFill("traps","back")} opacity={getOpacity("traps","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Rear delts */}
+      <ellipse id="rear-delt-l" cx="30" cy="42" rx="9" ry="7" fill={getFill("rear-delt","back")} opacity={getOpacity("rear-delt","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <ellipse id="rear-delt-r" cx="70" cy="42" rx="9" ry="7" fill={getFill("rear-delt","back")} opacity={getOpacity("rear-delt","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Lats */}
+      <path id="lats-l" d="M36,42 Q38,44 39,78 Q36,80 32,72 Q28,60 30,48 Z" fill={getFill("lats","back")} opacity={getOpacity("lats","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <path id="lats-r" d="M64,42 Q62,44 61,78 Q64,80 68,72 Q72,60 70,48 Z" fill={getFill("lats","back")} opacity={getOpacity("lats","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Triceps */}
+      <ellipse id="triceps-l" cx="24" cy="62" rx="6" ry="10" fill={getFill("triceps","back")} opacity={getOpacity("triceps","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <ellipse id="triceps-r" cx="76" cy="62" rx="6" ry="10" fill={getFill("triceps","back")} opacity={getOpacity("triceps","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Lower back */}
+      <rect x="40" y="72" width="20" height="16" rx="3" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Glutes */}
+      <ellipse id="glutes-l" cx="41" cy="96" rx="10" ry="11" fill={getFill("glutes","back")} opacity={getOpacity("glutes","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <ellipse id="glutes-r" cx="59" cy="96" rx="10" ry="11" fill={getFill("glutes","back")} opacity={getOpacity("glutes","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Hamstrings */}
+      <ellipse id="hamstrings-l" cx="40" cy="122" rx="9" ry="18" fill={getFill("hamstrings","back")} opacity={getOpacity("hamstrings","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <ellipse id="hamstrings-r" cx="60" cy="122" rx="9" ry="18" fill={getFill("hamstrings","back")} opacity={getOpacity("hamstrings","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Calves */}
+      <ellipse id="calves-l" cx="40" cy="158" rx="7" ry="15" fill={getFill("calves","back")} opacity={getOpacity("calves","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      <ellipse id="calves-r" cx="60" cy="158" rx="7" ry="15" fill={getFill("calves","back")} opacity={getOpacity("calves","back")} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+      {/* Feet */}
+      <ellipse cx="40" cy="178" rx="8" ry="5" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5"/>
+      <ellipse cx="60" cy="178" rx="8" ry="5" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5"/>
+      {/* Label */}
+      <text x="50" y="196" textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="7" fontFamily="sans-serif">BACK</text>
+    </svg>
+  );
+
+  return(
+    <div style={{marginTop:12,marginBottom:4}}>
+      <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:10,letterSpacing:2,color:"var(--muted)",marginBottom:6,textAlign:"center"}}>
+        MUSCLES WORKED
+        {allPrimary.length>0&&(
+          <span style={{color:"#ff6b35",marginLeft:6}}>
+            {[...new Set(allPrimary)].map(m=>m.charAt(0).toUpperCase()+m.slice(1)).join(" · ")}
+          </span>
+        )}
+      </div>
+      <div style={{display:"flex",justifyContent:"center",gap:16,padding:"8px 0"}}>
+        <FrontBody/>
+        <BackBody/>
+      </div>
+      <div style={{display:"flex",justifyContent:"center",gap:16,fontSize:9,color:"var(--muted)",marginTop:4}}>
+        <span style={{display:"flex",alignItems:"center",gap:4}}>
+          <span style={{width:8,height:8,borderRadius:"50%",background:"#ff6b35",display:"inline-block"}}/>
+          Primary
+        </span>
+        <span style={{display:"flex",alignItems:"center",gap:4}}>
+          <span style={{width:8,height:8,borderRadius:"50%",background:"rgba(255,107,53,0.3)",display:"inline-block"}}/>
+          Secondary
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ── AI TRAINER — exercise card (form cues + GIF) ─────────────────────────────
 function ExerciseCard({exercise, userName, experience, injuries, idx}){
   const [expanded,setExpanded]=useState(false);
@@ -3643,6 +3800,9 @@ function ExerciseCard({exercise, userName, experience, injuries, idx}){
               💡 {exercise.notes}
             </div>
           )}
+
+          {/* Anatomy diagram — shows which muscles light up */}
+          <AnatomyDiagram primaryMuscle={exercise.primaryMuscle}/>
 
           {/* YouTube form guide — opens in external browser so music keeps playing */}
           <a
@@ -3995,125 +4155,171 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
 
 // ── EFFORT RATING MODAL ──────────────────────────────────────────────────────
 function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose}){
-  const [selected,setSelected]=useState(null);
-  const [showWeightLog,setShowWeightLog]=useState(false);
-  const [saving,setSaving]=useState(false);
-
-  const handleRate=async(effortId)=>{
-    setSelected(effortId);
-  };
-
-  const handleSave=async()=>{
-    if(!selected)return;
-    setSaving(true);
-    // Save effort rating to training log (no weights yet)
-    await saveTrainingLog(currentUser, exercises.map(e=>({
-      name:e.name,
-      reps:e.reps,
-      weightUsed:e.weight&&e.weight!=="bodyweight"?e.weight:null,
-    })), selected);
-    setSaving(false);
-    onRate(selected);
-  };
-
-  if(showWeightLog){
-    return(
-      <WeightLogModal
-        exercises={exercises}
-        effortId={selected}
-        currentUser={currentUser}
-        onSave={async(loggedExercises)=>{
-          setSaving(true);
-          await saveTrainingLog(currentUser, loggedExercises, selected||"normal");
-          setSaving(false);
-          onRate(selected||"normal");
-        }}
-        onSkip={()=>setShowWeightLog(false)}
-        onClose={onClose}
-      />
-    );
-  }
-
-  return(
-    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()} style={{zIndex:1200}}>
-      <div className="modal" style={{maxHeight:"80dvh",overflowY:"auto"}}>
-        <div className="modal-handle"/>
-        <div style={{textAlign:"center",marginBottom:16}}>
-          <div style={{fontSize:28,marginBottom:6}}>🔥</div>
-          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>HOW'D IT GO?</div>
-          <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>WOLFMODE uses this to get smarter over time</div>
-        </div>
-
-        {/* Effort buttons */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
-          {EFFORT_RATINGS.map(r=>{
-            const sel=selected===r.id;
-            return(
-              <button key={r.id} onClick={()=>handleRate(r.id)} style={{
-                padding:"14px 8px",borderRadius:14,cursor:"pointer",textAlign:"center",
-                background:sel?`rgba(${r.color.replace("#","").match(/.{2}/g).map(h=>parseInt(h,16)).join(",")},0.2)`:"var(--bg3)",
-                border:sel?`1px solid ${r.color}`:"1px solid var(--border)",
-                transition:"all 0.15s",
-              }}>
-                <div style={{fontSize:28,marginBottom:4}}>{r.emoji}</div>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1.5,color:sel?r.color:"#fff"}}>{r.label}</div>
-                {sel&&<div style={{fontSize:9,color:"var(--muted)",marginTop:2}}>{r.advice}</div>}
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{display:"flex",gap:8}}>
-          <button className="btn-primary" onClick={handleSave} disabled={!selected||saving}
-            style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-            {saving?"SAVING...":"SAVE"}
-          </button>
-          <button className="btn-ghost" onClick={()=>{if(selected)setShowWeightLog(true);else onClose();}}
-            style={{flex:"0 0 auto",padding:"0 14px",fontSize:11}}>
-            📝 Log weights
-          </button>
-        </div>
-        <button onClick={onClose} style={{
-          width:"100%",marginTop:8,padding:8,background:"transparent",border:"none",
-          color:"var(--muted)",fontSize:11,cursor:"pointer",
-        }}>Skip — don't rate this one</button>
-      </div>
-    </div>
-  );
-}
-
-// ── WEIGHT LOG MODAL ─────────────────────────────────────────────────────────
-function WeightLogModal({exercises, effortId, currentUser, onSave, onSkip, onClose}){
+  // 3 steps: checklist → effort → weights (optional)
+  const [step,setStep]=useState("checklist");
+  const [done,setDone]=useState(()=>Object.fromEntries((exercises||[]).map(e=>[e.name,true])));
+  const [subs,setSubs]=useState({}); // substitutions: {exerciseName: "what they did instead"}
+  const [effortId,setEffortId]=useState(null);
   const [weights,setWeights]=useState(()=>{
     const init={};
-    exercises.forEach(e=>{
-      // Pre-fill with AI suggestion if available, strip "lbs" etc
-      const w=e.weight&&e.weight!=="bodyweight"?e.weight.replace(/[^0-9.]/g,""):"";
-      init[e.name]=w;
+    (exercises||[]).forEach(e=>{
+      init[e.name]=e.weight&&e.weight!=="bodyweight"?e.weight.replace(/[^0-9.]/g,""):"";
     });
     return init;
   });
   const [saving,setSaving]=useState(false);
 
-  const save=async()=>{
+  const doneExercises=(exercises||[]).filter(e=>done[e.name]);
+  const skippedExercises=(exercises||[]).filter(e=>!done[e.name]);
+
+  const handleFinalSave=async()=>{
     setSaving(true);
-    const logged=exercises.map(e=>({
+    // Build the logged exercises list — only done ones, with actual weights
+    const logged=doneExercises.map(e=>({
       name:e.name,
       reps:e.reps,
       weightUsed:weights[e.name]?`${weights[e.name]} lbs`:null,
+      skipped:false,
     }));
-    await onSave(logged);
+    // Add skipped ones too so we know what was avoided
+    skippedExercises.forEach(e=>{
+      logged.push({
+        name:e.name,
+        reps:e.reps,
+        weightUsed:null,
+        skipped:true,
+        substitutedWith:subs[e.name]||null,
+      });
+    });
+    await saveTrainingLog(currentUser, logged, effortId||"normal");
+    setSaving(false);
+    onRate(effortId||"normal", logged);
   };
 
+  // ── STEP 1: Exercise checklist ─────────────────────────────────────────────
+  if(step==="checklist"){
+    return(
+      <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()} style={{zIndex:1200}}>
+        <div className="modal" style={{maxHeight:"90dvh",overflowY:"auto"}}>
+          <div className="modal-handle"/>
+          <div style={{textAlign:"center",marginBottom:14}}>
+            <div style={{fontSize:26,marginBottom:4}}>📋</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WHAT DID YOU DO?</div>
+            <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>Untick anything you skipped</div>
+          </div>
+
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+            {(exercises||[]).map((ex,i)=>{
+              const isDone=done[ex.name]!==false;
+              return(
+                <div key={i} style={{
+                  padding:"10px 12px",
+                  background:isDone?"rgba(46,204,113,0.06)":"rgba(231,76,60,0.06)",
+                  border:isDone?"1px solid rgba(46,204,113,0.2)":"1px solid rgba(231,76,60,0.2)",
+                  borderRadius:12,
+                }}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <button onClick={()=>setDone(d=>({...d,[ex.name]:!isDone}))} style={{
+                      width:24,height:24,borderRadius:6,flexShrink:0,cursor:"pointer",
+                      background:isDone?"var(--green)":"var(--bg3)",
+                      border:isDone?"1px solid var(--green)":"1px solid var(--border)",
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:14,color:"#fff",
+                    }}>{isDone?"✓":""}</button>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,color:isDone?"#fff":"rgba(255,255,255,0.4)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{ex.name}</div>
+                      <div style={{fontSize:10,color:"var(--muted)"}}>{ex.sets} × {ex.reps}{ex.weight&&ex.weight!=="bodyweight"?` · ${ex.weight}`:""}</div>
+                    </div>
+                  </div>
+                  {/* Show substitute input when skipped */}
+                  {!isDone&&(
+                    <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,0.06)"}}>
+                      <div style={{fontSize:10,color:"var(--muted)",marginBottom:4}}>Did you do something instead?</div>
+                      <input className="input"
+                        placeholder="e.g. Leg press, bodyweight squats..."
+                        value={subs[ex.name]||""}
+                        onChange={e=>setSubs(s=>({...s,[ex.name]:e.target.value}))}
+                        style={{padding:"6px 10px",fontSize:12,width:"100%"}}/>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{fontSize:11,color:"var(--muted)",textAlign:"center",marginBottom:10}}>
+            {doneExercises.length} completed · {skippedExercises.length} skipped
+          </div>
+
+          <button className="btn-primary" onClick={()=>setStep("effort")}
+            style={{width:"100%",background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+            NEXT →
+          </button>
+          <button onClick={onClose} style={{width:"100%",marginTop:8,padding:8,background:"transparent",border:"none",color:"var(--muted)",fontSize:11,cursor:"pointer"}}>
+            Skip — just log it
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── STEP 2: Effort rating ─────────────────────────────────────────────────
+  if(step==="effort"){
+    return(
+      <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()} style={{zIndex:1200}}>
+        <div className="modal" style={{maxHeight:"85dvh",overflowY:"auto"}}>
+          <div className="modal-handle"/>
+          <div style={{textAlign:"center",marginBottom:16}}>
+            <div style={{fontSize:28,marginBottom:6}}>🔥</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>HOW'D IT FEEL?</div>
+            <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>WOLFMODE uses this to adjust next time</div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+            {EFFORT_RATINGS.map(r=>{
+              const sel=effortId===r.id;
+              return(
+                <button key={r.id} onClick={()=>setEffortId(r.id)} style={{
+                  padding:"14px 8px",borderRadius:14,cursor:"pointer",textAlign:"center",
+                  background:sel?`rgba(${r.color.replace("#","").match(/.{2}/g).map(h=>parseInt(h,16)).join(",")},0.2)`:"var(--bg3)",
+                  border:sel?`1px solid ${r.color}`:"1px solid var(--border)",
+                  transition:"all 0.15s",
+                }}>
+                  <div style={{fontSize:28,marginBottom:4}}>{r.emoji}</div>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1.5,color:sel?r.color:"#fff"}}>{r.label}</div>
+                  {sel&&<div style={{fontSize:9,color:"var(--muted)",marginTop:2}}>{r.advice}</div>}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn-ghost" onClick={()=>setStep("checklist")} style={{flex:"0 0 auto",padding:"0 14px",fontSize:11}}>← Back</button>
+            <button className="btn-primary" onClick={()=>setStep("weights")} disabled={!effortId}
+              style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+              NEXT →
+            </button>
+          </div>
+          <button onClick={()=>{if(effortId)handleFinalSave();else onClose();}} style={{width:"100%",marginTop:8,padding:8,background:"transparent",border:"none",color:"var(--muted)",fontSize:11,cursor:"pointer"}}>
+            {effortId?"Save without logging weights":"Skip"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── STEP 3: Weight override ───────────────────────────────────────────────
   return(
-    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()} style={{zIndex:1300}}>
-      <div className="modal" style={{maxHeight:"90dvh",overflowY:"auto"}}>
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()} style={{zIndex:1200}}>
+      <div className="modal" style={{maxHeight:"92dvh",overflowY:"auto"}}>
         <div className="modal-handle"/>
-        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,marginBottom:4}}>LOG WEIGHTS</div>
-        <div style={{fontSize:11,color:"var(--muted)",marginBottom:14}}>Optional — helps WOLFMODE suggest better weights next time. Pre-filled with AI's suggestion.</div>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,marginBottom:4}}>WHAT DID YOU LIFT?</div>
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:14}}>
+          Pre-filled with AI suggestion. Update if you lifted different — WOLFMODE learns from this.
+        </div>
 
         <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
-          {exercises.map((ex,i)=>(
+          {doneExercises.map((ex,i)=>(
             <div key={i} style={{
               padding:"10px 12px",background:"var(--bg3)",
               border:"1px solid var(--border)",borderRadius:12,
@@ -4124,17 +4330,14 @@ function WeightLogModal({exercises, effortId, currentUser, onSave, onSkip, onClo
                 <div style={{fontSize:10,color:"var(--muted)"}}>{ex.sets} sets × {ex.reps}</div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-                <input
-                  type="number"
-                  value={weights[ex.name]||""}
-                  onChange={e=>setWeights(p=>({...p,[ex.name]:e.target.value}))}
+                <input type="number" value={weights[ex.name]||""}
+                  onChange={e=>setWeights(w=>({...w,[ex.name]:e.target.value}))}
                   placeholder="—"
                   style={{
                     width:60,padding:"6px 8px",textAlign:"center",
                     background:"var(--bg2)",border:"1px solid var(--border)",
                     borderRadius:8,color:"#fff",fontSize:13,
-                  }}
-                />
+                  }}/>
                 <span style={{fontSize:11,color:"var(--muted)"}}>lbs</span>
               </div>
             </div>
@@ -4142,19 +4345,21 @@ function WeightLogModal({exercises, effortId, currentUser, onSave, onSkip, onClo
         </div>
 
         <div style={{display:"flex",gap:8}}>
-          <button className="btn-primary" onClick={save} disabled={saving}
+          <button className="btn-ghost" onClick={()=>setStep("effort")} style={{flex:"0 0 auto",padding:"0 14px",fontSize:11}}>← Back</button>
+          <button className="btn-primary" onClick={handleFinalSave} disabled={saving}
             style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-            {saving?"SAVING...":"SAVE WEIGHTS"}
+            {saving?"SAVING...":"✓ FINISH"}
           </button>
-          <button className="btn-ghost" onClick={onSkip} style={{flex:"0 0 auto",padding:"0 14px",fontSize:11}}>Skip</button>
         </div>
+        <button onClick={handleFinalSave} disabled={saving} style={{width:"100%",marginTop:8,padding:8,background:"transparent",border:"none",color:"var(--muted)",fontSize:11,cursor:"pointer"}}>
+          Skip weights — just save
+        </button>
       </div>
     </div>
   );
 }
 
-// ── ACTIVE WORKOUT CARD ──────────────────────────────────────────────────────
-// Shows on Pack tab — persists all day via localStorage, clears at midnight Central
+// ── WEIGHT LOG MODAL ─────────────────────────────────────────────────────────
 function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, userName, experience, injuries}){
   const [data,setData]=useState(()=>getActiveWorkout(currentUser, targetDate));
   const [expanded,setExpanded]=useState(false);
@@ -4668,10 +4873,14 @@ export default function App(){
     const prevDetails=existing.details||{};
     const aiLift={id:"lift",icon:"🏋️",label:"Lifting"};
     const newWorkouts=[...prevWorkouts,aiLift];
-    const newDetails={...prevDetails,lift:{...(prevDetails.lift||{}),duration:String(minutes||45),focus:muscleGroup||"Full Body"}};
+    const mgLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label||muscleGroup:null;
+    const exCount=exercises?.length||0;
+    // Clean one-liner: "Lifting · Glutes · 5 exercises"
+    const cleanLabel=["Lifting",mgLabel,exCount?`${exCount} exercises`:null].filter(Boolean).join(" · ");
+    const newDetails={...prevDetails,lift:{...(prevDetails.lift||{}),duration:String(minutes||45),focus:mgLabel||"Full Body"}};
     const icons=newWorkouts.map(w=>w.icon).join("");
     const summaryLines=newWorkouts.map(w=>{
-      if(w.id==="lift"&&w===aiLift) return `WOLFMODE: ${summary}`;
+      if(w.id==="lift"&&w===aiLift) return cleanLabel;
       const d=newDetails?.[w.id]||{};
       const parts=[];
       if(d.focus) parts.push(d.focus);
@@ -4849,8 +5058,6 @@ export default function App(){
               experience={profiles[currentUser]?.aiTrainer?.experience}
               injuries={(profiles[currentUser]?.aiTrainer?.injuries||[]).join(", ")}
               onComplete={(data)=>{
-                markActiveWorkoutComplete(currentUser,"today");
-                setActiveWorkoutRefresh(r=>r+1);
                 // Log the workout
                 handleLogAIWorkout({
                   summary:data.workout.exercises.map(e=>`${e.name}: ${e.sets}×${e.reps}${e.weight&&e.weight!=="bodyweight"?` @ ${e.weight}`:""}`).join(" + "),
@@ -4859,8 +5066,11 @@ export default function App(){
                   exercises:data.workout.exercises,
                   muscleGroup:data.muscleGroup,
                 });
-                // Show effort rating after completing
+                // Show effort rating checklist
                 setPendingEffortRating({exercises:data.workout.exercises,muscleGroup:data.muscleGroup});
+                // Dismiss the card so Pack tab stays clean
+                dismissActiveWorkout(currentUser,"today");
+                setActiveWorkoutRefresh(r=>r+1);
               }}
               onDismiss={(targetDate)=>{
                 dismissActiveWorkout(currentUser,targetDate);
@@ -4924,7 +5134,7 @@ export default function App(){
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
       {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)}/>}
-      {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={(effortId)=>{setPendingEffortRating(null);showToast(`${EFFORT_RATINGS.find(r=>r.id===effortId)?.emoji} Got it — WOLFMODE will adjust next time!`);}} onClose={()=>setPendingEffortRating(null)}/>}
+      {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={(effortId,logged)=>{setPendingEffortRating(null);const effort=EFFORT_RATINGS.find(r=>r.id===effortId);showToast(`${effort?.emoji||"✓"} Logged! ${effort?.advice||"Keep it up"}! 🐺`);}} onClose={()=>setPendingEffortRating(null)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet("wolfpack/settings",{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
