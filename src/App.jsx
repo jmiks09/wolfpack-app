@@ -1845,7 +1845,7 @@ function GymTab({currentUser,gymSlots,onBook,onCancel}){
 
   // Image path — place garage.jpg in your repo's public folder
   // GitHub Pages URL: https://[username].github.io/[repo]/garage.jpg
-  const GYM_IMAGE = "/garage.jpg";
+  const GYM_IMAGE = "https://jmiks09.github.io/wolfpack-app/garage.jpg";
 
   return(
     <div style={{paddingBottom:16}}>
