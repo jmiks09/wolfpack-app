@@ -4566,7 +4566,7 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
   // ── STEP 1: Exercise checklist ─────────────────────────────────────────────
   if(step==="checklist"){
     return(
-      <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()} style={{zIndex:1200}}>
+      <div className="modal-overlay" style={{zIndex:1200}}>
         <div className="modal" style={{maxHeight:"90dvh",overflowY:"auto"}}>
           <div className="modal-handle"/>
           <div style={{textAlign:"center",marginBottom:14}}>
@@ -4633,7 +4633,7 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
   // ── STEP 2: Effort rating ─────────────────────────────────────────────────
   if(step==="effort"){
     return(
-      <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()} style={{zIndex:1200}}>
+      <div className="modal-overlay" style={{zIndex:1200}}>
         <div className="modal" style={{maxHeight:"85dvh",overflowY:"auto"}}>
           <div className="modal-handle"/>
           <div style={{textAlign:"center",marginBottom:16}}>
@@ -4677,7 +4677,7 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
 
   // ── STEP 3: Weight override ───────────────────────────────────────────────
   return(
-    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()} style={{zIndex:1200}}>
+    <div className="modal-overlay" style={{zIndex:1200}}>
       <div className="modal" style={{maxHeight:"92dvh",overflowY:"auto"}}>
         <div className="modal-handle"/>
         <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,marginBottom:4}}>WHAT DID YOU LIFT?</div>
