@@ -5243,7 +5243,7 @@ export default function App(){
     const mgLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label||muscleGroup:null;
     const exCount=exercises?.length||0;
     // Clean one-liner: "Lifting · Glutes · 5 exercises"
-    const cleanLabel=["Lifting",mgLabel,exCount?`${exCount} exercises`:null].filter(Boolean).join(" · ");
+    const cleanLabel=["WOLFMODE TRAINER",mgLabel,exCount?`${exCount} exercises`:null,minutes?`${minutes} min`:null].filter(Boolean).join(" · ");
     const newDetails={...prevDetails,lift:{...(prevDetails.lift||{}),duration:String(minutes||45),focus:mgLabel||"Full Body"}};
     const icons=newWorkouts.map(w=>w.icon).join("");
     const summaryLines=newWorkouts.map(w=>{
