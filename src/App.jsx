@@ -124,9 +124,9 @@ const QUOTES = [
 ];
 const BADGES = [
   {id:"first_blood",icon:"🩸",label:"First Blood",desc:"Log your first workout"},
-  {id:"week_warrior",icon:"⚔️",label:"Week Warrior",desc:"7-day streak"},
-  {id:"consistent",icon:"🔥",label:"On Fire",desc:"3-week streak"},
-  {id:"monthly",icon:"📅",label:"Iron Month",desc:"30-day streak"},
+  {id:"week_warrior",icon:"⚔️",label:"Week Warrior",desc:"1 week consistent"},
+{id:"consistent",icon:"🔥",label:"On Fire",desc:"3 weeks consistent"},
+{id:"monthly",icon:"📅",label:"Iron Month",desc:"4 weeks consistent"},
   {id:"centurion",icon:"💯",label:"Centurion",desc:"100 workouts logged"},
   {id:"social",icon:"🐺",label:"Pack Leader",desc:"Post 10 times in feed"},
   {id:"challenger",icon:"⚡",label:"Challenger",desc:"Complete a challenge"},
@@ -352,7 +352,7 @@ function calcPenalties(c,h,profiles){
   });
   return r;
 }
-function computeBadges(n,h,feed,ch,profile){const e=[];const t=getTotalWorkouts(h,n),s=getStreak(h,n,profile),p=feed.filter(x=>x.author===n).length;const cc=ch.filter(c=>c.participants?.[n]?.done||(c.goalType==="dateRange"&&c.startDate&&c.endDate&&getWorkoutDays(c.startDate,c.endDate,profile).filter(d=>h[d]?.[n]?.done).length>=c.goal)).length;if(t>=1)e.push("first_blood");if(s>=7)e.push("week_warrior");if(s>=21)e.push("consistent");if(s>=30)e.push("monthly");if(t>=100)e.push("centurion");if(p>=10)e.push("social");if(cc>=1)e.push("challenger");return e;}
+function computeBadges(n,h,feed,ch,profile){const e=[];const t=getTotalWorkouts(h,n),s=getStreak(h,n,profile),p=feed.filter(x=>x.author===n).length;const cc=ch.filter(c=>c.participants?.[n]?.done||(c.goalType==="dateRange"&&c.startDate&&c.endDate&&getWorkoutDays(c.startDate,c.endDate,profile).filter(d=>h[d]?.[n]?.done).length>=c.goal)).length;if(t>=1)e.push("first_blood");if(s>=5)e.push("week_warrior");if(s>=15)e.push("consistent");if(s>=20)e.push("monthly");if(t>=100)e.push("centurion");if(p>=10)e.push("social");if(cc>=1)e.push("challenger");return e;}
 
 function launchConfetti(){const cv=document.getElementById("confetti-canvas");if(!cv)return;const ctx=cv.getContext("2d");cv.width=window.innerWidth;cv.height=window.innerHeight;const ps=Array.from({length:80},()=>({x:Math.random()*cv.width,y:-10,r:Math.random()*6+4,c:["#7c5cbf","#ff6b35","#f1c40f","#2ecc71","#e74c3c"][Math.floor(Math.random()*5)],vx:(Math.random()-.5)*4,vy:Math.random()*4+2,life:1}));let fr;const draw=()=>{ctx.clearRect(0,0,cv.width,cv.height);let alive=false;ps.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life-=.008;if(p.y<cv.height&&p.life>0)alive=true;ctx.globalAlpha=p.life;ctx.fillStyle=p.c;ctx.fillRect(p.x,p.y,p.r,p.r);});ctx.globalAlpha=1;if(alive)fr=requestAnimationFrame(draw);else ctx.clearRect(0,0,cv.width,cv.height);};draw();setTimeout(()=>{cancelAnimationFrame(fr);ctx.clearRect(0,0,cv.width,cv.height);},4000);}
 function Toast({msg}){return msg?<div className="toast">{msg}</div>:null;}
