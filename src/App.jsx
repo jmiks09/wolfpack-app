@@ -4618,7 +4618,7 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
             {doneExercises.length} completed · {skippedExercises.length} skipped
           </div>
 
-          <button className="btn-primary" onClick={()=>setStep("effort")}
+          <button className="btn-primary" onClick={e=>{e.stopPropagation();setStep("effort");}}
             style={{width:"100%",background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
             NEXT →
           </button>
@@ -4661,7 +4661,7 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
           </div>
 
           <div style={{display:"flex",gap:8}}>
-            <button className="btn-ghost" onClick={()=>setStep("checklist")} style={{flex:"0 0 auto",padding:"0 14px",fontSize:11}}>← Back</button>
+            <button className="btn-ghost" onClick={e=>{e.stopPropagation();setStep("checklist");}} style={{flex:"0 0 auto",padding:"0 14px",fontSize:11}}>← Back</button>
             <button className="btn-primary" onClick={()=>setStep("weights")} disabled={!effortId}
               style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
               NEXT →
@@ -4712,7 +4712,7 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
         </div>
 
         <div style={{display:"flex",gap:8}}>
-          <button className="btn-ghost" onClick={()=>setStep("effort")} style={{flex:"0 0 auto",padding:"0 14px",fontSize:11}}>← Back</button>
+          <button className="btn-ghost" onClick={e=>{e.stopPropagation();setStep("effort");}} style={{flex:"0 0 auto",padding:"0 14px",fontSize:11}}>← Back</button>
           <button className="btn-primary" onClick={handleFinalSave} disabled={saving}
             style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
             {saving?"SAVING...":"✓ FINISH"}
@@ -4782,7 +4782,7 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
             color:"var(--muted)",fontSize:18,padding:"0 4px",
             transition:"transform .2s",transform:expanded?"rotate(180deg)":"rotate(0)",
           }}>▾</button>
-          <button onClick={e=>{e.stopPropagation();onDismiss(targetDate);setData(null);}} style={{
+          <button onClick={e=>{e.stopPropagation();if(window.confirm("Remove this workout? It won't be logged.")){{onDismiss(targetDate);setData(null);};}}} style={{
             background:"none",border:"none",cursor:"pointer",
             color:"var(--muted)",fontSize:20,padding:"0 4px",lineHeight:1,
           }}>×</button>
