@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { fsGet, fsSet, fsDelete, fsListen, requestNotifPermission, onForegroundMessage, aiGenerateWorkout, aiGenerateFormCues, aiGenerateNutritionPlan, uploadProofPhoto } from "./firebase";
+import { fsGet, fsSet, fsDelete, fsListen, requestNotifPermission, onForegroundMessage, aiGenerateWorkout, aiGenerateFormCues, aiGenerateNutritionPlan } from "./firebase";
 
 const INVITE_CODE = "WOLF2026";
 const WORKOUT_TYPES = [
@@ -1651,23 +1651,6 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
 
 
               {isMe&&<div style={{position:"absolute",top:10,right:12,fontSize:11,color:"var(--muted)"}}>👤</div>}
-
-              {/* Proof photo thumbnail — shows if member uploaded proof today */}
-              {td[m]?.proofPhoto&&(
-                <div style={{flexShrink:0}}>
-                  <img
-                    src={td[m].proofPhoto}
-                    alt="proof"
-                    style={{
-                      width:44,height:44,borderRadius:10,
-                      objectFit:"cover",
-                      border:"1px solid rgba(255,107,53,0.4)",
-                      cursor:"pointer",
-                    }}
-                    onClick={e=>{e.stopPropagation();window.open(td[m].proofPhoto,"_blank");}}
-                  />
-                </div>
-              )}
             </div>
           );
         })}
@@ -4980,83 +4963,6 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
 }
 
 // ── WORKOUT PROOF PHOTO MODAL ─────────────────────────────────────────────────
-function WorkoutProofModal({currentUser, dateStr, onSave, onSkip}){
-  const [photo,setPhoto]=useState(null);
-  const [uploading,setUploading]=useState(false);
-  const fileRef=useRef();
-
-  const handleFile=async(e)=>{
-    const file=e.target.files?.[0];
-    if(!file)return;
-    // Compress aggressively — max 400px, 60% quality (~50-100KB)
-    const reader=new FileReader();
-    reader.onload=async(ev)=>{
-      const compressed=await compressImage(ev.target.result,400);
-      setPhoto(compressed);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleUpload=async()=>{
-    if(!photo)return;
-    setUploading(true);
-    const path=`workout_proofs/${currentUser}_${dateStr}`;
-    const result=await uploadProofPhoto(photo,path);
-    setUploading(false);
-    if(result.ok){
-      onSave(result.url);
-    }else{
-      onSkip(); // silently skip on error
-    }
-  };
-
-  return(
-    <div className="modal-overlay" style={{zIndex:1300}}>
-      <div className="modal" style={{maxHeight:"85dvh",overflowY:"auto"}}>
-        <div className="modal-handle"/>
-        <div style={{textAlign:"center",marginBottom:16}}>
-          <div style={{fontSize:32,marginBottom:6}}>📸</div>
-          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>ADD WORKOUT PROOF</div>
-          <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>Shows on your Pack card for the day · Optional</div>
-        </div>
-
-        {photo?(
-          <div style={{marginBottom:14}}>
-            <img src={photo} alt="proof" style={{
-              width:"100%",borderRadius:14,objectFit:"cover",maxHeight:240,
-              border:"1px solid var(--border)",
-            }}/>
-            <button onClick={()=>setPhoto(null)} style={{
-              width:"100%",marginTop:8,padding:8,background:"transparent",
-              border:"none",color:"var(--muted)",fontSize:11,cursor:"pointer",
-            }}>Choose different photo</button>
-          </div>
-        ):(
-          <div onClick={()=>fileRef.current?.click()} style={{
-            marginBottom:14,padding:"30px 20px",
-            background:"rgba(255,255,255,0.02)",
-            border:"2px dashed rgba(255,255,255,0.1)",
-            borderRadius:14,textAlign:"center",cursor:"pointer",
-          }}>
-            <div style={{fontSize:32,marginBottom:8}}>📷</div>
-            <div style={{fontSize:13,color:"var(--muted)"}}>Tap to choose a photo</div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",marginTop:4}}>Compressed automatically · ~100KB</div>
-            <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{display:"none"}} capture="environment"/>
-          </div>
-        )}
-
-        <div style={{display:"flex",gap:8}}>
-          <button className="btn-ghost" onClick={onSkip} style={{flex:1}}>SKIP</button>
-          <button className="btn-primary" onClick={handleUpload} disabled={!photo||uploading}
-            style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-            {uploading?"UPLOADING...":"SHARE WITH PACK 🐺"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function WorkoutModal({onClose,onSubmit,loading}){
   const [selected,setSelected]=useState([]);
   const [details,setDetails]=useState({}); // {workoutId: {sets,reps,weight,duration,distance,...}}
@@ -5198,7 +5104,6 @@ export default function App(){
   const [nutritionOpen,setNutritionOpen]=useState(false);
   const [pendingEffortRating,setPendingEffortRating]=useState(null);
   const [activeWorkoutRefresh,setActiveWorkoutRefresh]=useState(0);
-  const [showProofModal,setShowProofModal]=useState(false);
   const [toast,setToast]=useState("");
   const unsubs=useRef([]);const tt=useRef(null);
   const showToast=useCallback(msg=>{setToast(msg);clearTimeout(tt.current);tt.current=setTimeout(()=>setToast(""),3000);},[]);
@@ -5443,7 +5348,6 @@ export default function App(){
     await fsSet("wolfpack/workouts",{byDate:newData});
     setLoggingWorkout(false);setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
     await checkMilestones(newData);
-    setShowProofModal(true);
   };
 
   // ── AI Trainer: log the AI-generated workout as a lift entry ──────────────
@@ -5492,7 +5396,6 @@ export default function App(){
     showToast(`🔥 WOLFMODE logged! 🐺`);
     await checkMilestones(newData);
     // Prompt for proof photo
-    setShowProofModal(true);
   };
 
   const handlePost=async(t,photo)=>{
@@ -5719,18 +5622,6 @@ export default function App(){
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
       {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)}/>}
-      {showProofModal&&<WorkoutProofModal
-        currentUser={currentUser}
-        dateStr={todayStr()}
-        onSave={async(url)=>{
-          const key=todayStr();
-          const existing=history[key]?.[currentUser];
-          if(existing){await fsSet("wolfpack/workouts",{byDate:{...history,[key]:{...(history[key]||{}),[currentUser]:{...existing,proofPhoto:url}}}});}
-          setShowProofModal(false);
-          showToast("📸 Proof shared with the pack! 🐺");
-        }}
-        onSkip={()=>setShowProofModal(false)}
-      />}
       {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={async(effortId,logged)=>{
         setPendingEffortRating(null);
         const effort=EFFORT_RATINGS.find(r=>r.id===effortId);
