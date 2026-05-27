@@ -98,31 +98,3 @@ export const aiGenerateNutritionPlan = async (params) => {
     return { ok: false, error: e.message || "Failed to generate nutrition plan." };
   }
 };
-
-// ── Firebase Storage helpers ─────────────────────────────────────────────────
-// Upload a base64 data URL to Firebase Storage
-// path: e.g. "workout_proofs/JS_2026-05-22"
-export const uploadProofPhoto = async (dataUrl, path) => {
-  try {
-    const storageRef = ref(storage, path);
-    // Strip the data:image/...;base64, prefix
-    const base64 = dataUrl.split(",")[1];
-    await uploadString(storageRef, base64, "base64", {
-      contentType: dataUrl.split(";")[0].split(":")[1] || "image/jpeg",
-    });
-    const url = await getDownloadURL(storageRef);
-    return { ok: true, url };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-};
-
-// Delete a photo from Storage (for cleanup)
-export const deleteProofPhoto = async (path) => {
-  try {
-    await deleteObject(ref(storage, path));
-    return { ok: true };
-  } catch (e) {
-    return { ok: false };
-  }
-};
