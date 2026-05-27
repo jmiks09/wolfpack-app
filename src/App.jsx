@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { fsGet, fsSet, fsDelete, fsListen, requestNotifPermission, onForegroundMessage, aiGenerateWorkout, aiGenerateFormCues, aiGenerateNutritionPlan } from "./firebase";
+import { fsGet, fsSet, fsDelete, fsListen, requestNotifPermission, onForegroundMessage, aiGenerateWorkout, aiGenerateFormCues, aiGenerateNutritionPlan, uploadProofPhoto } from "./firebase";
 
 const INVITE_CODE = "WOLF2026";
 const WORKOUT_TYPES = [
@@ -751,6 +751,37 @@ function dismissActiveWorkout(userName, targetDate="today"){
     const key=`wp_active_${userName}_${date}`;
     localStorage.removeItem(key);
   }catch{}
+}
+
+// ── FAVORITES HELPERS ────────────────────────────────────────────────────────
+function getFavorites(userName){
+  try{
+    const raw=localStorage.getItem(`wp_favorites_${userName}`);
+    return raw?JSON.parse(raw):[];
+  }catch{return[];}
+}
+function saveFavorite(userName, workout, muscleGroup){
+  try{
+    const favs=getFavorites(userName);
+    const id=`fav_${Date.now()}`;
+    const newFav={id,workout,muscleGroup,savedAt:Date.now(),title:workout.title};
+    const updated=[newFav,...favs].slice(0,10); // keep max 10
+    localStorage.setItem(`wp_favorites_${userName}`,JSON.stringify(updated));
+    return true;
+  }catch{return false;}
+}
+function removeFavorite(userName, favId){
+  try{
+    const favs=getFavorites(userName).filter(f=>f.id!==favId);
+    localStorage.setItem(`wp_favorites_${userName}`,JSON.stringify(favs));
+    return true;
+  }catch{return false;}
+}
+function isWorkoutFavorited(userName, workoutTitle){
+  return getFavorites(userName).some(f=>f.workout?.title===workoutTitle);
+}
+function getFavoriteId(userName, workoutTitle){
+  return getFavorites(userName).find(f=>f.workout?.title===workoutTitle)?.id;
 }
 
 // ── TRAINING LOG HELPERS ────────────────────────────────────────────────────
@@ -1620,6 +1651,23 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
 
 
               {isMe&&<div style={{position:"absolute",top:10,right:12,fontSize:11,color:"var(--muted)"}}>👤</div>}
+
+              {/* Proof photo thumbnail — shows if member uploaded proof today */}
+              {td[m]?.proofPhoto&&(
+                <div style={{flexShrink:0}}>
+                  <img
+                    src={td[m].proofPhoto}
+                    alt="proof"
+                    style={{
+                      width:44,height:44,borderRadius:10,
+                      objectFit:"cover",
+                      border:"1px solid rgba(255,107,53,0.4)",
+                      cursor:"pointer",
+                    }}
+                    onClick={e=>{e.stopPropagation();window.open(td[m].proofPhoto,"_blank");}}
+                  />
+                </div>
+              )}
             </div>
           );
         })}
@@ -4365,6 +4413,49 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
               </div>
             </div>
 
+            {/* ── FAVORITES ── */}
+            {getFavorites(currentUser).length>0&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⭐ MY FAVORITES</div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {getFavorites(currentUser).map(fav=>(
+                    <div key={fav.id} style={{
+                      display:"flex",alignItems:"center",gap:10,
+                      padding:"10px 12px",
+                      background:"rgba(255,107,53,0.06)",
+                      border:"1px solid rgba(255,107,53,0.2)",
+                      borderRadius:12,
+                    }}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1.5,color:"#fff",marginBottom:1}}>{fav.title}</div>
+                        <div style={{fontSize:10,color:"var(--muted)"}}>
+                          {AI_MUSCLE_GROUPS.find(m=>m.id===fav.muscleGroup)?.label||fav.muscleGroup}
+                          {` · ${fav.workout?.exercises?.length||0} exercises`}
+                        </div>
+                      </div>
+                      <button onClick={()=>{
+                        // Load this favorite directly — skip generation
+                        setWorkout(fav.workout);
+                        setMuscleGroup(fav.muscleGroup);
+                        setStep("result");
+                      }} style={{
+                        padding:"6px 14px",borderRadius:10,cursor:"pointer",
+                        background:"rgba(255,107,53,0.15)",
+                        border:"1px solid rgba(255,107,53,0.3)",
+                        color:"#ff6b35",fontSize:11,
+                        fontFamily:"'Bebas Neue',cursive",letterSpacing:1,flexShrink:0,
+                      }}>USE</button>
+                      <button onClick={()=>{removeFavorite(currentUser,fav.id);setStep(s=>s);}} style={{
+                        background:"none",border:"none",cursor:"pointer",
+                        color:"var(--muted)",fontSize:16,padding:"0 2px",
+                      }}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{height:1,background:"var(--border)",margin:"10px 0"}}/>
+              </div>
+            )}
+
             {/* ── MUSCLE GROUP ── */}
             <div style={{marginBottom:14}}>
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🎯 MUSCLE GROUP</div>
@@ -4534,6 +4625,14 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
     });
     return init;
   });
+  const [reps,setReps]=useState(()=>{
+    const init={};
+    (exercises||[]).forEach(e=>{
+      // Pre-fill with suggested reps (take first number from range like "8-10" → "8")
+      init[e.name]=e.reps?e.reps.toString().split("-")[0].replace(/[^0-9]/g,""):"";
+    });
+    return init;
+  });
   const [saving,setSaving]=useState(false);
 
   const doneExercises=(exercises||[]).filter(e=>done[e.name]);
@@ -4541,10 +4640,11 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
 
   const handleFinalSave=async()=>{
     setSaving(true);
-    // Build the logged exercises list — only done ones, with actual weights
+    // Build the logged exercises list — only done ones, with actual weights + reps
     const logged=doneExercises.map(e=>({
       name:e.name,
-      reps:e.reps,
+      reps:reps[e.name]?reps[e.name]:e.reps,
+      actualReps:reps[e.name]||null,
       weightUsed:weights[e.name]?`${weights[e.name]} lbs`:null,
       skipped:false,
     }));
@@ -4690,22 +4790,35 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
             <div key={i} style={{
               padding:"10px 12px",background:"var(--bg3)",
               border:"1px solid var(--border)",borderRadius:12,
-              display:"flex",alignItems:"center",gap:10,
+              display:"flex",alignItems:"center",gap:8,
             }}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1.5,color:"#fff",marginBottom:2}}>{ex.name}</div>
-                <div style={{fontSize:10,color:"var(--muted)"}}>{ex.sets} sets × {ex.reps}</div>
+                <div style={{fontSize:10,color:"var(--muted)"}}>{ex.sets} sets · suggested: {ex.reps} reps</div>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-                <input type="number" value={weights[ex.name]||""}
-                  onChange={e=>setWeights(w=>({...w,[ex.name]:e.target.value}))}
-                  placeholder="—"
-                  style={{
-                    width:60,padding:"6px 8px",textAlign:"center",
-                    background:"var(--bg2)",border:"1px solid var(--border)",
-                    borderRadius:8,color:"#fff",fontSize:13,
-                  }}/>
-                <span style={{fontSize:11,color:"var(--muted)"}}>lbs</span>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:3}}>
+                  <input type="number" value={reps[ex.name]||""}
+                    onChange={e=>setReps(r=>({...r,[ex.name]:e.target.value}))}
+                    placeholder="—"
+                    style={{
+                      width:44,padding:"6px 6px",textAlign:"center",
+                      background:"var(--bg2)",border:"1px solid var(--border)",
+                      borderRadius:8,color:"#fff",fontSize:13,
+                    }}/>
+                  <span style={{fontSize:10,color:"var(--muted)"}}>reps</span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:3}}>
+                  <input type="number" value={weights[ex.name]||""}
+                    onChange={e=>setWeights(w=>({...w,[ex.name]:e.target.value}))}
+                    placeholder="—"
+                    style={{
+                      width:52,padding:"6px 6px",textAlign:"center",
+                      background:"var(--bg2)",border:"1px solid var(--border)",
+                      borderRadius:8,color:"#fff",fontSize:13,
+                    }}/>
+                  <span style={{fontSize:10,color:"var(--muted)"}}>lbs</span>
+                </div>
               </div>
             </div>
           ))}
@@ -4730,10 +4843,13 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
 function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, userName, experience, injuries}){
   const [data,setData]=useState(()=>getActiveWorkout(currentUser, targetDate));
   const [expanded,setExpanded]=useState(false);
+  const [favorited,setFavorited]=useState(()=>data?.workout?isWorkoutFavorited(currentUser,data?.workout?.title):false);
 
   // Re-check localStorage whenever the card mounts or key props change
   useEffect(()=>{
-    setData(getActiveWorkout(currentUser, targetDate));
+    const d=getActiveWorkout(currentUser, targetDate);
+    setData(d);
+    setFavorited(d?.workout?isWorkoutFavorited(currentUser,d?.workout?.title):false);
   },[currentUser, targetDate]);
 
   if(!data)return null;
@@ -4741,6 +4857,18 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
   const {workout,muscleGroup,completed}=data;
   const isToday=targetDate==="today";
   const mgObj=AI_MUSCLE_GROUPS?.find(m=>m.id===muscleGroup);
+
+  const toggleFavorite=(e)=>{
+    e.stopPropagation();
+    if(favorited){
+      const favId=getFavoriteId(currentUser,workout.title);
+      if(favId)removeFavorite(currentUser,favId);
+      setFavorited(false);
+    }else{
+      saveFavorite(currentUser,workout,muscleGroup);
+      setFavorited(true);
+    }
+  };
 
   return(
     <div style={{
@@ -4777,6 +4905,14 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
               color:"var(--green)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1,
             }}>✓ DONE</span>
           )}
+          {/* Heart — favorite button */}
+          <button onClick={toggleFavorite} style={{
+            background:"none",border:"none",cursor:"pointer",
+            fontSize:18,padding:"0 4px",lineHeight:1,
+            color:favorited?"#e74c3c":"var(--muted)",
+            transition:"transform 0.15s",
+            transform:favorited?"scale(1.2)":"scale(1)",
+          }}>{favorited?"❤️":"🤍"}</button>
           <button onClick={e=>{e.stopPropagation();setExpanded(ex=>!ex);}} style={{
             background:"none",border:"none",cursor:"pointer",
             color:"var(--muted)",fontSize:18,padding:"0 4px",
@@ -4839,6 +4975,84 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── WORKOUT PROOF PHOTO MODAL ─────────────────────────────────────────────────
+function WorkoutProofModal({currentUser, dateStr, onSave, onSkip}){
+  const [photo,setPhoto]=useState(null);
+  const [uploading,setUploading]=useState(false);
+  const fileRef=useRef();
+
+  const handleFile=async(e)=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    // Compress aggressively — max 400px, 60% quality (~50-100KB)
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      const compressed=await compressImage(ev.target.result,400);
+      setPhoto(compressed);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUpload=async()=>{
+    if(!photo)return;
+    setUploading(true);
+    const path=`workout_proofs/${currentUser}_${dateStr}`;
+    const result=await uploadProofPhoto(photo,path);
+    setUploading(false);
+    if(result.ok){
+      onSave(result.url);
+    }else{
+      onSkip(); // silently skip on error
+    }
+  };
+
+  return(
+    <div className="modal-overlay" style={{zIndex:1300}}>
+      <div className="modal" style={{maxHeight:"85dvh",overflowY:"auto"}}>
+        <div className="modal-handle"/>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:32,marginBottom:6}}>📸</div>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>ADD WORKOUT PROOF</div>
+          <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>Shows on your Pack card for the day · Optional</div>
+        </div>
+
+        {photo?(
+          <div style={{marginBottom:14}}>
+            <img src={photo} alt="proof" style={{
+              width:"100%",borderRadius:14,objectFit:"cover",maxHeight:240,
+              border:"1px solid var(--border)",
+            }}/>
+            <button onClick={()=>setPhoto(null)} style={{
+              width:"100%",marginTop:8,padding:8,background:"transparent",
+              border:"none",color:"var(--muted)",fontSize:11,cursor:"pointer",
+            }}>Choose different photo</button>
+          </div>
+        ):(
+          <div onClick={()=>fileRef.current?.click()} style={{
+            marginBottom:14,padding:"30px 20px",
+            background:"rgba(255,255,255,0.02)",
+            border:"2px dashed rgba(255,255,255,0.1)",
+            borderRadius:14,textAlign:"center",cursor:"pointer",
+          }}>
+            <div style={{fontSize:32,marginBottom:8}}>📷</div>
+            <div style={{fontSize:13,color:"var(--muted)"}}>Tap to choose a photo</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",marginTop:4}}>Compressed automatically · ~100KB</div>
+            <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{display:"none"}} capture="environment"/>
+          </div>
+        )}
+
+        <div style={{display:"flex",gap:8}}>
+          <button className="btn-ghost" onClick={onSkip} style={{flex:1}}>SKIP</button>
+          <button className="btn-primary" onClick={handleUpload} disabled={!photo||uploading}
+            style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+            {uploading?"UPLOADING...":"SHARE WITH PACK 🐺"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -4983,7 +5197,8 @@ export default function App(){
   const [aiTrainerOpen,setAiTrainerOpen]=useState(false);
   const [nutritionOpen,setNutritionOpen]=useState(false);
   const [pendingEffortRating,setPendingEffortRating]=useState(null);
-  const [activeWorkoutRefresh,setActiveWorkoutRefresh]=useState(0); // bump to re-render cards
+  const [activeWorkoutRefresh,setActiveWorkoutRefresh]=useState(0);
+  const [showProofModal,setShowProofModal]=useState(false);
   const [toast,setToast]=useState("");
   const unsubs=useRef([]);const tt=useRef(null);
   const showToast=useCallback(msg=>{setToast(msg);clearTimeout(tt.current);tt.current=setTimeout(()=>setToast(""),3000);},[]);
@@ -5228,6 +5443,7 @@ export default function App(){
     await fsSet("wolfpack/workouts",{byDate:newData});
     setLoggingWorkout(false);setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
     await checkMilestones(newData);
+    setShowProofModal(true);
   };
 
   // ── AI Trainer: log the AI-generated workout as a lift entry ──────────────
@@ -5275,6 +5491,8 @@ export default function App(){
     launchConfetti();
     showToast(`🔥 WOLFMODE logged! 🐺`);
     await checkMilestones(newData);
+    // Prompt for proof photo
+    setShowProofModal(true);
   };
 
   const handlePost=async(t,photo)=>{
@@ -5501,10 +5719,35 @@ export default function App(){
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
       {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)}/>}
-      {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={(effortId,logged)=>{setPendingEffortRating(null);const effort=EFFORT_RATINGS.find(r=>r.id===effortId);showToast(`${effort?.emoji||"✓"} Logged! ${effort?.advice||"Keep it up"}! 🐺`);}} onClose={()=>setPendingEffortRating(null)}/>}
+      {showProofModal&&<WorkoutProofModal
+        currentUser={currentUser}
+        dateStr={todayStr()}
+        onSave={async(url)=>{
+          const key=todayStr();
+          const existing=history[key]?.[currentUser];
+          if(existing){await fsSet("wolfpack/workouts",{byDate:{...history,[key]:{...(history[key]||{}),[currentUser]:{...existing,proofPhoto:url}}}});}
+          setShowProofModal(false);
+          showToast("📸 Proof shared with the pack! 🐺");
+        }}
+        onSkip={()=>setShowProofModal(false)}
+      />}
+      {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={async(effortId,logged)=>{
+        setPendingEffortRating(null);
+        const effort=EFFORT_RATINGS.find(r=>r.id===effortId);
+        showToast((effort?.emoji||"") + " Logged! " + (effort?.advice||"Keep it up") + "! 🐺");
+        if(logged?.length){try{
+          const key=todayStr();
+          const existing=history[key]?.[currentUser];
+          if(existing?.wolfmodeSession){
+            const updatedEx=existing.wolfmodeSession.exercises.map(ex=>{const l=logged.find(x=>x.name===ex.name);if(l)return{...ex,weightUsed:l.weightUsed||ex.weightUsed,actualReps:l.actualReps||null,skipped:l.skipped||false,substitutedWith:l.substitutedWith||null};return{...ex,skipped:true};});
+            await fsSet("wolfpack/workouts",{byDate:{...history,[key]:{...(history[key]||{}),[currentUser]:{...existing,wolfmodeSession:{...existing.wolfmodeSession,exercises:updatedEx,effortRating:effortId}}}}});
+          }
+        }catch(err){console.warn(err);}}
+      }} onClose={()=>setPendingEffortRating(null)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet("wolfpack/settings",{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
     </div>
   );
 }
+
