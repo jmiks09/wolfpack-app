@@ -90,17 +90,26 @@ DESIGN PRINCIPLES:
 - Block should run 5 weeks
 - Return ONLY valid JSON, no markdown`;
 
-    const usr = `Design a ${daysPerWeek}-day training program for:
-Goal: ${goal}
+    const usr = `Design a ${daysPerWeek||3}-day training program for:
+Primary goal: ${goal} (PRIORITY focus only — NOT the only muscle group to train)
 Experience: ${experience}
 Injuries: ${injuries||"None"}
 Equipment: ${equipment}
 Training mode: ${trainingMode||"structured"}
 ${hasHistory==="true"||hasHistory===true ? `Detected training history - top muscles: ${detectedMuscles}` : "New user, no history"}
 
+CRITICAL SPLIT RULES:
+- Build a BALANCED split. Never repeat the same muscle group more than once per week.
+- 3 days example: Push (Chest/Shoulders/Triceps) + Pull (Back/Biceps) + Legs/Glutes
+- 4 days example: Push + Pull + Legs + Upper Body
+- 5 days example: Chest + Back + Legs + Shoulders + Arms
+- Primary goal means that day gets the most volume/attention, NOT that every day trains it
+- If goal is "Build Legs" or "Grow Glutes" — one dedicated leg/glute day, other days train upper body
+- Always include at least one Push day and one Pull day for any program 3+ days/week
+
 Return this exact JSON:
 {
-  "blockName": "Program name (e.g. 'Push/Pull/Legs Strength Block')",
+  "blockName": "Program name (e.g. 'Leg-Focused PPL Block')",
   "blockWeeks": 5,
   "split": [
     {
@@ -116,7 +125,7 @@ Return this exact JSON:
   "progressionNotes": "Brief note on how to progress this block"
 }`;
 
-    const responseText = await callClaude(sys, usr, apiKey, "claude-sonnet-4-20250514");
+    const responseText = await callClaude(sys, usr, apiKey, "claude-haiku-4-5-20251001");
     const blockData = parseJSON(responseText);
     return { workout: { block: blockData } };
   }
