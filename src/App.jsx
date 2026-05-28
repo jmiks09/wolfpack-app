@@ -232,6 +232,28 @@ const EFFORT_RATINGS = [
   {id:"wrecked", emoji:"💀", label:"Wrecked",   color:"#e74c3c", advice:"reduce volume next time"},
 ];
 
+// ── WOLFMODE COACH — Training modes ─────────────────────────────────────────
+const TRAINING_MODES=[
+  {id:"structured",label:"Structured Progression",icon:"📈",desc:"Core lifts stay consistent, weights increase weekly. Best for strength and muscle.",rotationPct:20},
+  {id:"variety",label:"Variety Mode",icon:"🎲",desc:"More exercise rotation while keeping progression. Best for people who get bored.",rotationPct:40},
+  {id:"athletic",label:"Athletic Mode",icon:"⚡",desc:"Adds conditioning, explosive movements and mobility. Best for functional fitness.",rotationPct:30},
+  {id:"beginner",label:"Beginner Mode",icon:"🌱",desc:"Simpler workouts, less variety, more repetition for learning movement patterns.",rotationPct:10},
+];
+const DAYS_PER_WEEK_OPTIONS=[2,3,4,5];
+const SPLIT_DAY_TYPES=[
+  {id:"legs",label:"Legs",muscles:["quads","hamstrings","glutes","calves"]},
+  {id:"push",label:"Push",muscles:["chest","shoulders","triceps"]},
+  {id:"pull",label:"Pull",muscles:["back","biceps","rear delts"]},
+  {id:"upper",label:"Upper Body",muscles:["chest","back","shoulders","arms"]},
+  {id:"lower",label:"Lower Body",muscles:["quads","hamstrings","glutes","calves"]},
+  {id:"glutes",label:"Glutes/Legs",muscles:["glutes","hamstrings","quads"]},
+  {id:"arms",label:"Arms",muscles:["biceps","triceps","forearms"]},
+  {id:"back",label:"Back",muscles:["lats","traps","rear delts"]},
+  {id:"chest",label:"Chest",muscles:["chest","front delts","triceps"]},
+  {id:"fullbody",label:"Full Body",muscles:["chest","back","legs","shoulders"]},
+  {id:"own",label:"My Own Plan",muscles:[]},
+];
+
 // ── AI Coach (Nutrition + Supplements) constants ────────────────────────────
 const AI_BULK_CUT = [
   {id:"bulk",     label:"Bulk",     icon:"📈", desc:"Build muscle, eat in surplus"},
@@ -358,6 +380,53 @@ function launchConfetti(){const cv=document.getElementById("confetti-canvas");if
 function Toast({msg}){return msg?<div className="toast">{msg}</div>:null;}
 function AvatarDisplay({profile,size=40}){if(profile?.avatarImg)return<img src={profile.avatarImg} alt="av" style={{width:size,height:size,borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>;return<div className="avatar" style={{width:size,height:size,background:"var(--bg2)",fontSize:size*.55,flexShrink:0}}>{profile?.avatar||"🐺"}</div>;}
 function readFileAsDataURL(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});}
+// ── TRAINING BLOCK HELPERS ───────────────────────────────────────────────────
+async function getTrainingBlock(userName){
+  try{const data=await fsGet("wolfpack/training_blocks");return data?.users?.[userName]||null;}
+  catch{return null;}
+}
+async function saveTrainingBlock(userName,block){
+  try{const existing=await fsGet("wolfpack/training_blocks")||{users:{}};await fsSet("wolfpack/training_blocks",{users:{...(existing.users||{}),[userName]:block}});return true;}
+  catch{return false;}
+}
+async function clearTrainingBlock(userName){
+  try{const existing=await fsGet("wolfpack/training_blocks")||{users:{}};const updated={...existing.users};delete updated[userName];await fsSet("wolfpack/training_blocks",{users:updated});return true;}
+  catch{return false;}
+}
+function detectTrainingPattern(history,userName){
+  const muscleCounts={};let workoutDays=0;
+  for(let i=0;i<30;i++){
+    const d=new Date();d.setDate(d.getDate()-i);
+    const ds=localDateStr(d);const entry=history[ds]?.[userName];
+    if(entry?.done){
+      workoutDays++;
+      const mg=entry.wolfmodeSession?.muscleGroup;
+      if(mg)muscleCounts[mg]=(muscleCounts[mg]||0)+1;
+      const label=(entry.workoutLabel||"").toLowerCase();
+      if(label.includes("chest"))muscleCounts.chest=(muscleCounts.chest||0)+1;
+      if(label.includes("back"))muscleCounts.back=(muscleCounts.back||0)+1;
+      if(label.includes("leg")||label.includes("glute"))muscleCounts.legs=(muscleCounts.legs||0)+1;
+      if(label.includes("arm")||label.includes("bicep")||label.includes("tricep"))muscleCounts.arms=(muscleCounts.arms||0)+1;
+      if(label.includes("shoulder"))muscleCounts.shoulders=(muscleCounts.shoulders||0)+1;
+    }
+  }
+  const avgDaysPerWeek=Math.round((workoutDays/30)*7);
+  const topMuscles=Object.entries(muscleCounts).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([m])=>m);
+  return{avgDaysPerWeek:Math.max(2,Math.min(5,avgDaysPerWeek||3)),topMuscles,totalWorkouts:workoutDays,hasHistory:workoutDays>=3};
+}
+function isBlockComplete(block){
+  if(!block)return false;
+  const sessionsPerWeek=block.split?.filter(d=>d.type!=="own").length||3;
+  return(block.sessionsCompleted||0)>=(block.blockWeeks*sessionsPerWeek);
+}
+function getNextSplitDay(block){
+  if(!block?.split?.length)return null;
+  const activeDays=block.split.filter(d=>d.id!=="own");
+  if(!activeDays.length)return null;
+  const lastIdx=activeDays.findIndex(d=>d.id===block.lastSessionDay);
+  return activeDays[(lastIdx+1)%activeDays.length];
+}
+
 function compressImage(dataUrl,maxPx=200){return new Promise(res=>{const img=new Image();img.onload=()=>{let w=img.width,h=img.height;if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*(maxPx/w));w=maxPx;}else{w=Math.round(w*(maxPx/h));h=maxPx;}}const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h);res(cv.toDataURL("image/jpeg",.75));};img.onerror=()=>res(dataUrl);img.src=dataUrl;});}
 
 // ── AI TRAINER HELPERS ──────────────────────────────────────────────────────
@@ -2769,7 +2838,7 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed}){
 }
 
 // ── PROFILE MODAL ────────────────────────────────────────────────────────────
-function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,onSaveWeight,onSaveGoal,onChangePin,onChangeName,onSaveProfile,onSaveBackfill}){
+function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,onSaveWeight,onSaveGoal,onChangePin,onChangeName,onSaveProfile,onSaveBackfill,trainingBlock,onBlockUpdated}){
   const [tab,setTab]=useState("stats");
   const [weight,setWeight]=useState("");
   const [weightUnit,setWeightUnit]=useState("lbs");
@@ -3094,6 +3163,9 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
               profile={profile}
               profiles={profiles}
               onSaveProfile={onSaveProfile}
+              history={history}
+              trainingBlock={trainingBlock}
+              onBlockUpdated={onBlockUpdated}
             />
           )}
 
@@ -3268,7 +3340,7 @@ function WorkoutSummaryDisplay({summary, workoutLabel, style={}}){
 }
 
 // ── AI TRAINER — profile settings tab ───────────────────────────────────────
-function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile}){
+function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile, history, trainingBlock, onBlockUpdated}){
   const cur=profile?.aiTrainer||{};
   const [goal,setGoal]=useState(cur.goal||"");
   const [secondaryGoal,setSecondaryGoal]=useState(cur.secondaryGoal||"none");
@@ -3277,6 +3349,9 @@ function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile}){
   const [usualSetup,setUsualSetup]=useState(cur.usualSetup||"home");
   const [customInjury,setCustomInjury]=useState("");
   const [saved,setSaved]=useState(false);
+  const [daysPerWeek,setDaysPerWeek]=useState(cur.daysPerWeek||3);
+  const [trainingMode,setTrainingMode]=useState(cur.trainingMode||"structured");
+  const [showBlockReset,setShowBlockReset]=useState(false);
 
   const toggleInjury=(inj)=>{
     setInjuries(prev=>prev.includes(inj)?prev.filter(x=>x!==inj):[...prev,inj]);
@@ -3301,6 +3376,8 @@ function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile}){
         experience,
         injuries,
         usualSetup,
+        daysPerWeek,
+        trainingMode,
       },
     };
     const np={...profiles,[currentUser]:updated};
@@ -3454,6 +3531,55 @@ function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile}){
       <button className="btn-primary" onClick={save} disabled={!goal||!experience}>
         {saved?"✓ SAVED":"SAVE AI TRAINER SETTINGS"}
       </button>
+
+      {/* ── TRAINING PROGRAM SECTION ── */}
+      <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid var(--border)"}}>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--accent2)",marginBottom:4}}>🗓️ TRAINING PROGRAM</div>
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:12,lineHeight:1.5}}>WOLFMODE uses this to build a multi-week progressive program.</div>
+        <div style={{marginBottom:14}}>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>DAYS/WEEK</div>
+          <div style={{display:"flex",gap:8}}>
+            {DAYS_PER_WEEK_OPTIONS.map(n=>{const sel=daysPerWeek===n;return(
+              <button key={n} onClick={()=>{setDaysPerWeek(n);setSaved(false);}} style={{flex:1,padding:"12px 0",borderRadius:12,cursor:"pointer",background:sel?"linear-gradient(135deg,rgba(255,107,53,0.25),rgba(124,92,191,0.2))":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.5)":"1px solid var(--border)"}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,color:sel?"#ff6b35":"#fff"}}>{n}</div>
+                <div style={{fontSize:9,color:"var(--muted)"}}>days</div>
+              </button>
+            );})}
+          </div>
+        </div>
+        <div style={{marginBottom:14}}>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>TRAINING MODE</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {TRAINING_MODES.map(m=>{const sel=trainingMode===m.id;return(
+              <button key={m.id} onClick={()=>{setTrainingMode(m.id);setSaved(false);}} style={{padding:"12px 14px",borderRadius:12,cursor:"pointer",textAlign:"left",background:sel?"rgba(124,92,191,0.15)":"var(--bg3)",border:sel?"1px solid var(--accent)":"1px solid var(--border)",display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:22,flexShrink:0}}>{m.icon}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,color:sel?"var(--accent2)":"#fff",marginBottom:2}}>{m.label}</div>
+                  <div style={{fontSize:10,color:"var(--muted)",lineHeight:1.4}}>{m.desc}</div>
+                </div>
+                {sel&&<div style={{color:"var(--accent)",fontSize:14}}>✓</div>}
+              </button>
+            );})}
+          </div>
+        </div>
+        {trainingBlock&&(
+          <div style={{padding:"12px 14px",background:"rgba(46,204,113,0.06)",border:"1px solid rgba(46,204,113,0.2)",borderRadius:12,marginBottom:10}}>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--green)",marginBottom:4}}>ACTIVE PROGRAM BLOCK</div>
+            <div style={{fontSize:13,color:"#fff",marginBottom:2}}>{trainingBlock.blockName||"Training Block"}</div>
+            <div style={{fontSize:11,color:"var(--muted)"}}>Week {trainingBlock.currentWeek||1} of {trainingBlock.blockWeeks||5} · {trainingBlock.sessionsCompleted||0} sessions</div>
+            {!showBlockReset&&<button onClick={()=>setShowBlockReset(true)} style={{marginTop:8,padding:"6px 12px",borderRadius:8,cursor:"pointer",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.2)",color:"var(--red)",fontSize:11}}>Reset block</button>}
+            {showBlockReset&&(
+              <div style={{marginTop:8}}>
+                <div style={{fontSize:11,color:"var(--red)",marginBottom:6}}>Delete current block and start fresh?</div>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={async()=>{await clearTrainingBlock(currentUser);if(onBlockUpdated)onBlockUpdated(null);setShowBlockReset(false);}} style={{flex:1,padding:"7px",borderRadius:8,cursor:"pointer",background:"var(--red)",border:"none",color:"#fff",fontSize:11}}>Yes, reset</button>
+                  <button onClick={()=>setShowBlockReset(false)} style={{flex:1,padding:"7px",borderRadius:8,cursor:"pointer",background:"var(--bg3)",border:"1px solid var(--border)",color:"var(--muted)",fontSize:11}}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Reset button */}
       <button onClick={async()=>{
@@ -4263,99 +4389,38 @@ function ExerciseCard({exercise, userName, experience, injuries, idx}){
 }
 
 // ── AI TRAINER MODAL ────────────────────────────────────────────────────────
-function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, onUseWorkout, showToast}){
-  const [step,setStep]=useState("setup");
+
+function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlock, onBlockUpdated, onClose, onUseWorkout, showToast}){
+  const [step,setStep]=useState("home");
+  const [mode,setMode]=useState("program");
   const [selectedPreset,setSelectedPreset]=useState(profile?.aiTrainer?.usualSetup||"home");
-  const [customEquip,setCustomEquip]=useState(profile?.aiTrainer?.savedPresets?.[0]?.equipment||"");
-  const [showCustomEditor,setShowCustomEditor]=useState(false);
+  const [customEquip,setCustomEquip]=useState("");
   const [savedPresets,setSavedPresets]=useState(profile?.aiTrainer?.savedPresets||[]);
   const [workout,setWorkout]=useState(null);
   const [error,setError]=useState(null);
   const [regenCount,setRegenCount]=useState(getRegenCount(currentUser));
-
-  // Muscle group state
-  const [muscleGroup,setMuscleGroup]=useState(null); // null = AI picks
-  const [aiPickingMuscle,setAiPickingMuscle]=useState(false);
+  const [muscleGroup,setMuscleGroup]=useState(null);
+  const [numExercises,setNumExercises]=useState(5);
+  const [setsPerExercise,setSetsPerExercise]=useState(4);
+  const [designingBlock,setDesigningBlock]=useState(false);
+  const [detectedPattern,setDetectedPattern]=useState(null);
+  const [showFreestyleSetup,setShowFreestyleSetup]=useState(false);
   const [aiMuscleReason,setAiMuscleReason]=useState("");
-  // muscle group state only — volume controlled by AI
 
   const goal=profile?.aiTrainer?.goal;
   const experience=profile?.aiTrainer?.experience;
   const injuries=(profile?.aiTrainer?.injuries||[]).join(", ");
-  const goalLabel=AI_GOALS.find(g=>g.id===goal)?.label||goal;
+  const daysPerWeek=profile?.aiTrainer?.daysPerWeek||3;
+  const trainingMode=profile?.aiTrainer?.trainingMode||"structured";
+  const goalLabel=AI_GOALS.find(g=>g.id===goal)?.label||goal||"General Fitness";
+  const modeObj=TRAINING_MODES.find(m=>m.id===trainingMode)||TRAINING_MODES[0];
+  const blockComplete=isBlockComplete(trainingBlock);
+  const nextDay=trainingBlock&&!blockComplete?getNextSplitDay(trainingBlock):null;
 
-  // AI Pick for muscle group — looks at recent history and suggests
-  const handleAIPick=()=>{
-    setAiPickingMuscle(true);
-    const history7=getRecentHistoryString(history,currentUser);
-    // Simple heuristic: scan recent history for muscle keywords and pick the least-trained
-    const groups=["chest","back","legs","glutes","shoulders","arms","core"];
-    const counts={};
-    groups.forEach(g=>{counts[g]=0;});
-    const lower=history7.toLowerCase();
-    if(lower.includes("chest")||lower.includes("bench")||lower.includes("push")) counts.chest+=2;
-    if(lower.includes("back")||lower.includes("pull")||lower.includes("row")||lower.includes("lat")) counts.back+=2;
-    if(lower.includes("leg")||lower.includes("squat")||lower.includes("lunge")) counts.legs+=2;
-    if(lower.includes("glute")||lower.includes("hip thrust")||lower.includes("rdl")) counts.glutes+=2;
-    if(lower.includes("shoulder")||lower.includes("press")||lower.includes("delt")) counts.shoulders+=2;
-    if(lower.includes("arm")||lower.includes("curl")||lower.includes("tricep")||lower.includes("bicep")) counts.arms+=2;
-    if(lower.includes("core")||lower.includes("abs")||lower.includes("plank")) counts.core+=2;
-    // Find least trained
-    const sorted=groups.sort((a,b)=>counts[a]-counts[b]);
-    const pick=sorted[0];
-    const mg=AI_MUSCLE_GROUPS.find(m=>m.id===pick)||AI_MUSCLE_GROUPS[7]; // fallback full body
-    setMuscleGroup(mg.id);
-    setAiMuscleReason(`You haven't trained ${mg.label.toLowerCase()} much recently — good time to hit it.`);
-    setAiPickingMuscle(false);
-  };
+  useEffect(()=>{
+    if(!trainingBlock&&history){setDetectedPattern(detectTrainingPattern(history,currentUser));}
+  },[]);
 
-  const generate=async(isRegen=false)=>{
-    if(isRegen&&regenCount>=MAX_DAILY_REGENS){
-      showToast(`Daily limit reached (${MAX_DAILY_REGENS} regens). Try again tomorrow.`);
-      return;
-    }
-    setStep("loading");
-    setError(null);
-    const equipment=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
-    const bulkCut=profile?.aiTrainer?.coach?.stats?.bulkCut;
-    const muscleLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label:"AI's choice based on history";
-    const secondaryGoal=profile?.aiTrainer?.secondaryGoal;
-    const secondaryLabel=secondaryGoal?AI_SECONDARY_GOALS.find(s=>s.id===secondaryGoal)?.label:null;
-    // Build a single clean goal string — fold bulk/cut and secondary goal in here
-    const fullGoal=[
-      goalLabel,
-      bulkCut?`(${bulkCut==="bulk"?"bulking":bulkCut==="cut"?"cutting":"maintaining"})`:null,
-      secondaryLabel?`+ ${secondaryLabel}`:null,
-    ].filter(Boolean).join(" ");
-    const result=await aiGenerateWorkout({
-      userName:currentUser,
-      goal:fullGoal,
-      experience:experience||"intermediate",
-      injuries:injuries||"None",
-      equipment,
-      recentHistory:getRecentHistoryString(history,currentUser).split("|").slice(0,3).join("|"),
-      muscleGroup:muscleLabel,
-    });
-    if(result.ok){
-      setWorkout(result.workout);
-      setStep("result");
-      if(isRegen){setRegenCount(bumpRegenCount(currentUser));}
-    }else{
-      setError(result.error);
-      setStep("setup");
-    }
-  };
-
-  const handlePlanWorkout=(targetDate)=>{
-    if(!workout)return;
-    saveActiveWorkout(currentUser, workout, muscleGroup||"fullbody", targetDate);
-    showToast(targetDate==="tomorrow"
-      ?"📋 Planned for tomorrow! It'll be waiting for you."
-      :"🔥 Workout saved! Tap it on the Pack tab when you're ready.");
-    onClose();
-  };
-
-  // ── Profile not set up ───────────────────────────────────────────────────
   if(!goal||!experience){
     return(
       <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -4364,9 +4429,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
           <div style={{textAlign:"center",padding:"10px 0 16px"}}>
             <div style={{fontSize:36,marginBottom:8}}>🔥</div>
             <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,marginBottom:8}}>SET UP YOUR PROFILE FIRST</div>
-            <div style={{fontSize:13,color:"var(--muted)",marginBottom:18,lineHeight:1.5,padding:"0 10px"}}>
-              WOLFMODE needs your goal and experience level to train you right. Open your profile and fill in the 🤖 AI tab.
-            </div>
+            <div style={{fontSize:13,color:"var(--muted)",marginBottom:18,lineHeight:1.5,padding:"0 10px"}}>WOLFMODE needs your goal and experience level. Open your profile and fill in the 🔥 WOLF tab.</div>
             <button className="btn-primary" onClick={onClose} style={{maxWidth:240,margin:"0 auto"}}>OPEN MY PROFILE</button>
           </div>
         </div>
@@ -4374,179 +4437,261 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     );
   }
 
+  const handleDesignBlock=async()=>{
+    setDesigningBlock(true);setError(null);
+    const pattern=detectedPattern||detectTrainingPattern(history,currentUser);
+    const result=await aiGenerateWorkout({
+      userName:currentUser,goal:goalLabel,experience:experience||"intermediate",
+      injuries:injuries||"None",equipment:buildEquipmentString(selectedPreset,customEquip,packHomeGym),
+      recentHistory:getRecentHistoryString(history,currentUser),
+      requestType:"design_block",daysPerWeek,trainingMode,
+      detectedMuscles:pattern.topMuscles.join(", "),hasHistory:pattern.hasHistory,
+    });
+    setDesigningBlock(false);
+    if(result.ok&&result.workout?.block){
+      const block={...result.workout.block,currentWeek:1,sessionsCompleted:0,startDate:new Date().toISOString().slice(0,10),lastSessionDay:null,createdAt:Date.now()};
+      await saveTrainingBlock(currentUser,block);
+      if(onBlockUpdated)onBlockUpdated(block);
+      setStep("home");showToast("🎯 Your training program is ready! 🐺");
+    }else{setError(result.error||"Failed to design program.");setStep("home");}
+  };
+
+  const generateSession=async(isRegen=false,sessionMode=mode)=>{
+    if(isRegen&&regenCount>=MAX_DAILY_REGENS){showToast("Daily limit reached.");return;}
+    setStep("loading");setError(null);
+    const equipment=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
+    const trainingLog=await getTrainingLog(currentUser);
+    const priorPerf=buildPriorPerformanceString(trainingLog,nextDay?.label||"");
+    const secondaryGoal=profile?.aiTrainer?.secondaryGoal;
+    const secondaryLabel=secondaryGoal?AI_SECONDARY_GOALS.find(s=>s.id===secondaryGoal)?.label:null;
+    const fullGoal=[goalLabel,secondaryLabel?`+ ${secondaryLabel}`:null].filter(Boolean).join(" ");
+    const muscleLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label:"AI choice";
+    const result=await aiGenerateWorkout({
+      userName:currentUser,goal:fullGoal,experience:experience||"intermediate",
+      injuries:injuries||"None",equipment,recentHistory:getRecentHistoryString(history,currentUser),
+      muscleGroup:sessionMode==="program"?(nextDay?.label||"AI choice"):muscleLabel,
+      requestType:sessionMode==="program"?"program_session":"freestyle",
+      trainingMode,numExercises,setsPerExercise,
+      blockContext:sessionMode==="program"&&trainingBlock?JSON.stringify({
+        blockName:trainingBlock.blockName,week:trainingBlock.currentWeek||1,
+        blockWeeks:trainingBlock.blockWeeks||5,sessionsCompleted:trainingBlock.sessionsCompleted||0,
+        coreLifts:trainingBlock.coreLifts||[],dayType:nextDay?.id||"fullbody",
+        rotationPct:modeObj.rotationPct,
+      }):"",
+      priorPerformance:priorPerf,
+    });
+    if(result.ok){setWorkout(result.workout);setStep("result");if(isRegen)setRegenCount(bumpRegenCount(currentUser));}
+    else{setError(result.error);setStep(sessionMode==="program"?"home":"setup");}
+  };
+
+  const handleUseWorkout=()=>{
+    if(!workout)return;
+    const mg=mode==="program"?(nextDay?.id||"fullbody"):muscleGroup||"fullbody";
+    saveActiveWorkout(currentUser,workout,mg,"today");
+    if(mode==="program"&&trainingBlock){
+      const activeDays=trainingBlock.split?.filter(d=>d.id!=="own")||[];
+      const updatedBlock={...trainingBlock,sessionsCompleted:(trainingBlock.sessionsCompleted||0)+1,currentWeek:Math.max(1,Math.ceil(((trainingBlock.sessionsCompleted||0)+1)/Math.max(1,activeDays.length))),lastSessionDay:nextDay?.id||null,lastSessionDate:new Date().toISOString().slice(0,10)};
+      saveTrainingBlock(currentUser,updatedBlock);if(onBlockUpdated)onBlockUpdated(updatedBlock);
+    }
+    showToast("🔥 Workout saved! Find it on the Pack tab.");
+    onUseWorkout&&onUseWorkout();onClose();
+  };
+
   return(
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal" style={{maxHeight:"92dvh",overflowY:"auto"}}>
         <div className="modal-handle"/>
 
-        {/* ── SETUP STEP ── */}
-        {step==="setup"&&(
+        {step==="home"&&(
           <>
-            {/* Header */}
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
               <div style={{fontSize:26}}>🔥</div>
               <div style={{flex:1}}>
-                <div style={{
-                  fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,
-                  background:"linear-gradient(90deg,#ff6b35,#c084fc)",
-                  WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
-                  lineHeight:1,
-                }}>WOLFMODE</div>
-                <div style={{fontSize:10,color:"var(--muted)"}}>Goal: {goalLabel} · {experience}</div>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1}}>WOLFMODE</div>
+                <div style={{fontSize:10,color:"var(--muted)"}}>{goalLabel} · {experience} · {modeObj.icon} {modeObj.label}</div>
               </div>
             </div>
 
-            {/* ── FAVORITES ── */}
-            {getFavorites(currentUser).length>0&&(
-              <div style={{marginBottom:14}}>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⭐ MY FAVORITES</div>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  {getFavorites(currentUser).map(fav=>(
-                    <div key={fav.id} style={{
-                      display:"flex",alignItems:"center",gap:10,
-                      padding:"10px 12px",
-                      background:"rgba(255,107,53,0.06)",
-                      border:"1px solid rgba(255,107,53,0.2)",
-                      borderRadius:12,
-                    }}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1.5,color:"#fff",marginBottom:1}}>{fav.title}</div>
-                        <div style={{fontSize:10,color:"var(--muted)"}}>
-                          {AI_MUSCLE_GROUPS.find(m=>m.id===fav.muscleGroup)?.label||fav.muscleGroup}
-                          {` · ${fav.workout?.exercises?.length||0} exercises`}
-                        </div>
-                      </div>
-                      <button onClick={()=>{
-                        // Load this favorite directly — skip generation
-                        setWorkout(fav.workout);
-                        setMuscleGroup(fav.muscleGroup);
-                        setStep("result");
-                      }} style={{
-                        padding:"6px 14px",borderRadius:10,cursor:"pointer",
-                        background:"rgba(255,107,53,0.15)",
-                        border:"1px solid rgba(255,107,53,0.3)",
-                        color:"#ff6b35",fontSize:11,
-                        fontFamily:"'Bebas Neue',cursive",letterSpacing:1,flexShrink:0,
-                      }}>USE</button>
-                      <button onClick={()=>{removeFavorite(currentUser,fav.id);setStep(s=>s);}} style={{
-                        background:"none",border:"none",cursor:"pointer",
-                        color:"var(--muted)",fontSize:16,padding:"0 2px",
-                      }}>×</button>
-                    </div>
-                  ))}
-                </div>
-                <div style={{height:1,background:"var(--border)",margin:"10px 0"}}/>
+            {blockComplete&&(
+              <div style={{padding:"16px",marginBottom:12,background:"linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,107,53,0.08))",border:"1px solid rgba(255,215,0,0.3)",borderRadius:16,textAlign:"center"}}>
+                <div style={{fontSize:32,marginBottom:6}}>🏆</div>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2,color:"#ffd700",marginBottom:4}}>BLOCK COMPLETE!</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginBottom:4}}>{trainingBlock?.blockName} · {trainingBlock?.blockWeeks} weeks</div>
+                <div style={{fontSize:11,color:"var(--muted)",marginBottom:12}}>{trainingBlock?.sessionsCompleted} sessions completed 🎉</div>
+                <button className="btn-primary" onClick={handleDesignBlock} disabled={designingBlock} style={{background:"linear-gradient(135deg,#ffd700,#ff6b35)",border:"none",color:"#000",maxWidth:220,margin:"0 auto"}}>
+                  {designingBlock?"DESIGNING...":"🎯 START NEW BLOCK"}
+                </button>
               </div>
             )}
 
-            {/* ── MUSCLE GROUP ── */}
-            <div style={{marginBottom:14}}>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🎯 MUSCLE GROUP</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:8}}>
-                {AI_MUSCLE_GROUPS.map(mg=>{
-                  const sel=muscleGroup===mg.id;
-                  return(
-                    <button key={mg.id} onClick={()=>{setMuscleGroup(mg.id);setAiMuscleReason("");}}
-                      style={{
-                        padding:"8px 4px",borderRadius:10,cursor:"pointer",textAlign:"center",
-                        background:sel?"rgba(255,107,53,0.2)":"var(--bg3)",
-                        border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",
-                      }}>
-                      <div style={{fontSize:16,marginBottom:2}}>{mg.icon}</div>
-                      <div style={{fontSize:9,color:sel?"#ff6b35":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{mg.label}</div>
-                    </button>
-                  );
-                })}
-              </div>
-              <button onClick={handleAIPick} disabled={aiPickingMuscle}
-                style={{
-                  width:"100%",padding:"10px 12px",borderRadius:10,cursor:"pointer",
-                  background:!muscleGroup?"rgba(124,92,191,0.2)":"var(--bg3)",
-                  border:!muscleGroup?"1px solid var(--accent)":"1px solid var(--border)",
-                  display:"flex",alignItems:"center",gap:8,
-                }}>
-                <span style={{fontSize:16}}>🤖</span>
-                <div style={{textAlign:"left",flex:1}}>
-                  <div style={{fontSize:12,color:!muscleGroup?"var(--accent2)":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1.5}}>
-                    {aiPickingMuscle?"ANALYZING YOUR HISTORY...":"AI PICK FOR ME"}
+            {trainingBlock&&!blockComplete&&(
+              <div style={{padding:"12px 14px",marginBottom:12,background:"rgba(124,92,191,0.08)",border:"1px solid rgba(124,92,191,0.2)",borderRadius:14}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <div>
+                    <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--accent2)"}}>{trainingBlock.blockName||"TRAINING BLOCK"}</div>
+                    <div style={{fontSize:11,color:"var(--muted)"}}>Week {trainingBlock.currentWeek||1} of {trainingBlock.blockWeeks||5}</div>
                   </div>
-                  {aiMuscleReason&&<div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>{aiMuscleReason}</div>}
-                  {!muscleGroup&&!aiMuscleReason&&<div style={{fontSize:10,color:"var(--muted)"}}>Based on what you haven't trained recently</div>}
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,color:"var(--accent2)"}}>{trainingBlock.sessionsCompleted||0}</div>
+                    <div style={{fontSize:9,color:"var(--muted)"}}>sessions</div>
+                  </div>
                 </div>
-                {!muscleGroup&&<div style={{fontSize:14,color:"var(--accent)"}}>✓</div>}
-              </button>
-            </div>
-
-            {/* ── EQUIPMENT ── */}
-            <div style={{marginBottom:14}}>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🏠 WHERE ARE YOU TRAINING?</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}}>
-                {AI_EQUIPMENT_PRESETS.map(p=>{
-                  const sel=selectedPreset===p.id;
-                  return(
-                    <button key={p.id} onClick={()=>{setSelectedPreset(p.id);setShowCustomEditor(false);}}
-                      style={{
-                        padding:"10px 8px",borderRadius:12,cursor:"pointer",
-                        background:sel?"rgba(124,92,191,0.2)":"var(--bg3)",
-                        border:sel?"1px solid var(--accent)":"1px solid var(--border)",
-                        textAlign:"left",
-                      }}>
-                      <div style={{fontSize:18,marginBottom:2}}>{p.icon}</div>
-                      <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1.5,color:sel?"var(--accent2)":"#fff"}}>{p.label}</div>
-                    </button>
-                  );
-                })}
+                <div style={{height:4,background:"rgba(255,255,255,0.08)",borderRadius:2,overflow:"hidden",marginBottom:8}}>
+                  <div style={{height:"100%",background:"linear-gradient(90deg,#ff6b35,#c084fc)",borderRadius:2,width:`${Math.min(100,((trainingBlock.sessionsCompleted||0)/Math.max(1,(trainingBlock.blockWeeks||5)*Math.max(1,(trainingBlock.split?.filter(d=>d.id!=="own").length||daysPerWeek))))*100)}%`,transition:"width 0.3s"}}/>
+                </div>
+                {nextDay&&<div style={{fontSize:11,color:"rgba(255,255,255,0.7)"}}>Next up: <span style={{color:"#ff6b35",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{nextDay.label}</span></div>}
+                {trainingBlock.split&&(
+                  <div style={{marginTop:8,display:"flex",gap:4,flexWrap:"wrap"}}>
+                    {trainingBlock.split.map((d,i)=>(
+                      <span key={i} style={{padding:"2px 8px",borderRadius:20,fontSize:9,background:d.id===nextDay?.id?"rgba(255,107,53,0.2)":d.id==="own"?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.06)",border:d.id===nextDay?.id?"1px solid rgba(255,107,53,0.4)":"1px solid rgba(255,255,255,0.08)",color:d.id===nextDay?.id?"#ff6b35":d.id==="own"?"rgba(255,255,255,0.2)":"rgba(255,255,255,0.5)"}}>
+                        {d.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              {savedPresets.length>0&&savedPresets.map((sp,i)=>{
-                const sel=selectedPreset===`saved_${i}`;
-                return(
-                  <button key={i} onClick={()=>{setSelectedPreset(`saved_${i}`);setCustomEquip(sp.equipment);setShowCustomEditor(false);}}
-                    style={{
-                      width:"100%",padding:"8px 12px",borderRadius:10,cursor:"pointer",textAlign:"left",marginBottom:6,
-                      background:sel?"rgba(124,92,191,0.15)":"var(--bg3)",
-                      border:sel?"1px solid var(--accent)":"1px solid var(--border)",
-                    }}>
-                    <div style={{fontSize:12,color:sel?"var(--accent2)":"#fff"}}>⚙️ {sp.name}</div>
-                  </button>
-                );
-              })}
-              <button onClick={()=>{setSelectedPreset("custom");setShowCustomEditor(true);}}
-                style={{
-                  width:"100%",padding:"8px 12px",borderRadius:10,cursor:"pointer",
-                  background:selectedPreset==="custom"?"rgba(124,92,191,0.15)":"var(--bg3)",
-                  border:selectedPreset==="custom"?"1px solid var(--accent)":"1px solid var(--border)",
-                  textAlign:"left",color:selectedPreset==="custom"?"var(--accent2)":"var(--muted)",fontSize:12,
-                }}>
-                ⚙️ Custom equipment
-              </button>
-              {showCustomEditor&&(
-                <textarea className="input" placeholder="Describe your equipment..." value={customEquip}
-                  onChange={e=>setCustomEquip(e.target.value)} rows={2}
-                  style={{padding:10,resize:"vertical",fontFamily:"inherit",fontSize:12,marginTop:6}}/>
+            )}
+
+            {!trainingBlock&&(
+              <div style={{padding:"14px",marginBottom:12,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:14}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"#ff6b35",marginBottom:4}}>NO PROGRAM YET</div>
+                {detectedPattern?.hasHistory?(
+                  <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginBottom:10,lineHeight:1.5}}>
+                    We detected ~{detectedPattern.avgDaysPerWeek} training days/week.{detectedPattern.topMuscles.length>0?` Top muscles: ${detectedPattern.topMuscles.slice(0,3).join(", ")}.`:""} Ready to build your program?
+                  </div>
+                ):(
+                  <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginBottom:10,lineHeight:1.5}}>Set your training days/week and mode in your profile, then let the AI design your full program.</div>
+                )}
+                <button className="btn-primary" onClick={handleDesignBlock} disabled={designingBlock} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+                  {designingBlock?"DESIGNING YOUR PROGRAM...":"🎯 DESIGN MY PROGRAM"}
+                </button>
+              </div>
+            )}
+
+            {getFavorites(currentUser).length>0&&(
+              <div style={{marginBottom:12}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⭐ MY FAVORITES</div>
+                {getFavorites(currentUser).map(fav=>(
+                  <div key={fav.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:6,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:12}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1.5,color:"#fff",marginBottom:1}}>{fav.title}</div>
+                      <div style={{fontSize:10,color:"var(--muted)"}}>{AI_MUSCLE_GROUPS.find(m=>m.id===fav.muscleGroup)?.label||fav.muscleGroup} · {fav.workout?.exercises?.length||0} exercises</div>
+                    </div>
+                    <button onClick={()=>{setWorkout(fav.workout);setMuscleGroup(fav.muscleGroup);setMode("freestyle");setStep("result");}} style={{padding:"6px 14px",borderRadius:10,cursor:"pointer",background:"rgba(255,107,53,0.15)",border:"1px solid rgba(255,107,53,0.3)",color:"#ff6b35",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,flexShrink:0}}>USE</button>
+                    <button onClick={()=>{removeFavorite(currentUser,fav.id);setStep(s=>s);}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:16,padding:"0 2px"}}>×</button>
+                  </div>
+                ))}
+                <div style={{height:1,background:"var(--border)",margin:"4px 0 10px"}}/>
+              </div>
+            )}
+
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {trainingBlock&&!blockComplete&&(
+                <button className="btn-primary" onClick={()=>{setMode("program");setShowFreestyleSetup(false);setStep("setup");}} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+                  📋 FOLLOW MY PROGRAM{nextDay?` · ${nextDay.label}`:""}
+                </button>
               )}
+              <button onClick={()=>{setMode("freestyle");setShowFreestyleSetup(true);setStep("setup");}} style={{width:"100%",padding:"12px",borderRadius:12,cursor:"pointer",background:"var(--bg3)",border:"1px solid var(--border)",color:"var(--muted)",fontSize:13,fontFamily:"'Bebas Neue',cursive",letterSpacing:2}}>
+                ⚡ FREESTYLE SESSION
+              </button>
             </div>
-
-            {error&&<div style={{padding:10,marginBottom:10,background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:10,color:"var(--red)",fontSize:12}}>{error}</div>}
-
-            <button className="btn-primary" disabled={selectedPreset==="custom"&&!customEquip.trim()} onClick={()=>generate(false)}
-              style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-              🔥 GENERATE MY WORKOUT
-            </button>
-            <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:6}}>{MAX_DAILY_REGENS-regenCount} regens remaining today</div>
+            {error&&<div style={{padding:10,marginTop:10,background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:10,color:"var(--red)",fontSize:12}}>{error}</div>}
           </>
         )}
 
-        {/* ── LOADING STEP ── */}
+        {step==="setup"&&(
+          <>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+              <button onClick={()=>setStep("home")} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:20,padding:"0 4px"}}>←</button>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,color:"#fff"}}>{mode==="program"?`📋 ${nextDay?.label||"Program Session"}`:"⚡ FREESTYLE"}</div>
+            </div>
+
+            {showFreestyleSetup&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🎯 MUSCLE GROUP</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:8}}>
+                  {AI_MUSCLE_GROUPS.map(mg=>{const sel=muscleGroup===mg.id;return(
+                    <button key={mg.id} onClick={()=>{setMuscleGroup(mg.id);setAiMuscleReason("");}} style={{padding:"8px 4px",borderRadius:10,cursor:"pointer",textAlign:"center",background:sel?"rgba(255,107,53,0.2)":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)"}}>
+                      <div style={{fontSize:16,marginBottom:2}}>{mg.icon}</div>
+                      <div style={{fontSize:9,color:sel?"#ff6b35":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{mg.label}</div>
+                    </button>
+                  );})}
+                </div>
+                <button onClick={()=>{
+                  const groups=["chest","back","legs","glutes","shoulders","arms","core"];
+                  const counts={};groups.forEach(g=>{counts[g]=0;});
+                  const lower=getRecentHistoryString(history,currentUser).toLowerCase();
+                  ["chest","back","shoulder","arm","core"].forEach(k=>{if(lower.includes(k))counts[k]=(counts[k]||0)+2;});
+                  if(lower.includes("leg")||lower.includes("squat"))counts.legs+=2;if(lower.includes("glute"))counts.glutes+=2;
+                  const pick=groups.sort((a,b)=>(counts[a]||0)-(counts[b]||0))[0];
+                  const mg=AI_MUSCLE_GROUPS.find(m=>m.id===pick)||AI_MUSCLE_GROUPS[7];
+                  setMuscleGroup(mg.id);setAiMuscleReason(`You haven't trained ${mg.label.toLowerCase()} much recently.`);
+                }} style={{width:"100%",padding:"10px 12px",borderRadius:10,cursor:"pointer",background:!muscleGroup?"rgba(124,92,191,0.2)":"var(--bg3)",border:!muscleGroup?"1px solid var(--accent)":"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:16}}>🤖</span>
+                  <div style={{textAlign:"left",flex:1}}>
+                    <div style={{fontSize:12,color:!muscleGroup?"var(--accent2)":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1.5}}>AI PICK FOR ME</div>
+                    {aiMuscleReason&&<div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>{aiMuscleReason}</div>}
+                  </div>
+                  {!muscleGroup&&<div style={{fontSize:14,color:"var(--accent)"}}>✓</div>}
+                </button>
+              </div>
+            )}
+
+            <div style={{marginBottom:14}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⚙️ VOLUME</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Exercises</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {[3,4,5].map(n=>(
+                      <button key={n} onClick={()=>setNumExercises(n)} style={{flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",background:numExercises===n?"rgba(255,107,53,0.2)":"var(--bg3)",border:numExercises===n?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",color:numExercises===n?"#ff6b35":"var(--muted)",fontFamily:"'Bebas Neue',cursive",fontSize:15}}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Sets each</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {[3,4].map(n=>(
+                      <button key={n} onClick={()=>setSetsPerExercise(n)} style={{flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",background:setsPerExercise===n?"rgba(255,107,53,0.2)":"var(--bg3)",border:setsPerExercise===n?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",color:setsPerExercise===n?"#ff6b35":"var(--muted)",fontFamily:"'Bebas Neue',cursive",fontSize:15}}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{marginBottom:14}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🏠 EQUIPMENT</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                {AI_EQUIPMENT_PRESETS.map(p=>{const sel=selectedPreset===p.id;return(
+                  <button key={p.id} onClick={()=>setSelectedPreset(p.id)} style={{padding:"10px 8px",borderRadius:12,cursor:"pointer",background:sel?"rgba(124,92,191,0.2)":"var(--bg3)",border:sel?"1px solid var(--accent)":"1px solid var(--border)",textAlign:"left"}}>
+                    <div style={{fontSize:18,marginBottom:2}}>{p.icon}</div>
+                    <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1.5,color:sel?"var(--accent2)":"#fff"}}>{p.label}</div>
+                  </button>
+                );})}
+              </div>
+              {savedPresets.map((sp,i)=>{const sel=selectedPreset===`saved_${i}`;return(
+                <button key={i} onClick={()=>{setSelectedPreset(`saved_${i}`);setCustomEquip(sp.equipment);}} style={{width:"100%",padding:"8px 12px",borderRadius:10,cursor:"pointer",textAlign:"left",marginTop:6,background:sel?"rgba(124,92,191,0.15)":"var(--bg3)",border:sel?"1px solid var(--accent)":"1px solid var(--border)"}}>
+                  <div style={{fontSize:12,color:sel?"var(--accent2)":"#fff"}}>⚙️ {sp.name}</div>
+                </button>
+              );})}
+            </div>
+
+            <button className="btn-primary" onClick={()=>generateSession(false,mode)} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+              🔥 {mode==="program"?"GENERATE PROGRAM SESSION":"GENERATE FREESTYLE"}
+            </button>
+            <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:6}}>{MAX_DAILY_REGENS-regenCount} regens remaining</div>
+          </>
+        )}
+
         {step==="loading"&&(
           <div style={{textAlign:"center",padding:"40px 20px"}}>
             <div style={{fontSize:48,marginBottom:14,animation:"spin 1.5s linear infinite",display:"inline-block"}}>🔥</div>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:6,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFMODE ACTIVATED</div>
-            <div style={{fontSize:12,color:"var(--muted)"}}>Building your {muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label:"personalized"} workout...</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:6,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>{mode==="program"?"BUILDING YOUR SESSION":"GENERATING WORKOUT"}</div>
+            <div style={{fontSize:12,color:"var(--muted)"}}>{mode==="program"?`Week ${trainingBlock?.currentWeek||1} · ${nextDay?.label||""}...`:"Picking exercises..."}</div>
             <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
           </div>
         )}
 
-        {/* ── RESULT STEP ── */}
         {step==="result"&&workout&&(
           <>
             <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
@@ -4554,39 +4699,22 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
               <div style={{flex:1}}>
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:2,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.1}}>{workout.title}</div>
                 <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>~{workout.estimatedMinutes} min · {workout.exercises?.length} exercises</div>
+                {mode==="program"&&trainingBlock&&<div style={{fontSize:10,color:"var(--accent2)",marginTop:2}}>📋 {trainingBlock.blockName} · Week {trainingBlock.currentWeek||1}</div>}
               </div>
             </div>
-            {workout.reasoning&&(
-              <div style={{padding:"10px 12px",marginBottom:12,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:10,fontSize:12,color:"rgba(255,255,255,0.8)",lineHeight:1.5,fontStyle:"italic"}}>
-                💭 {workout.reasoning}
-              </div>
-            )}
-            {workout.exercises.map((ex,i)=>(
+            {workout.reasoning&&<div style={{padding:"10px 12px",marginBottom:12,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:10,fontSize:12,color:"rgba(255,255,255,0.8)",lineHeight:1.5,fontStyle:"italic"}}>💭 {workout.reasoning}</div>}
+            {workout.exercises?.map((ex,i)=>(
               <ExerciseCard key={i} exercise={ex} userName={currentUser} experience={experience} injuries={injuries} idx={i}/>
             ))}
             <div style={{display:"flex",gap:8,marginTop:12}}>
-              <button className="btn-primary" onClick={()=>handlePlanWorkout("today")}
-                style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-                🔥 TRAIN TODAY
+              <button className="btn-primary" onClick={handleUseWorkout} style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+                {mode==="program"?"🔥 TRAIN TODAY":"USE THIS WORKOUT"}
               </button>
-              <button className="btn-ghost" onClick={()=>generate(true)} disabled={regenCount>=MAX_DAILY_REGENS} style={{flex:"0 0 auto",padding:"0 14px"}}>
+              <button className="btn-ghost" onClick={()=>generateSession(true,mode)} disabled={regenCount>=MAX_DAILY_REGENS} style={{flex:"0 0 auto",padding:"0 14px"}}>
                 🔄 ({MAX_DAILY_REGENS-regenCount})
               </button>
             </div>
-            <button onClick={()=>handlePlanWorkout("tomorrow")}
-              style={{
-                width:"100%",marginTop:8,padding:"10px",
-                background:"rgba(124,92,191,0.1)",
-                border:"1px solid rgba(124,92,191,0.3)",
-                borderRadius:12,cursor:"pointer",
-                color:"var(--accent2)",fontSize:12,
-                fontFamily:"'Bebas Neue',cursive",letterSpacing:2,
-              }}>
-              📋 PLAN FOR TOMORROW
-            </button>
-            <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:6}}>
-              {regenCount>=MAX_DAILY_REGENS?"No more regens today.":`${MAX_DAILY_REGENS-regenCount} regens left today`}
-            </div>
+            <button onClick={()=>{setStep("home");setWorkout(null);}} style={{width:"100%",marginTop:8,padding:8,background:"transparent",border:"none",color:"var(--muted)",fontSize:11,cursor:"pointer"}}>← Back</button>
           </>
         )}
       </div>
@@ -5097,6 +5225,7 @@ export default function App(){
   const [lastSeen,setLastSeen]=useState({feed:0,challenges:0,gym:0});
   const [packGoals,setPackGoals]=useState([]);
   const [garageEquipment,setGarageEquipment]=useState(HOME_GYM_DEFAULT);
+  const [trainingBlock,setTrainingBlock]=useState(null);
   const [reactions,setReactions]=useState({});
   const [editWorkout,setEditWorkout]=useState(null);
   const [weeklyRecap,setWeeklyRecap]=useState(null);
@@ -5118,6 +5247,7 @@ export default function App(){
       const u5=fsListen("wolfpack/gym",d=>{if(d)setGymSlots(d.slots||[]);});
       const u6=fsListen("wolfpack/packgoals",d=>{if(d)setPackGoals(d.list||[]);});
       const u8=fsListen("wolfpack/settings",d=>{if(d?.garageEquipment)setGarageEquipment(d.garageEquipment);});
+      const u9=fsListen("wolfpack/training_blocks",d=>{setTrainingBlock(d?.users?.[currentUser]||null);});
       const u7=fsListen("wolfpack/reactions",d=>{if(d)setReactions(d.data||{});});
       unsubs.current=[u1,u2,u3,u4,u5,u6,u7];
       const ad=await fsGet("wolfpack/admin");if(ad?.name)setAdminName(ad.name);
@@ -5620,7 +5750,7 @@ export default function App(){
         })}
       </nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
-      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
+      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} trainingBlock={trainingBlock} onBlockUpdated={setTrainingBlock} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)}/>}
       {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={async(effortId,logged)=>{
         setPendingEffortRating(null);
@@ -5636,7 +5766,7 @@ export default function App(){
         }catch(err){console.warn(err);}}
       }} onClose={()=>setPendingEffortRating(null)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
-      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
+      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill} trainingBlock={trainingBlock} onBlockUpdated={setTrainingBlock}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet("wolfpack/settings",{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
     </div>
   );
