@@ -4406,8 +4406,15 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
   const [detectedPattern,setDetectedPattern]=useState(null);
   const [showFreestyleSetup,setShowFreestyleSetup]=useState(false);
   const [aiMuscleReason,setAiMuscleReason]=useState("");
-  const [selectedSplitDay,setSelectedSplitDay]=useState(null); // user-chosen day override
+  const [selectedSplitDay,setSelectedSplitDay]=useState(null);
+  const [blockLoading,setBlockLoading]=useState(!trainingBlock); // show spinner briefly if no block yet
 
+  // Give Firestore a moment to push the block before showing "No program"
+  useEffect(()=>{
+    if(trainingBlock){setBlockLoading(false);return;}
+    const timer=setTimeout(()=>setBlockLoading(false),2000);
+    return()=>clearTimeout(timer);
+  },[trainingBlock]);
   const goal=profile?.aiTrainer?.goal;
   const experience=profile?.aiTrainer?.experience;
   const injuries=(profile?.aiTrainer?.injuries||[]).join(", ");
@@ -4478,8 +4485,10 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
       blockContext:sessionMode==="program"&&trainingBlock?JSON.stringify({
         blockName:trainingBlock.blockName,week:trainingBlock.currentWeek||1,
         blockWeeks:trainingBlock.blockWeeks||5,sessionsCompleted:trainingBlock.sessionsCompleted||0,
-        coreLifts:activeDay?.coreLifts||trainingBlock.coreLifts||[],dayType:activeDay?.id||"fullbody",
+        coreLifts:activeDay?.coreLifts||trainingBlock.coreLifts||[],
+        dayType:activeDay?.id||"fullbody",
         rotationPct:modeObj.rotationPct,
+        accessoryPool:activeDay?.accessoryPool||[],
       }):"",
       priorPerformance:priorPerf,
     });
@@ -4563,19 +4572,27 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
             )}
 
             {!trainingBlock&&(
-              <div style={{padding:"14px",marginBottom:12,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:14}}>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"#ff6b35",marginBottom:4}}>NO PROGRAM YET</div>
-                {detectedPattern?.hasHistory?(
-                  <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginBottom:10,lineHeight:1.5}}>
-                    We detected ~{detectedPattern.avgDaysPerWeek} training days/week.{detectedPattern.topMuscles.length>0?` Top muscles: ${detectedPattern.topMuscles.slice(0,3).join(", ")}.`:""} Ready to build your program?
-                  </div>
-                ):(
-                  <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginBottom:10,lineHeight:1.5}}>Set your training days/week and mode in your profile, then let the AI design your full program.</div>
-                )}
-                <button className="btn-primary" onClick={handleDesignBlock} disabled={designingBlock} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-                  {designingBlock?"DESIGNING YOUR PROGRAM...":"🎯 DESIGN MY PROGRAM"}
-                </button>
-              </div>
+              blockLoading?(
+                <div style={{padding:"20px",marginBottom:12,textAlign:"center",background:"rgba(255,255,255,0.02)",border:"1px solid var(--border)",borderRadius:14}}>
+                  <div style={{fontSize:24,marginBottom:8,animation:"spin 1.5s linear infinite",display:"inline-block"}}>⚙️</div>
+                  <div style={{fontSize:12,color:"var(--muted)"}}>Loading your program...</div>
+                  <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+                </div>
+              ):(
+                <div style={{padding:"14px",marginBottom:12,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:14}}>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"#ff6b35",marginBottom:4}}>NO PROGRAM YET</div>
+                  {detectedPattern?.hasHistory?(
+                    <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginBottom:10,lineHeight:1.5}}>
+                      We detected ~{detectedPattern.avgDaysPerWeek} training days/week.{detectedPattern.topMuscles.length>0?` Top muscles: ${detectedPattern.topMuscles.slice(0,3).join(", ")}.`:""} Ready to build your program?
+                    </div>
+                  ):(
+                    <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginBottom:10,lineHeight:1.5}}>Set your training days/week and mode in your profile, then let the AI design your full program.</div>
+                  )}
+                  <button className="btn-primary" onClick={handleDesignBlock} disabled={designingBlock} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+                    {designingBlock?"DESIGNING YOUR PROGRAM...":"🎯 DESIGN MY PROGRAM"}
+                  </button>
+                </div>
+              )
             )}
 
             {getFavorites(currentUser).length>0&&(
@@ -4725,7 +4742,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
             </div>
 
             <button className="btn-primary" onClick={()=>generateSession(false,mode)} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-              🔥 {mode==="program"?`GENERATE ${(selectedSplitDay||nextDay)?.label?.toUpperCase()||"SESSION"}`:"GENERATE FREESTYLE"}
+              🔥 {mode==="program"?"GENERATE PROGRAM SESSION":"GENERATE FREESTYLE"}
             </button>
             <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:6}}>{MAX_DAILY_REGENS-regenCount} regens remaining</div>
           </>
@@ -4735,7 +4752,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
           <div style={{textAlign:"center",padding:"40px 20px"}}>
             <div style={{fontSize:48,marginBottom:14,animation:"spin 1.5s linear infinite",display:"inline-block"}}>🔥</div>
             <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:6,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>{mode==="program"?"BUILDING YOUR SESSION":"GENERATING WORKOUT"}</div>
-            <div style={{fontSize:12,color:"var(--muted)"}}>{mode==="program"?`Week ${trainingBlock?.currentWeek||1} · ${nextDay?.label||""}...`:"Picking exercises..."}</div>
+            <div style={{fontSize:12,color:"var(--muted)"}}>{mode==="program"?`Week ${trainingBlock?.currentWeek||1} · ${(selectedSplitDay||nextDay)?.label||""}...`:"Picking exercises..."}</div>
             <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
           </div>
         )}
