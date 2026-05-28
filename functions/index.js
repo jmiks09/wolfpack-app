@@ -148,29 +148,43 @@ ${JSON.stringify({
 
     const hasMuscleTarget = muscleGroup && muscleGroup !== "AI choice";
     const rotationPct = blockInfo.rotationPct || 20;
+    const coreLifts = blockInfo.coreLifts || [];
+    const week = blockInfo.week || 1;
 
-    const sys = `You are a personal trainer executing Week ${blockInfo.week||1} of the "${blockInfo.blockName||"Training Block"}" program.
+    // Progression guidance based on week
+    const progressionGuide = week === 1
+      ? "Week 1: Establish baseline weights. Choose moderate weights the athlete can complete with good form."
+      : week <= 3
+      ? `Week ${week}: Increase weight by 5-10% from previous week on core lifts. Add 1-2 reps if weight hasn't changed.`
+      : `Week ${week}: Final weeks — push for strength gains. Increase weight or reps vs prior week.`;
 
-CRITICAL RULES:
-1. MUSCLE: This is a ${muscleGroup} session. ALL exercises MUST target ${muscleGroup}. No exceptions.
-2. CORE LIFTS: These MUST appear in the workout (they are the consistent foundation): ${(blockInfo.coreLifts||[]).join(", ")||"choose appropriate compound lifts"}
-3. PROGRESSION: Use prior performance data to set weights. Week ${blockInfo.week||1} means ${blockInfo.week>1?"increase from last week":"establish baseline weights"}.
-4. ACCESSORIES: Rotate ~${rotationPct}% of accessories from previous sessions. Keep core lifts IDENTICAL.
-5. EQUIPMENT: Only exercises possible with available equipment.
-6. Count: Exactly ${exCount} exercises, exactly ${sets} sets each.
-7. Return ONLY valid JSON, no markdown.`;
+    const sys = `You are a personal trainer executing Week ${week} of the "${blockInfo.blockName||"Training Block"}" program.
 
-    const usr = `Generate Week ${blockInfo.week||1} ${muscleGroup} session.
-Athlete: ${userName}, experience: ${experience}
+ABSOLUTE RULES — these cannot be broken:
+1. MUSCLE GROUP: This is a ${muscleGroup} session. EVERY exercise targets ${muscleGroup} ONLY.
+2. CORE LIFTS — MANDATORY: The first ${coreLifts.length||2} exercises MUST be EXACTLY these lifts in this order:
+${coreLifts.length > 0
+  ? coreLifts.map((l,i) => `   Exercise ${i+1}: ${l} (LOCKED — same name every week, same muscle group)`).join("\n")
+  : "   Choose 2-3 appropriate compound lifts and keep them consistent."}
+3. CORE LIFT NAMES: Use the EXACT same exercise name as listed above. Do not rename, substitute, or swap core lifts unless equipment makes them impossible. If impossible, use closest equivalent and note it.
+4. ACCESSORIES: Fill remaining exercises with accessories targeting ${muscleGroup}. Rotate these each session.
+5. PROGRESSION: ${progressionGuide}
+6. EQUIPMENT: Only exercises possible with: ${equipment}
+7. VOLUME: Exactly ${exCount} total exercises, exactly ${sets} sets each.
+8. Return ONLY valid JSON, no markdown.`;
+
+    const usr = `Generate Week ${week} ${muscleGroup} session.
+Athlete: ${userName}, experience: ${experience||"intermediate"}
 Goal: ${goal}
 Injuries: ${injuries||"None"}
 Equipment: ${equipment}
 Recent training: ${recentHistory||"None"}
-Prior performance data:
-${priorPerformance||"No prior data — establish baseline."}
+Prior performance (use these weights as starting point and progress from them):
+${priorPerformance||"Week 1 — no prior data, establish baseline weights."}
 
-JSON format:
-{"title":"","reasoning":"","estimatedMinutes":0,"exercises":[{"name":"","sets":${sets},"reps":"","weight":"","restSeconds":0,"primaryMuscle":"${hasMuscleTarget?muscleGroup:""}","notes":"","isCoreLift":true}]}`;
+REMINDER: Core lifts must appear FIRST and use EXACT names: ${coreLifts.join(", ")||"choose compound lifts"}
+
+JSON: {"title":"","reasoning":"","estimatedMinutes":0,"exercises":[{"name":"","sets":${sets},"reps":"","weight":"","restSeconds":0,"primaryMuscle":"${hasMuscleTarget?muscleGroup:""}","notes":"","isCoreLift":false}]}`;
 
     const responseText = await callClaude(sys, usr, apiKey);
     console.log("Program session response:", responseText.slice(0, 200));
