@@ -79,53 +79,64 @@ exports.generateWorkout = onCall({secrets: [ANTHROPIC_API_KEY], cors: true}, asy
       beginner: "Simple 3-4 exercise workouts, repeat same exercises for 2 weeks before any rotation",
     };
 
-    const sys = `You are an expert strength and conditioning coach designing a multi-week training program block.
+    // Hardcoded balanced splits — goal never changes the split structure
+    const SPLITS = {
+      2: [
+        {id:"upper",label:"Upper Body",type:"wolfmode",muscles:["chest","back","shoulders","arms"]},
+        {id:"lower",label:"Lower Body",type:"wolfmode",muscles:["quads","hamstrings","glutes","calves"]},
+      ],
+      3: [
+        {id:"push",label:"Push Day",type:"wolfmode",muscles:["chest","shoulders","triceps"]},
+        {id:"pull",label:"Pull Day",type:"wolfmode",muscles:["back","biceps","rear delts"]},
+        {id:"legs",label:"Legs & Glutes",type:"wolfmode",muscles:["quads","hamstrings","glutes","calves"]},
+      ],
+      4: [
+        {id:"push",label:"Push Day",type:"wolfmode",muscles:["chest","shoulders","triceps"]},
+        {id:"pull",label:"Pull Day",type:"wolfmode",muscles:["back","biceps","rear delts"]},
+        {id:"legs",label:"Legs & Glutes",type:"wolfmode",muscles:["quads","hamstrings","glutes","calves"]},
+        {id:"upper",label:"Upper Body",type:"wolfmode",muscles:["chest","back","shoulders","arms"]},
+      ],
+      5: [
+        {id:"chest",label:"Chest Day",type:"wolfmode",muscles:["chest","front delts","triceps"]},
+        {id:"back",label:"Back Day",type:"wolfmode",muscles:["lats","traps","biceps","rear delts"]},
+        {id:"legs",label:"Legs & Glutes",type:"wolfmode",muscles:["quads","hamstrings","glutes","calves"]},
+        {id:"shoulders",label:"Shoulders & Arms",type:"wolfmode",muscles:["delts","biceps","triceps"]},
+        {id:"arms",label:"Arms & Core",type:"wolfmode",muscles:["biceps","triceps","abs"]},
+      ],
+    };
 
-DESIGN PRINCIPLES:
-- Create a ${daysPerWeek}-day/week split appropriate for the athlete's goal
-- Each day should have 2-3 CORE LIFTS (stay consistent for the whole block) + 1-2 ACCESSORIES (can rotate)
-- ${modeDescriptions[trainingMode||"structured"]}
-- Balance push/pull, upper/lower, bilateral/unilateral movements
-- For "My Own Plan" days, use type: "own"
-- Block should run 5 weeks
-- Return ONLY valid JSON, no markdown`;
+    const days = parseInt(daysPerWeek)||3;
+    const splitTemplate = SPLITS[days] || SPLITS[3];
 
-    const usr = `Design a ${daysPerWeek||3}-day training program for:
-Primary goal: ${goal} (PRIORITY focus only — NOT the only muscle group to train)
+    const sys = `You are a strength coach. Given a training split, assign core lifts and accessories to each day.
+For each day, choose exercises that match the day's muscle groups and the available equipment.
+The primary goal (${goal}) determines exercise selection and volume emphasis, NOT the split structure.
+Return ONLY valid JSON, no markdown.`;
+
+    const usr = `Assign exercises to this ${days}-day split for:
+Goal: ${goal} (influences exercise choice and volume, not split structure)
 Experience: ${experience}
 Injuries: ${injuries||"None"}
 Equipment: ${equipment}
 Training mode: ${trainingMode||"structured"}
-${hasHistory==="true"||hasHistory===true ? `Detected training history - top muscles: ${detectedMuscles}` : "New user, no history"}
 
-CRITICAL SPLIT RULES:
-- Build a BALANCED split. Never repeat the same muscle group more than once per week.
-- 3 days example: Push (Chest/Shoulders/Triceps) + Pull (Back/Biceps) + Legs/Glutes
-- 4 days example: Push + Pull + Legs + Upper Body
-- 5 days example: Chest + Back + Legs + Shoulders + Arms
-- Primary goal means that day gets the most volume/attention, NOT that every day trains it
-- If goal is "Build Legs" or "Grow Glutes" — one dedicated leg/glute day, other days train upper body
-- Always include at least one Push day and one Pull day for any program 3+ days/week
+Split days to fill:
+${splitTemplate.map(d => `- ${d.label} (muscles: ${d.muscles.join(", ")})`).join("\n")}
 
-Return this exact JSON:
-{
-  "blockName": "Program name (e.g. 'Leg-Focused PPL Block')",
-  "blockWeeks": 5,
-  "split": [
-    {
-      "id": "push",
-      "label": "Push Day",
-      "type": "wolfmode",
-      "muscles": ["chest", "shoulders", "triceps"],
-      "coreLifts": ["Bench Press", "Overhead Press", "Incline DB Press"],
-      "accessoryPool": ["Cable Fly", "Lateral Raise", "Tricep Pushdown", "Face Pull", "DB Lateral Raise"]
-    }
-  ],
-  "coreLifts": ["list of all core lifts across all days"],
-  "progressionNotes": "Brief note on how to progress this block"
-}`;
+Return this exact JSON structure (fill in the exercises for each day):
+${JSON.stringify({
+  blockName: `${days}-Day ${goal} Block`,
+  blockWeeks: 5,
+  split: splitTemplate.map(d => ({
+    ...d,
+    coreLifts: ["FILL IN 2-3 compound lifts for " + d.label],
+    accessoryPool: ["FILL IN 4-6 accessories for " + d.label]
+  })),
+  coreLifts: ["all core lifts"],
+  progressionNotes: "progression note"
+}, null, 2)}`;
 
-    const responseText = await callClaude(sys, usr, apiKey, "claude-haiku-4-5-20251001");
+        const responseText = await callClaude(sys, usr, apiKey, "claude-haiku-4-5-20251001");
     const blockData = parseJSON(responseText);
     return { workout: { block: blockData } };
   }
