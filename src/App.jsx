@@ -4651,7 +4651,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
           <>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
               <button onClick={()=>setStep("home")} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:20,padding:"0 4px"}}>←</button>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,color:"#fff"}}>{mode==="program"?`📋 ${nextDay?.label||"Program Session"}`:"⚡ FREESTYLE"}</div>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,color:"#fff"}}>{mode==="program"?`📋 ${(selectedSplitDay||nextDay)?.label||"Program Session"}`:"⚡ FREESTYLE"}</div>
             </div>
 
             {showFreestyleSetup&&(
@@ -4725,7 +4725,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
             </div>
 
             <button className="btn-primary" onClick={()=>generateSession(false,mode)} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-              🔥 {mode==="program"?"GENERATE PROGRAM SESSION":"GENERATE FREESTYLE"}
+              🔥 {mode==="program"?`GENERATE ${(selectedSplitDay||nextDay)?.label?.toUpperCase()||"SESSION"}`:"GENERATE FREESTYLE"}
             </button>
             <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:6}}>{MAX_DAILY_REGENS-regenCount} regens remaining</div>
           </>
