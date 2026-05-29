@@ -4210,8 +4210,34 @@ const MUSCLE_MAP = {
 
 function getMuscleMapping(primaryMuscle){
   if(!primaryMuscle)return {front:[],back:[],secondary:[]};
-  const key=primaryMuscle.toLowerCase().trim();
-  return MUSCLE_MAP[key]||{front:[key],back:[],secondary:[]};
+  // Normalize — AI returns many variations like "Quadriceps", "Glutes/Hamstrings", "Quads, Glutes"
+  const raw=primaryMuscle.toLowerCase().trim();
+  // Take first muscle if comma or slash separated
+  const first=raw.split(/[,/]/)[0].trim();
+  // Map common AI variations to our MUSCLE_MAP keys
+  const normalize={
+    "quadriceps":"quads","quad":"quads","quads":"quads",
+    "hamstring":"hamstrings","hamstrings":"hamstrings",
+    "glute":"glutes","glutes":"glutes","gluteus":"glutes",
+    "calf":"calves","calves":"calves",
+    "pec":"chest","pecs":"chest","pectoral":"chest","chest":"chest",
+    "lat":"lats","lats":"lats","latissimus":"lats",
+    "trap":"traps","traps":"traps","trapezius":"traps",
+    "delt":"shoulders","delts":"shoulders","deltoid":"shoulders","shoulder":"shoulders","shoulders":"shoulders",
+    "bicep":"biceps","biceps":"biceps",
+    "tricep":"triceps","triceps":"triceps",
+    "ab":"abs","abs":"abs","abdominal":"abs","core":"core",
+    "oblique":"obliques","obliques":"obliques",
+    "forearm":"forearms","forearms":"forearms",
+    "rear delt":"rear-delt","rear delts":"rear-delt","posterior delt":"rear-delt",
+    "front delt":"front-delt","anterior delt":"front-delt",
+    "back":"lats","upper back":"traps","lower back":"lats",
+    "arm":"arms","arms":"arms",
+    "leg":"legs","legs":"legs",
+    "full body":"fullbody","fullbody":"fullbody","total body":"fullbody",
+  };
+  const key=normalize[first]||normalize[raw]||first;
+  return MUSCLE_MAP[key]||{front:[],back:[],secondary:[]};
 }
 
 function AnatomyDiagram({primaryMuscle}){
@@ -4337,7 +4363,7 @@ function AnatomyDiagram({primaryMuscle}){
 }
 
 // ── AI TRAINER — exercise card (form cues + GIF) ─────────────────────────────
-function ExerciseCard({exercise, userName, experience, injuries, idx}){
+function ExerciseCard({exercise, userName, experience, injuries, idx, onSwap, swapping}){
   const [expanded,setExpanded]=useState(false);
   const [cues,setCues]=useState(null);
   const [cuesLoading,setCuesLoading]=useState(false);
@@ -4361,24 +4387,24 @@ function ExerciseCard({exercise, userName, experience, injuries, idx}){
     }
   };
 
-  // Capitalise primary muscle for display
   const muscleLabel=exercise.primaryMuscle
     ? exercise.primaryMuscle.charAt(0).toUpperCase()+exercise.primaryMuscle.slice(1)
     : null;
 
   return(
-    <div style={{marginBottom:10,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:14,overflow:"hidden"}}>
+    <div style={{marginBottom:10,background:"var(--bg3)",border:`1px solid ${swapping?"rgba(255,107,53,0.4)":"var(--border)"}`,borderRadius:14,overflow:"hidden",opacity:swapping?0.7:1,transition:"opacity 0.2s"}}>
       {/* Header row */}
-      <div onClick={handleExpand} style={{padding:"12px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
-        <div style={{
-          width:28,height:28,borderRadius:"50%",
+      <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:10}}>
+        <div onClick={handleExpand} style={{
+          width:28,height:28,borderRadius:"50%",flexShrink:0,cursor:"pointer",
           background:"rgba(124,92,191,0.2)",border:"1px solid rgba(124,92,191,0.4)",
           color:"var(--accent2)",display:"flex",alignItems:"center",justifyContent:"center",
-          fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1,flexShrink:0,
+          fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1,
         }}>{idx+1}</div>
-        <div style={{flex:1,minWidth:0}}>
+        <div onClick={handleExpand} style={{flex:1,minWidth:0,cursor:"pointer"}}>
           <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1.5,color:"#fff",marginBottom:2}}>
             {exercise.name}
+            {exercise.isCoreLift&&<span style={{marginLeft:6,fontSize:9,padding:"1px 6px",borderRadius:4,background:"rgba(255,215,0,0.1)",border:"1px solid rgba(255,215,0,0.25)",color:"rgba(255,215,0,0.7)"}}>CORE</span>}
           </div>
           <div style={{fontSize:11,color:"var(--muted)",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
             <span>{exercise.sets} × {exercise.reps}</span>
@@ -4386,16 +4412,27 @@ function ExerciseCard({exercise, userName, experience, injuries, idx}){
             {exercise.weight==="bodyweight"&&<span>· bodyweight</span>}
             {exercise.restSeconds&&<span>· {exercise.restSeconds}s rest</span>}
             {muscleLabel&&(
-              <span style={{
-                padding:"1px 7px",borderRadius:10,fontSize:10,
-                background:"rgba(255,107,53,0.12)",
-                border:"1px solid rgba(255,107,53,0.25)",
-                color:"#ff6b35",
-              }}>{muscleLabel}</span>
+              <span style={{padding:"1px 7px",borderRadius:10,fontSize:10,background:"rgba(255,107,53,0.12)",border:"1px solid rgba(255,107,53,0.25)",color:"#ff6b35"}}>{muscleLabel}</span>
             )}
           </div>
         </div>
-        <div style={{fontSize:18,color:"var(--muted)",transition:"transform .2s",transform:expanded?"rotate(180deg)":"rotate(0)"}}>▾</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+          {/* Swap button — only show if onSwap provided and not a core lift */}
+          {onSwap&&!exercise.isCoreLift&&(
+            <button onClick={e=>{e.stopPropagation();onSwap(idx,exercise);}}
+              disabled={swapping}
+              title="Swap this exercise"
+              style={{
+                width:28,height:28,borderRadius:8,cursor:swapping?"default":"pointer",
+                background:"rgba(255,107,53,0.1)",border:"1px solid rgba(255,107,53,0.25)",
+                color:"#ff6b35",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",
+                flexShrink:0,
+              }}>
+              {swapping?"⏳":"🔄"}
+            </button>
+          )}
+          <div onClick={handleExpand} style={{fontSize:18,color:"var(--muted)",cursor:"pointer",transition:"transform .2s",transform:expanded?"rotate(180deg)":"rotate(0)"}}>▾</div>
+        </div>
       </div>
 
       {/* Expanded content */}
@@ -4489,7 +4526,8 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
   const [showFreestyleSetup,setShowFreestyleSetup]=useState(false);
   const [aiMuscleReason,setAiMuscleReason]=useState("");
   const [selectedSplitDay,setSelectedSplitDay]=useState(null);
-  const [blockLoading,setBlockLoading]=useState(!trainingBlock); // show spinner briefly if no block yet
+  const [blockLoading,setBlockLoading]=useState(!trainingBlock);
+  const [swappingIdx,setSwappingIdx]=useState(null); // index of exercise being swapped // show spinner briefly if no block yet
 
   // Give Firestore a moment to push the block before showing "No program"
   useEffect(()=>{
@@ -4599,6 +4637,39 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
     }
     showToast("🔥 Workout saved! Find it on the Pack tab.");
     onUseWorkout&&onUseWorkout();onClose();
+  };
+
+  const handleSwapExercise=async(idx,exercise)=>{
+    if(swappingIdx!==null)return; // already swapping
+    setSwappingIdx(idx);
+    const equipment=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
+    // All other exercise names — the new one must be different from all of them
+    const otherExercises=workout.exercises.map(e=>e.name);
+    const result=await aiGenerateWorkout({
+      userName:currentUser,
+      goal:goalLabel,
+      experience:experience||"intermediate",
+      injuries:injuries||"None",
+      equipment,
+      muscleGroup:exercise.primaryMuscle||muscleGroup||"",
+      requestType:"swap_exercise",
+      exerciseToReplace:exercise.name,
+      exerciseMuscle:exercise.primaryMuscle||"",
+      otherExercises,
+      numExercises:1,
+      setsPerExercise:exercise.sets||4,
+    });
+    setSwappingIdx(null);
+    if(result.ok&&result.workout?.exercises?.[0]){
+      // Replace just this exercise in the workout
+      const newExercise={...result.workout.exercises[0],sets:exercise.sets,isCoreLift:false};
+      const newExercises=[...workout.exercises];
+      newExercises[idx]=newExercise;
+      setWorkout({...workout,exercises:newExercises});
+      showToast(`🔄 Swapped ${exercise.name} → ${newExercise.name}`);
+    }else{
+      showToast("Couldn't find a swap — try again");
+    }
   };
 
   return(
@@ -4854,7 +4925,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
             </div>
             {workout.reasoning&&<div style={{padding:"10px 12px",marginBottom:12,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:10,fontSize:12,color:"rgba(255,255,255,0.8)",lineHeight:1.5,fontStyle:"italic"}}>💭 {workout.reasoning}</div>}
             {workout.exercises?.map((ex,i)=>(
-              <ExerciseCard key={i} exercise={ex} userName={currentUser} experience={experience} injuries={injuries} idx={i}/>
+              <ExerciseCard key={i} exercise={ex} userName={currentUser} experience={experience} injuries={injuries} idx={i} onSwap={handleSwapExercise} swapping={swappingIdx===i}/>
             ))}
             <div style={{display:"flex",gap:8,marginTop:12}}>
               <button className="btn-primary" onClick={handleUseWorkout} style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
