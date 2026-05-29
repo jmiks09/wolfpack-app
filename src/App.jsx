@@ -4551,13 +4551,14 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
     setStep("loading");setError(null);
     const equipment=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
     const trainingLog=await getTrainingLog(currentUser);
-    // Use user-selected day if chosen, otherwise fall back to nextDay
     const activeDay=selectedSplitDay||nextDay;
     const priorPerf=buildPriorPerformanceString(trainingLog,activeDay?.label||"");
     const secondaryGoal=profile?.aiTrainer?.secondaryGoal;
     const secondaryLabel=secondaryGoal?AI_SECONDARY_GOALS.find(s=>s.id===secondaryGoal)?.label:null;
     const fullGoal=[goalLabel,secondaryLabel?`+ ${secondaryLabel}`:null].filter(Boolean).join(" ");
     const muscleLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label:"AI choice";
+    // Pass previous exercise names on regen so AI avoids repeating them
+    const prevExercises=isRegen&&workout?workout.exercises?.map(e=>e.name)||[]:[];
     const result=await aiGenerateWorkout({
       userName:currentUser,goal:fullGoal,experience:experience||"intermediate",
       injuries:injuries||"None",equipment,recentHistory:getRecentHistoryString(history,currentUser),
@@ -4573,6 +4574,8 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
         accessoryPool:activeDay?.accessoryPool||[],
       }):"",
       priorPerformance:priorPerf,
+      previousExercises:prevExercises,
+      isRegen,
     });
     if(result.ok){setWorkout(result.workout);setStep("result");if(isRegen)setRegenCount(bumpRegenCount(currentUser));}
     else{setError(result.error);setStep(sessionMode==="program"?"home":"setup");}
