@@ -292,7 +292,17 @@ const getRestDays=profile=>profile?.restDays||[0,6]; // default Sat/Sun
 const isRestDay=(d,profile)=>{const x=new Date(d+"T00:00:00");return getRestDays(profile).includes(x.getDay());};
 const next7Days=()=>Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return localDateStr(d);});
 const fmtDate=d=>new Date(d+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
-const fmtTime=ts=>new Date(ts).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+const fmtTime=ts=>{
+  const d=new Date(ts);
+  const now=new Date();
+  const isToday=d.toDateString()===now.toDateString();
+  const yesterday=new Date(now);yesterday.setDate(now.getDate()-1);
+  const isYesterday=d.toDateString()===yesterday.toDateString();
+  const time=d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+  if(isToday)return `Today ${time}`;
+  if(isYesterday)return `Yesterday ${time}`;
+  return d.toLocaleDateString("en-US",{month:"short",day:"numeric"})+" "+time;
+};
 const getWeekStart=d=>{const x=new Date(d+"T00:00:00");x.setDate(x.getDate()-x.getDay());return localDateStr(x);};
 const getDateRange=(s,e)=>{const dates=[];const sd=new Date(s+"T00:00:00"),ed=new Date(e+"T00:00:00");for(let d=new Date(sd);d<=ed;d.setDate(d.getDate()+1))dates.push(localDateStr(d));return dates;};
 const getWeekdays=(s,e)=>getDateRange(s,e).filter(d=>!isWeekend(d));
@@ -4527,7 +4537,8 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
   const [aiMuscleReason,setAiMuscleReason]=useState("");
   const [selectedSplitDay,setSelectedSplitDay]=useState(null);
   const [blockLoading,setBlockLoading]=useState(!trainingBlock);
-  const [swappingIdx,setSwappingIdx]=useState(null); // index of exercise being swapped // show spinner briefly if no block yet
+  const [swappingIdx,setSwappingIdx]=useState(null);
+  const [customDuration,setCustomDuration]=useState(null); // overrides estimatedMinutes // show spinner briefly if no block yet
 
   // Give Firestore a moment to push the block before showing "No program"
   useEffect(()=>{
@@ -4615,7 +4626,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
       previousExercises:prevExercises,
       isRegen,
     });
-    if(result.ok){setWorkout(result.workout);setStep("result");if(isRegen)setRegenCount(bumpRegenCount(currentUser));}
+    if(result.ok){setWorkout(result.workout);setCustomDuration(null);setStep("result");if(isRegen)setRegenCount(bumpRegenCount(currentUser));}
     else{setError(result.error);setStep(sessionMode==="program"?"home":"setup");}
   };
 
@@ -4623,7 +4634,8 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
     if(!workout)return;
     const activeDay=selectedSplitDay||nextDay;
     const mg=mode==="program"?(activeDay?.id||"fullbody"):muscleGroup||"fullbody";
-    saveActiveWorkout(currentUser,workout,mg,"today");
+    const finalMinutes=customDuration!==null?customDuration:workout.estimatedMinutes;
+    saveActiveWorkout(currentUser,{...workout,estimatedMinutes:finalMinutes},mg,"today");
     if(mode==="program"&&trainingBlock){
       const activeDays=trainingBlock.split?.filter(d=>d.id!=="own")||[];
       const updatedBlock={
@@ -4919,7 +4931,22 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
               <div style={{fontSize:22}}>🔥</div>
               <div style={{flex:1}}>
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:2,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.1}}>{workout.title}</div>
-                <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>~{workout.estimatedMinutes} min · {workout.exercises?.length} exercises</div>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4}}>
+                    <span style={{fontSize:11,color:"var(--muted)"}}>⏱</span>
+                    <input
+                      type="number"
+                      value={customDuration!==null?customDuration:workout.estimatedMinutes}
+                      onChange={e=>setCustomDuration(e.target.value?Number(e.target.value):null)}
+                      style={{width:44,padding:"2px 6px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,color:"rgba(255,255,255,0.7)",fontSize:11,textAlign:"center"}}
+                      min={1}
+                    />
+                    <span style={{fontSize:11,color:"var(--muted)"}}>min · {workout.exercises?.length} exercises</span>
+                  </div>
+                  {customDuration!==null&&customDuration!==workout.estimatedMinutes&&(
+                    <span style={{fontSize:10,color:"rgba(255,107,53,0.6)"}}>edited</span>
+                  )}
+                </div>
                 {mode==="program"&&trainingBlock&&<div style={{fontSize:10,color:"var(--accent2)",marginTop:2}}>📋 {trainingBlock.blockName} · Week {trainingBlock.currentWeek||1}</div>}
               </div>
             </div>
