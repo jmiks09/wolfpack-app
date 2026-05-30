@@ -1492,53 +1492,38 @@ function MyWeekStrip({currentUser, history}){
           {/* WOLFMODE exercises if available */}
           {getExercises(selected.entry)?(
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {getExercises(selected.entry).map((ex,i)=>(
-                <div key={i} style={{
-                  display:"flex",alignItems:"center",gap:8,
-                  padding:"6px 10px",
-                  background:ex.skipped
-                    ?"rgba(231,76,60,0.06)"
-                    :"rgba(46,204,113,0.06)",
-                  border:ex.skipped
-                    ?"1px solid rgba(231,76,60,0.15)"
-                    :"1px solid rgba(46,204,113,0.15)",
-                  borderRadius:10,
-                }}>
-                  <span style={{fontSize:12,flexShrink:0}}>
-                    {ex.skipped?"✗":"✓"}
-                  </span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{
-                      fontSize:12,
-                      color:ex.skipped?"rgba(255,255,255,0.4)":"#fff",
-                      fontFamily:"'Bebas Neue',cursive",letterSpacing:1,
-                    }}>{ex.name}</div>
-                    {!ex.skipped&&(
-                      <div style={{fontSize:10,color:"var(--muted)"}}>
-                        {[
-                          ex.sets&&ex.reps?`${ex.sets}×${ex.reps}`:null,
-                          ex.weightUsed?`@ ${ex.weightUsed}`:
-                            ex.suggestedWeight&&ex.suggestedWeight!=="bodyweight"?`@ ${ex.suggestedWeight} (suggested)`:null,
-                        ].filter(Boolean).join(" · ")}
+              {getExercises(selected.entry)
+                .filter(ex=>!ex.skipped||ex.substitutedWith) // hide pure skips, keep substitutes
+                .map((ex,i)=>{
+                  const isSubstitute=ex.skipped&&ex.substitutedWith;
+                  const displayName=isSubstitute?ex.substitutedWith:ex.name;
+                  return(
+                    <div key={i} style={{
+                      display:"flex",alignItems:"center",gap:8,
+                      padding:"6px 10px",
+                      background:"rgba(46,204,113,0.06)",
+                      border:"1px solid rgba(46,204,113,0.15)",
+                      borderRadius:10,
+                    }}>
+                      <span style={{fontSize:12,flexShrink:0}}>✓</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,color:"#fff",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                          {displayName}
+                          {isSubstitute&&<span style={{fontSize:9,color:"rgba(255,107,53,0.6)",marginLeft:6,fontFamily:"sans-serif",letterSpacing:0}}>(subbed)</span>}
+                        </div>
+                        <div style={{fontSize:10,color:"var(--muted)"}}>
+                          {[
+                            ex.sets&&ex.reps?`${ex.sets}×${ex.reps}`:null,
+                            ex.weightUsed?`@ ${ex.weightUsed}`:ex.suggestedWeight&&ex.suggestedWeight!=="bodyweight"?`@ ${ex.suggestedWeight} (suggested)`:null,
+                          ].filter(Boolean).join(" · ")}
+                        </div>
                       </div>
-                    )}
-                    {ex.skipped&&ex.substitutedWith&&(
-                      <div style={{fontSize:10,color:"rgba(255,107,53,0.6)"}}>
-                        → did {ex.substitutedWith} instead
-                      </div>
-                    )}
-                  </div>
-                  {ex.primaryMuscle&&!ex.skipped&&(
-                    <span style={{
-                      padding:"2px 8px",borderRadius:10,fontSize:9,flexShrink:0,
-                      background:"rgba(255,107,53,0.1)",
-                      border:"1px solid rgba(255,107,53,0.2)",
-                      color:"#ff6b35",
-                      fontFamily:"'Bebas Neue',cursive",letterSpacing:1,
-                    }}>{ex.primaryMuscle}</span>
-                  )}
-                </div>
-              ))}
+                      {ex.primaryMuscle&&(
+                        <span style={{padding:"2px 8px",borderRadius:10,fontSize:9,flexShrink:0,background:"rgba(255,107,53,0.1)",border:"1px solid rgba(255,107,53,0.2)",color:"#ff6b35",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{ex.primaryMuscle}</span>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
           ):(
             // Non-WOLFMODE workout — just show the label
@@ -1634,7 +1619,9 @@ function MemberCard({m,i,done,isMe,ms,restToday,td,profiles,sessionExercises,ses
         {/* Expand arrow — only if exercises exist */}
         {hasExercises&&(
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,flexShrink:0}}>
-            <span style={{fontSize:10,color:"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{sessionExercises.length} ex</span>
+            <span style={{fontSize:10,color:"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+              {sessionExercises.filter(ex=>!ex.skipped||ex.substitutedWith).length} ex
+            </span>
             <span style={{fontSize:14,color:"var(--muted)",transition:"transform .2s",transform:expanded?"rotate(180deg)":"rotate(0)"}}>▾</span>
           </div>
         )}
@@ -1645,36 +1632,38 @@ function MemberCard({m,i,done,isMe,ms,restToday,td,profiles,sessionExercises,ses
       {expanded&&hasExercises&&(
         <div style={{padding:"0 14px 14px 60px",borderTop:"1px solid rgba(255,255,255,0.06)"}}>
           <div style={{paddingTop:10,display:"flex",flexDirection:"column",gap:5}}>
-            {sessionExercises.map((ex,idx)=>(
-              <div key={idx} style={{
-                display:"flex",alignItems:"center",gap:8,
-                padding:"5px 10px",
-                background:ex.skipped?"rgba(231,76,60,0.05)":"rgba(46,204,113,0.05)",
-                border:ex.skipped?"1px solid rgba(231,76,60,0.1)":"1px solid rgba(46,204,113,0.1)",
-                borderRadius:8,
-              }}>
-                <span style={{fontSize:10,color:ex.skipped?"rgba(231,76,60,0.6)":"rgba(46,204,113,0.6)",flexShrink:0}}>
-                  {ex.skipped?"✗":"✓"}
-                </span>
-                <div style={{flex:1,minWidth:0}}>
-                  <span style={{fontSize:12,color:ex.skipped?"rgba(255,255,255,0.3)":"rgba(255,255,255,0.85)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
-                    {ex.name}
-                  </span>
-                  {!ex.skipped&&(ex.sets||ex.reps||ex.weightUsed||ex.weight)&&(
-                    <span style={{fontSize:10,color:"var(--muted)",marginLeft:6}}>
-                      {[
-                        ex.sets&&ex.reps?`${ex.sets}×${ex.actualReps||ex.reps}`:null,
-                        ex.weightUsed?`@ ${ex.weightUsed}`:ex.weight&&ex.weight!=="bodyweight"?`@ ${ex.weight}`:null,
-                      ].filter(Boolean).join(" ")}
-                    </span>
-                  )}
-                  {ex.skipped&&ex.substitutedWith&&(
-                    <span style={{fontSize:10,color:"rgba(255,107,53,0.5)",marginLeft:6}}>→ {ex.substitutedWith}</span>
-                  )}
-                </div>
-                {ex.isCoreLift&&<span style={{fontSize:8,padding:"1px 5px",borderRadius:4,background:"rgba(255,215,0,0.1)",border:"1px solid rgba(255,215,0,0.2)",color:"rgba(255,215,0,0.6)",flexShrink:0}}>CORE</span>}
-              </div>
-            ))}
+            {sessionExercises
+              .filter(ex=>!ex.skipped||ex.substitutedWith)
+              .map((ex,idx)=>{
+                const isSubstitute=ex.skipped&&ex.substitutedWith;
+                const displayName=isSubstitute?ex.substitutedWith:ex.name;
+                return(
+                  <div key={idx} style={{
+                    display:"flex",alignItems:"center",gap:8,
+                    padding:"5px 10px",
+                    background:"rgba(46,204,113,0.05)",
+                    border:"1px solid rgba(46,204,113,0.1)",
+                    borderRadius:8,
+                  }}>
+                    <span style={{fontSize:10,color:"rgba(46,204,113,0.6)",flexShrink:0}}>✓</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <span style={{fontSize:12,color:"rgba(255,255,255,0.85)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                        {displayName}
+                        {isSubstitute&&<span style={{fontSize:9,color:"rgba(255,107,53,0.5)",marginLeft:6,fontFamily:"sans-serif",letterSpacing:0}}>(subbed)</span>}
+                      </span>
+                      {(ex.sets||ex.reps||ex.weightUsed||ex.weight)&&(
+                        <span style={{fontSize:10,color:"var(--muted)",marginLeft:6}}>
+                          {[
+                            ex.sets&&ex.reps?`${ex.sets}×${ex.actualReps||ex.reps}`:null,
+                            ex.weightUsed?`@ ${ex.weightUsed}`:ex.weight&&ex.weight!=="bodyweight"?`@ ${ex.weight}`:null,
+                          ].filter(Boolean).join(" ")}
+                        </span>
+                      )}
+                    </div>
+                    {ex.isCoreLift&&<span style={{fontSize:8,padding:"1px 5px",borderRadius:4,background:"rgba(255,215,0,0.1)",border:"1px solid rgba(255,215,0,0.2)",color:"rgba(255,215,0,0.6)",flexShrink:0}}>CORE</span>}
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}
@@ -5916,7 +5905,7 @@ export default function App(){
     const aiLift={id:"lift",icon:"🏋️",label:"Lifting"};
     const newWorkouts=[...prevWorkouts,aiLift];
     const mgLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label||muscleGroup:null;
-    const exCount=exercises?.length||0;
+    const exCount=exercises?.filter(e=>!e.skipped||e.substitutedWith).length||exercises?.length||0;
     // Clean one-liner: "Lifting · Glutes · 5 exercises"
     const cleanLabel=[`WOLFMODE · Weight Training`,mgLabel,exCount?`${exCount} exercises`:null,minutes?`${minutes} min`:null].filter(Boolean).join(" · ");
     const newDetails={...prevDetails,lift:{...(prevDetails.lift||{}),duration:String(minutes||45),focus:mgLabel||"Full Body"}};
