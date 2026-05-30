@@ -4634,7 +4634,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
     if(!workout)return;
     const activeDay=selectedSplitDay||nextDay;
     const mg=mode==="program"?(activeDay?.id||"fullbody"):muscleGroup||"fullbody";
-    const finalMinutes=customDuration!==null?customDuration:workout.estimatedMinutes;
+    const finalMinutes=customDuration!==null?Number(customDuration):workout.estimatedMinutes;
     saveActiveWorkout(currentUser,{...workout,estimatedMinutes:finalMinutes},mg,"today");
     if(mode==="program"&&trainingBlock){
       const activeDays=trainingBlock.split?.filter(d=>d.id!=="own")||[];
@@ -4937,7 +4937,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
                     <input
                       type="number"
                       value={customDuration!==null?customDuration:workout.estimatedMinutes}
-                      onChange={e=>setCustomDuration(e.target.value?Number(e.target.value):null)}
+                      onChange={e=>setCustomDuration(e.target.value?Number(e.target.value):workout.estimatedMinutes)}
                       style={{width:44,padding:"2px 6px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,color:"rgba(255,255,255,0.7)",fontSize:11,textAlign:"center"}}
                       min={1}
                     />
@@ -5252,7 +5252,7 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
             {workout.title}
           </div>
           <div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>
-            ~{workout.estimatedMinutes} min · {workout.exercises?.length} exercises
+            {workout.estimatedMinutes} min · {workout.exercises?.length} exercises
             {mgObj?` · ${mgObj.label}`:""}
           </div>
         </div>
