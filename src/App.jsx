@@ -4527,7 +4527,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
   const [selectedSplitDay,setSelectedSplitDay]=useState(null);
   const [blockLoading,setBlockLoading]=useState(!trainingBlock);
   const [swappingIdx,setSwappingIdx]=useState(null);
-  const [customDuration,setCustomDuration]=useState(null); // overrides estimatedMinutes // show spinner briefly if no block yet
+  const [customDuration,setCustomDuration]=useState(workout?.estimatedMinutes||null);
 
   // Give Firestore a moment to push the block before showing "No program"
   useEffect(()=>{
@@ -4615,7 +4615,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
       previousExercises:prevExercises,
       isRegen,
     });
-    if(result.ok){setWorkout(result.workout);setCustomDuration(null);setStep("result");if(isRegen)setRegenCount(bumpRegenCount(currentUser));}
+    if(result.ok){setWorkout(result.workout);setCustomDuration(result.workout?.estimatedMinutes||45);setStep("result");if(isRegen)setRegenCount(bumpRegenCount(currentUser));}
     else{setError(result.error);setStep(sessionMode==="program"?"home":"setup");}
   };
 
@@ -4927,6 +4927,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
                       type="number"
                       value={customDuration!==null?customDuration:workout.estimatedMinutes}
                       onChange={e=>setCustomDuration(e.target.value?Number(e.target.value):workout.estimatedMinutes)}
+                      onBlur={e=>{if(!e.target.value||Number(e.target.value)<1)setCustomDuration(workout.estimatedMinutes);}}
                       style={{width:44,padding:"2px 6px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,color:"rgba(255,255,255,0.7)",fontSize:11,textAlign:"center"}}
                       min={1}
                     />
@@ -4986,6 +4987,7 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
     return init;
   });
   const [saving,setSaving]=useState(false);
+  const [barPlates,setBarPlates]=useState({}); // plates added per exercise key
 
   const doneExercises=(exercises||[]).filter(e=>done[e.name]!==false);
   const skippedExercises=(exercises||[]).filter(e=>done[e.name]===false);
@@ -5162,15 +5164,40 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
                     <span style={{fontSize:10,color:"var(--muted)"}}>lbs</span>
                   </div>
                 </div>
-                {/* Fix 4: Bar-only quick tap buttons for barbell exercises */}
+                {/* Fix 4: Smoother bar weight + plates UI */}
                 {isBarbell&&(
-                  <div style={{display:"flex",gap:6,marginTop:8}}>
-                    <button onClick={()=>setWeights(w=>({...w,[key]:"45"}))} style={{padding:"4px 10px",borderRadius:8,cursor:"pointer",fontSize:10,background:weights[key]==="45"?"rgba(255,107,53,0.2)":"rgba(255,255,255,0.04)",border:weights[key]==="45"?"1px solid rgba(255,107,53,0.4)":"1px solid rgba(255,255,255,0.08)",color:weights[key]==="45"?"#ff6b35":"var(--muted)"}}>
-                      Olympic bar only (45 lbs)
-                    </button>
-                    <button onClick={()=>setWeights(w=>({...w,[key]:"15"}))} style={{padding:"4px 10px",borderRadius:8,cursor:"pointer",fontSize:10,background:weights[key]==="15"?"rgba(255,107,53,0.2)":"rgba(255,255,255,0.04)",border:weights[key]==="15"?"1px solid rgba(255,107,53,0.4)":"1px solid rgba(255,255,255,0.08)",color:weights[key]==="15"?"#ff6b35":"var(--muted)"}}>
-                      CAP bar only (15 lbs)
-                    </button>
+                  <div style={{marginTop:8,padding:"8px 10px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:10}}>
+                    <div style={{fontSize:10,color:"var(--muted)",marginBottom:6}}>Quick calculate total weight:</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      <select onChange={e=>{
+                        const barWeight=Number(e.target.value);
+                        const plates=Number(barPlates[key]||0);
+                        setWeights(w=>({...w,[key]:String(barWeight+plates)}));
+                      }} defaultValue="" style={{padding:"4px 8px",borderRadius:8,background:"var(--bg2)",border:"1px solid var(--border)",color:"#fff",fontSize:11,cursor:"pointer"}}>
+                        <option value="" disabled>Bar type</option>
+                        <option value="45">Olympic bar (45 lbs)</option>
+                        <option value="15">CAP bar (15 lbs)</option>
+                        <option value="0">No bar</option>
+                      </select>
+                      <span style={{fontSize:10,color:"var(--muted)"}}>+</span>
+                      <div style={{display:"flex",alignItems:"center",gap:3}}>
+                        <input type="number" placeholder="0" min="0" step="5"
+                          value={barPlates[key]||""}
+                          onChange={e=>{
+                            const plates=Number(e.target.value)||0;
+                            setBarPlates(p=>({...p,[key]:e.target.value}));
+                            const currentWeight=Number(weights[key]||0);
+                            const prevPlates=Number(barPlates[key]||0);
+                            const barWeight=currentWeight-prevPlates;
+                            setWeights(w=>({...w,[key]:String(Math.max(0,barWeight)+plates)}));
+                          }}
+                          style={{width:48,padding:"4px 6px",textAlign:"center",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:8,color:"#fff",fontSize:11}}/>
+                        <span style={{fontSize:10,color:"var(--muted)"}}>lbs plates</span>
+                      </div>
+                    </div>
+                    <div style={{fontSize:10,color:"rgba(255,107,53,0.6)",marginTop:4}}>
+                      💡 For landmine exercises, log total weight loaded on the bar
+                    </div>
                   </div>
                 )}
               </div>
@@ -6120,11 +6147,12 @@ export default function App(){
               experience={profiles[currentUser]?.aiTrainer?.experience}
               injuries={(profiles[currentUser]?.aiTrainer?.injuries||[]).join(", ")}
               onComplete={(data)=>{
-                // Log the workout
+                // Log the workout — use stored estimatedMinutes which reflects any user edit
+                const logMinutes=data.workout?.estimatedMinutes||45;
                 handleLogAIWorkout({
                   summary:data.workout.exercises.map(e=>`${e.name}: ${e.sets}×${e.reps}${e.weight&&e.weight!=="bodyweight"?` @ ${e.weight}`:""}`).join(" + "),
                   note:`WOLFMODE: ${data.workout.title}`,
-                  minutes:data.workout.estimatedMinutes,
+                  minutes:logMinutes,
                   exercises:data.workout.exercises,
                   muscleGroup:data.muscleGroup,
                 });
