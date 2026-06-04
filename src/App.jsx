@@ -371,6 +371,24 @@ function Toast({msg}){return msg?<div className="toast">{msg}</div>:null;}
 function AvatarDisplay({profile,size=40}){if(profile?.avatarImg)return<img src={profile.avatarImg} alt="av" style={{width:size,height:size,borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>;return<div className="avatar" style={{width:size,height:size,background:"var(--bg2)",fontSize:size*.55,flexShrink:0}}>{profile?.avatar||"🐺"}</div>;}
 function readFileAsDataURL(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});}
 
+// ── REGEN HELPERS ────────────────────────────────────────────────────────────
+function getRegenCount(userName){
+  try{
+    const today=new Date().toISOString().slice(0,10);
+    const raw=localStorage.getItem(`wp_regen_${userName}_${today}`);
+    return raw?parseInt(raw,10):0;
+  }catch{return 0;}
+}
+function bumpRegenCount(userName){
+  try{
+    const today=new Date().toISOString().slice(0,10);
+    const key=`wp_regen_${userName}_${today}`;
+    const next=(getRegenCount(userName))+1;
+    localStorage.setItem(key,String(next));
+    return next;
+  }catch{return 0;}
+}
+
 // ── ACTIVE WORKOUT HELPERS (localStorage, Central time) ─────────────────────
 // Central time date string (CDT = UTC-5)
 function centralDateStr(offsetDays=0){
