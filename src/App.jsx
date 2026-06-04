@@ -234,6 +234,8 @@ const EFFORT_RATINGS = [
 
 // ── WOLFMODE COACH — Training modes ─────────────────────────────────────────
 
+const DAYS_PER_WEEK_OPTIONS=[2,3,4,5];
+
 // ── AI Coach (Nutrition + Supplements) constants ────────────────────────────
 const AI_BULK_CUT = [
   {id:"bulk",     label:"Bulk",     icon:"📈", desc:"Build muscle, eat in surplus"},
@@ -387,6 +389,34 @@ function bumpRegenCount(userName){
     localStorage.setItem(key,String(next));
     return next;
   }catch{return 0;}
+}
+
+// ── WORKOUT GENERATION HELPERS ───────────────────────────────────────────────
+// Build equipment string for AI prompt
+function buildEquipmentString(presetId, customEquipment, packHomeGym){
+  if(presetId==="custom"&&customEquipment) return customEquipment;
+  if(presetId==="home"){
+    const items=Array.isArray(packHomeGym)&&packHomeGym.length>0?packHomeGym:HOME_GYM_DEFAULT;
+    return `Garage gym equipment: ${items.join(", ")}.`;
+  }
+  if(presetId?.startsWith("saved_")) return customEquipment||"Custom equipment.";
+  return AI_PRESET_DESCRIPTIONS[presetId]||AI_PRESET_DESCRIPTIONS.bodyweight;
+}
+
+// Build recent history string for AI context (last 3 days)
+function getRecentHistoryString(history, userName){
+  const days=[];
+  for(let i=1;i<=7;i++){
+    const d=new Date();d.setDate(d.getDate()-i);
+    const ds=localDateStr(d);
+    const entry=history[ds]?.[userName];
+    if(entry?.done){
+      const label=entry.workoutLabel||entry.wolfmodeSession?.muscleGroup||"workout";
+      days.push(`${ds}: ${label}`);
+      if(days.length>=3)break;
+    }
+  }
+  return days.length>0?days.join(" | "):"No recent history";
 }
 
 // ── ACTIVE WORKOUT HELPERS (localStorage, Central time) ─────────────────────
