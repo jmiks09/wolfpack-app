@@ -1333,7 +1333,7 @@ function MemberCard({m,i,done,isMe,ms,restToday,td,profiles,sessionExercises,ses
 
 function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,onOpenAITrainer,onOpenNutrition,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,reactions,onReact,weeklyRecap,onDismissRecap}){
   const key=todayStr(),td=sharedData[key]||{},my=td[currentUser],str=getStreak(history,currentUser,profiles[currentUser]),tot=getTotalWorkouts(history,currentUser),we=isRestDay(key,profiles[currentUser]);
-  const sorted=[...members].sort((a,b)=>{const sa=getStreak(history,a),sb=getStreak(history,b);if(sb!==sa)return sb-sa;return b===currentUser?1:a===currentUser?-1:0;});
+  const sorted=[...members].sort((a,b)=>{const sa=getStreak(history,a,profiles[a]),sb=getStreak(history,b,profiles[b]);if(sb!==sa)return sb-sa;return b===currentUser?1:a===currentUser?-1:0;});
 
   return(
     <div>
@@ -2537,7 +2537,7 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed}){
       </div>
       <div className="section-label">PACK COMPARISON</div>
       {[...members].sort((a,b)=>getTotalWorkouts(history,b)-getTotalWorkouts(history,a)).map((m,i)=>{
-        const t=getTotalWorkouts(history,m),s=getStreak(history,m),mx=Math.max(...members.map(x=>getTotalWorkouts(history,x)),1);
+        const t=getTotalWorkouts(history,m),s=getStreak(history,m,profiles[m]),mx=Math.max(...members.map(x=>getTotalWorkouts(history,x)),1);
         return<div key={m} className="member-row" style={{margin:"0 16px 8px"}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,color:"var(--muted)",width:22}}>{i+1}</div><AvatarDisplay profile={profiles[m]} size={36}/><div style={{flex:1}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1}}>{m}{m===currentUser&&" (you)"}</span><span style={{fontSize:12,color:"var(--muted)"}}>{t} workouts</span></div><div className="progress-bar" style={{height:4}}><div className="progress-fill" style={{width:`${(t/mx)*100}%`}}/></div><div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>🔥{s} day streak</div></div></div>;
       })}
       <div className="section-label">MY WORKOUT HISTORY</div>
@@ -2584,7 +2584,7 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
   const [nameErr,setNameErr]=useState("");
   const [nameDone,setNameDone]=useState(false);
 
-  const streak=getStreak(history,currentUser);
+  const streak=getStreak(history,currentUser,profile);
   const total=getTotalWorkouts(history,currentUser);
   const weightLog=profile?.weightLog||[];
 
