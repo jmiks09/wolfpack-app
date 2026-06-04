@@ -217,11 +217,24 @@ const AI_MUSCLE_GROUPS = [
 
 // Secondary goals — shape the programming style, not the muscle focus
 const AI_SECONDARY_GOALS = [
-  {id:"none",      label:"None",                icon:"—",  desc:"Just my primary goal"},
-  {id:"fatloss",   label:"Also losing fat",     icon:"🔥", desc:"More circuits, shorter rest, cardio finishers"},
-  {id:"strength",  label:"Also getting stronger",icon:"⚡", desc:"Heavier compounds, longer rest, lower reps"},
-  {id:"athletic",  label:"Balanced & athletic", icon:"🏃", desc:"Mix of strength, power, and conditioning"},
-  {id:"endurance", label:"Build endurance",     icon:"💨", desc:"Higher reps, less rest, muscular stamina"},
+  // Lower body
+  {id:"bigger_glutes",   label:"Bigger glutes",          desc:"Prioritize glute hypertrophy. High-volume hip thrusts, RDLs, split squats."},
+  {id:"leaner_glutes",   label:"Leaner hips & glutes",   desc:"Reduce lower-body hypertrophy. Less heavy glute work, more conditioning."},
+  {id:"bigger_legs",     label:"Bigger legs",             desc:"Prioritize quad and hamstring development with heavy compound lifts."},
+  {id:"leaner_legs",     label:"Leaner thighs",           desc:"Limit lower-body hypertrophy. Favor moderate resistance and cardio."},
+  // Upper body — shoulders
+  {id:"bigger_shoulders",label:"Bigger shoulders",        desc:"Increase shoulder volume. More overhead pressing and lateral work."},
+  {id:"leaner_shoulders",label:"Smaller shoulders",       desc:"Minimal shoulder hypertrophy. Light maintenance work only."},
+  // Upper body — arms
+  {id:"bigger_arms",     label:"Bigger arms",             desc:"Increase bicep and tricep volume and emphasis."},
+  {id:"toned_arms",      label:"Toned arms",              desc:"Moderate arm volume for definition without bulk."},
+  // Upper body — back & chest
+  {id:"bigger_back",     label:"Wider back",              desc:"Prioritize lat width and upper back development."},
+  {id:"bigger_chest",    label:"Bigger chest",            desc:"Prioritize chest hypertrophy with progressive pressing."},
+  {id:"leaner_chest",    label:"Leaner chest",            desc:"Moderate chest maintenance. Support overall fat loss."},
+  // Overall
+  {id:"athletic",        label:"Athletic physique",       desc:"Balanced strength, power, and conditioning. Functional fitness focus."},
+  {id:"balanced",        label:"Balanced proportions",    desc:"Even development across all muscle groups. No overemphasis."},
 ];
 
 // Effort ratings for post-workout check-in
@@ -4030,7 +4043,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     favs.forEach(fav=>{
       const mgId=fav.muscleGroup||"other";
       const mg=AI_MUSCLE_GROUPS.find(m=>m.id===mgId);
-      const key=mg?.label||mgId;
+      const key=mg?.label||fav.muscleGroup||"Other";
       const icon=mg?.icon||"💪";
       if(!groups[key])groups[key]={icon,favs:[]};
       groups[key].favs.push(fav);
