@@ -233,26 +233,6 @@ const EFFORT_RATINGS = [
 ];
 
 // ── WOLFMODE COACH — Training modes ─────────────────────────────────────────
-const TRAINING_MODES=[
-  {id:"structured",label:"Structured Progression",icon:"📈",desc:"Core lifts stay consistent, weights increase weekly. Best for strength and muscle.",rotationPct:20},
-  {id:"variety",label:"Variety Mode",icon:"🎲",desc:"More exercise rotation while keeping progression. Best for people who get bored.",rotationPct:40},
-  {id:"athletic",label:"Athletic Mode",icon:"⚡",desc:"Adds conditioning, explosive movements and mobility. Best for functional fitness.",rotationPct:30},
-  {id:"beginner",label:"Beginner Mode",icon:"🌱",desc:"Simpler workouts, less variety, more repetition for learning movement patterns.",rotationPct:10},
-];
-const DAYS_PER_WEEK_OPTIONS=[2,3,4,5];
-const SPLIT_DAY_TYPES=[
-  {id:"legs",label:"Legs",muscles:["quads","hamstrings","glutes","calves"]},
-  {id:"push",label:"Push",muscles:["chest","shoulders","triceps"]},
-  {id:"pull",label:"Pull",muscles:["back","biceps","rear delts"]},
-  {id:"upper",label:"Upper Body",muscles:["chest","back","shoulders","arms"]},
-  {id:"lower",label:"Lower Body",muscles:["quads","hamstrings","glutes","calves"]},
-  {id:"glutes",label:"Glutes/Legs",muscles:["glutes","hamstrings","quads"]},
-  {id:"arms",label:"Arms",muscles:["biceps","triceps","forearms"]},
-  {id:"back",label:"Back",muscles:["lats","traps","rear delts"]},
-  {id:"chest",label:"Chest",muscles:["chest","front delts","triceps"]},
-  {id:"fullbody",label:"Full Body",muscles:["chest","back","legs","shoulders"]},
-  {id:"own",label:"My Own Plan",muscles:[]},
-];
 
 // ── AI Coach (Nutrition + Supplements) constants ────────────────────────────
 const AI_BULK_CUT = [
@@ -390,387 +370,6 @@ function launchConfetti(){const cv=document.getElementById("confetti-canvas");if
 function Toast({msg}){return msg?<div className="toast">{msg}</div>:null;}
 function AvatarDisplay({profile,size=40}){if(profile?.avatarImg)return<img src={profile.avatarImg} alt="av" style={{width:size,height:size,borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>;return<div className="avatar" style={{width:size,height:size,background:"var(--bg2)",fontSize:size*.55,flexShrink:0}}>{profile?.avatar||"🐺"}</div>;}
 function readFileAsDataURL(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});}
-// ── TRAINING BLOCK HELPERS ───────────────────────────────────────────────────
-async function getTrainingBlock(userName){
-  try{const data=await fsGet("wolfpack/training_blocks");return data?.users?.[userName]||null;}
-  catch{return null;}
-}
-async function saveTrainingBlock(userName,block){
-  try{const existing=await fsGet("wolfpack/training_blocks")||{users:{}};await fsSet("wolfpack/training_blocks",{users:{...(existing.users||{}),[userName]:block}});return true;}
-  catch{return false;}
-}
-async function clearTrainingBlock(userName){
-  try{const existing=await fsGet("wolfpack/training_blocks")||{users:{}};const updated={...existing.users};delete updated[userName];await fsSet("wolfpack/training_blocks",{users:updated});return true;}
-  catch{return false;}
-}
-function detectTrainingPattern(history,userName){
-  const muscleCounts={};let workoutDays=0;
-  for(let i=0;i<30;i++){
-    const d=new Date();d.setDate(d.getDate()-i);
-    const ds=localDateStr(d);const entry=history[ds]?.[userName];
-    if(entry?.done){
-      workoutDays++;
-      const mg=entry.wolfmodeSession?.muscleGroup;
-      if(mg)muscleCounts[mg]=(muscleCounts[mg]||0)+1;
-      const label=(entry.workoutLabel||"").toLowerCase();
-      if(label.includes("chest"))muscleCounts.chest=(muscleCounts.chest||0)+1;
-      if(label.includes("back"))muscleCounts.back=(muscleCounts.back||0)+1;
-      if(label.includes("leg")||label.includes("glute"))muscleCounts.legs=(muscleCounts.legs||0)+1;
-      if(label.includes("arm")||label.includes("bicep")||label.includes("tricep"))muscleCounts.arms=(muscleCounts.arms||0)+1;
-      if(label.includes("shoulder"))muscleCounts.shoulders=(muscleCounts.shoulders||0)+1;
-    }
-  }
-  const avgDaysPerWeek=Math.round((workoutDays/30)*7);
-  const topMuscles=Object.entries(muscleCounts).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([m])=>m);
-  return{avgDaysPerWeek:Math.max(2,Math.min(5,avgDaysPerWeek||3)),topMuscles,totalWorkouts:workoutDays,hasHistory:workoutDays>=3};
-}
-function isBlockComplete(block){
-  if(!block)return false;
-  const sessionsPerWeek=block.split?.filter(d=>d.type!=="own").length||3;
-  return(block.sessionsCompleted||0)>=(block.blockWeeks*sessionsPerWeek);
-}
-function getNextSplitDay(block){
-  if(!block?.split?.length)return null;
-  const activeDays=block.split.filter(d=>d.id!=="own");
-  if(!activeDays.length)return null;
-  const lastIdx=activeDays.findIndex(d=>d.id===block.lastSessionDay);
-  return activeDays[(lastIdx+1)%activeDays.length];
-}
-
-function compressImage(dataUrl,maxPx=200){return new Promise(res=>{const img=new Image();img.onload=()=>{let w=img.width,h=img.height;if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*(maxPx/w));w=maxPx;}else{w=Math.round(w*(maxPx/h));h=maxPx;}}const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h);res(cv.toDataURL("image/jpeg",.75));};img.onerror=()=>res(dataUrl);img.src=dataUrl;});}
-
-// ── AI TRAINER HELPERS ──────────────────────────────────────────────────────
-// Summarize last 7 days of workouts for the AI's context
-function getRecentHistoryString(history, userName){
-  const days=[];
-  for(let i=0;i<7;i++){
-    const d=new Date();d.setDate(d.getDate()-i);
-    const ds=localDateStr(d);
-    const entry=history[ds]?.[userName];
-    if(entry?.done){
-      const labels=entry.workouts?.map(w=>w.label).join("+")||entry.workoutLabel||"workout";
-      const details=entry.summary?.length?` (${entry.summary.map(s=>s.detail).filter(Boolean).join("; ")})`:"";
-      days.push(`Day -${i}: ${labels}${details}`);
-    }
-  }
-  return days.length?days.join(" | "):"No workouts in the last 7 days.";
-}
-
-// Build the equipment string the AI sees from a selected preset
-function buildEquipmentString(presetId, customEquipment, packHomeGym){
-  if(presetId==="custom"&&customEquipment){
-    return customEquipment;
-  }
-  if(presetId==="home"){
-    // packHomeGym comes from Firestore — array of strings
-    const items=Array.isArray(packHomeGym)&&packHomeGym.length>0
-      ? packHomeGym
-      : HOME_GYM_DEFAULT;
-    return `Garage gym equipment: ${items.join(", ")}.`;
-  }
-  // Check saved presets (saved_0, saved_1, etc.)
-  if(presetId.startsWith("saved_")){
-    return customEquipment||"Custom equipment.";
-  }
-  return AI_PRESET_DESCRIPTIONS[presetId]||AI_PRESET_DESCRIPTIONS.bodyweight;
-}
-
-// ── EXERCISE SVG ILLUSTRATIONS ───────────────────────────────────────────────
-// Generates animated SVG diagrams based on the primary muscle group.
-// Zero external dependencies — always works, never cuts music.
-
-function getExerciseSVG(exerciseName, primaryMuscle){
-  const name=(exerciseName||"").toLowerCase();
-  const muscle=(primaryMuscle||"").toLowerCase();
-
-  // Determine movement pattern from exercise name + muscle
-  let pattern="push";
-  if(name.includes("squat")||name.includes("lunge")||name.includes("leg press")||name.includes("step")) pattern="squat";
-  else if(name.includes("deadlift")||name.includes("rdl")||name.includes("hip hinge")||name.includes("good morning")) pattern="hinge";
-  else if(name.includes("row")||name.includes("pull")||name.includes("chin")||name.includes("lat")) pattern="pull";
-  else if(name.includes("hip thrust")||name.includes("glute bridge")||name.includes("bridge")) pattern="thrust";
-  else if(name.includes("curl")||name.includes("bicep")) pattern="curl";
-  else if(name.includes("tricep")||name.includes("extension")||name.includes("pushdown")) pattern="tricep";
-  else if(name.includes("press")&&(name.includes("bench")||name.includes("chest")||name.includes("incline")||name.includes("decline"))) pattern="bench";
-  else if(name.includes("press")&&(name.includes("shoulder")||name.includes("overhead")||name.includes("ohp")||name.includes("military"))) pattern="overhead";
-  else if(name.includes("plank")||name.includes("hollow")||name.includes("dead bug")) pattern="plank";
-  else if(name.includes("crunch")||name.includes("situp")||name.includes("sit-up")||name.includes("ab")) pattern="crunch";
-  else if(name.includes("lateral")||name.includes("raise")||name.includes("fly")||name.includes("flye")) pattern="raise";
-  else if(muscle.includes("glute")||muscle.includes("hip")) pattern="thrust";
-  else if(muscle.includes("back")||muscle.includes("lat")) pattern="pull";
-  else if(muscle.includes("leg")||muscle.includes("quad")||muscle.includes("hamstring")) pattern="squat";
-  else if(muscle.includes("chest")) pattern="bench";
-  else if(muscle.includes("shoulder")||muscle.includes("delt")) pattern="overhead";
-  else if(muscle.includes("bicep")) pattern="curl";
-  else if(muscle.includes("tricep")) pattern="tricep";
-  else if(muscle.includes("core")||muscle.includes("abs")) pattern="crunch";
-
-  const svgs={
-    squat:`<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes squat{0%,100%{transform:translateY(0)}50%{transform:translateY(14px)}}
-        .mover{animation:squat 1.8s ease-in-out infinite;}
-      </style>
-      <g class="mover" transform-origin="60 50">
-        <!-- head --><circle cx="60" cy="22" r="7" class="dot" fill-opacity="0.8"/>
-        <!-- torso --><line x1="60" y1="29" x2="60" y2="55" class="body"/>
-        <!-- arms --><line x1="60" y1="35" x2="42" y2="48" class="body"/><line x1="60" y1="35" x2="78" y2="48" class="body"/>
-        <!-- bar --><line x1="30" y1="37" x2="90" y2="37" class="accent"/>
-        <!-- left leg --><line x1="60" y1="55" x2="48" y2="75" class="body"/><line x1="48" y1="75" x2="44" y2="90" class="body"/>
-        <!-- right leg --><line x1="60" y1="55" x2="72" y2="75" class="body"/><line x1="72" y1="75" x2="76" y2="90" class="body"/>
-      </g>
-      <!-- floor --><line x1="20" y1="94" x2="100" y2="94" stroke="#444" stroke-width="1.5"/>
-      <!-- arrows --><text x="60" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↕ drive through heels</text>
-    </svg>`,
-
-    hinge:`<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes hinge{0%,100%{transform:rotate(0deg)}50%{transform:rotate(38deg)}}
-        .mover{animation:hinge 2s ease-in-out infinite;transform-origin:60px 72px;}
-      </style>
-      <g class="mover">
-        <circle cx="60" cy="28" r="7" class="dot" fill-opacity="0.8"/>
-        <line x1="60" y1="35" x2="60" y2="62" class="body"/>
-        <line x1="60" y1="40" x2="44" y2="52" class="body"/>
-        <line x1="60" y1="40" x2="76" y2="52" class="body"/>
-        <line x1="44" y1="52" x2="40" y2="68" class="accent"/>
-        <line x1="76" y1="52" x2="80" y2="68" class="accent"/>
-      </g>
-      <line x1="48" y1="72" x2="72" y2="72" class="body"/>
-      <line x1="48" y1="72" x2="46" y2="88" class="body"/>
-      <line x1="72" y1="72" x2="74" y2="88" class="body"/>
-      <line x1="20" y1="92" x2="100" y2="92" stroke="#444" stroke-width="1.5"/>
-      <text x="60" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↕ hinge at hips</text>
-    </svg>`,
-
-    thrust:`<svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes thrust{0%,100%{transform:translateY(0)}50%{transform:translateY(-16px)}}
-        .hips{animation:thrust 1.8s ease-in-out infinite;transform-origin:65px 60px;}
-      </style>
-      <!-- bench --><rect x="10" y="62" width="40" height="10" rx="3" fill="#333" stroke="#555" stroke-width="1"/>
-      <!-- upper body on bench --><line x1="12" y1="58" x2="48" y2="58" class="body"/>
-      <circle cx="10" cy="54" r="6" class="dot" fill-opacity="0.8"/>
-      <!-- arms --><line x1="30" y1="58" x2="30" y2="48" class="body"/><line x1="42" y1="58" x2="42" y2="48" class="body"/>
-      <!-- bar --><line x1="22" y1="48" x2="50" y2="48" class="accent"/>
-      <g class="hips">
-        <!-- hips+legs --><line x1="48" y1="58" x2="65" y2="58" class="body"/>
-        <line x1="65" y1="58" x2="75" y2="76" class="body"/><line x1="75" y1="76" x2="80" y2="90" class="body"/>
-        <line x1="65" y1="58" x2="85" y2="66" class="body"/><line x1="85" y1="66" x2="90" y2="82" class="body"/>
-      </g>
-      <line x1="20" y1="93" x2="110" y2="93" stroke="#444" stroke-width="1.5"/>
-      <text x="65" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ drive hips up, squeeze</text>
-    </svg>`,
-
-    pull:`<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes pull{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-        .mover{animation:pull 1.8s ease-in-out infinite;}
-      </style>
-      <!-- bar --><line x1="20" y1="18" x2="100" y2="18" class="accent" stroke-width="3"/>
-      <g class="mover" transform-origin="60 18">
-        <circle cx="60" cy="42" r="7" class="dot" fill-opacity="0.8"/>
-        <line x1="60" y1="49" x2="60" y2="72" class="body"/>
-        <line x1="60" y1="55" x2="44" y2="44" class="body"/><line x1="44" y1="44" x2="36" y2="26" class="body"/>
-        <line x1="60" y1="55" x2="76" y2="44" class="body"/><line x1="76" y1="44" x2="84" y2="26" class="body"/>
-        <line x1="60" y1="72" x2="50" y2="88" class="body"/><line x1="60" y1="72" x2="70" y2="88" class="body"/>
-      </g>
-      <text x="60" y="104" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ pull elbows to hips</text>
-    </svg>`,
-
-    push:`<svg viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes push{0%,100%{transform:translateY(0)}50%{transform:translateY(10px)}}
-        .mover{animation:push 1.8s ease-in-out infinite;}
-      </style>
-      <g class="mover" transform-origin="65 55">
-        <circle cx="65" cy="22" r="7" class="dot" fill-opacity="0.8"/>
-        <line x1="65" y1="29" x2="65" y2="56" class="body"/>
-        <line x1="65" y1="36" x2="44" y2="48" class="body"/><line x1="44" y1="48" x2="38" y2="38" class="body"/>
-        <line x1="65" y1="36" x2="86" y2="48" class="body"/><line x1="86" y1="48" x2="92" y2="38" class="body"/>
-        <line x1="38" y1="38" x2="92" y2="38" class="accent"/>
-        <line x1="65" y1="56" x2="55" y2="76" class="body"/><line x1="55" y1="76" x2="52" y2="92" class="body"/>
-        <line x1="65" y1="56" x2="75" y2="76" class="body"/><line x1="75" y1="76" x2="78" y2="92" class="body"/>
-      </g>
-      <line x1="20" y1="95" x2="110" y2="95" stroke="#444" stroke-width="1.5"/>
-      <text x="65" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↕ controlled press</text>
-    </svg>`,
-
-    bench:`<svg viewBox="0 0 140 100" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes bench{0%,100%{transform:translateY(0)}50%{transform:translateY(12px)}}
-        .arms{animation:bench 1.8s ease-in-out infinite;}
-      </style>
-      <rect x="15" y="54" width="90" height="10" rx="3" fill="#333" stroke="#555" stroke-width="1"/>
-      <circle cx="20" cy="48" r="7" class="dot" fill-opacity="0.8"/>
-      <line x1="25" y1="50" x2="100" y2="50" class="body"/>
-      <line x1="100" y1="50" x2="110" y2="64" class="body"/><line x1="110" y1="64" x2="116" y2="78" class="body"/>
-      <g class="arms" transform-origin="70 38">
-        <line x1="45" y1="50" x2="40" y2="36" class="body"/><line x1="75" y1="50" x2="80" y2="36" class="body"/>
-        <line x1="28" y1="36" x2="92" y2="36" class="accent" stroke-width="3"/>
-      </g>
-      <line x1="10" y1="92" x2="130" y2="92" stroke="#444" stroke-width="1.5"/>
-      <text x="70" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↕ lower to chest, press up</text>
-    </svg>`,
-
-    overhead:`<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes ohp{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
-        .arms{animation:ohp 1.8s ease-in-out infinite;}
-      </style>
-      <circle cx="60" cy="20" r="7" class="dot" fill-opacity="0.8"/>
-      <line x1="60" y1="27" x2="60" y2="58" class="body"/>
-      <line x1="60" y1="62" x2="48" y2="80" class="body"/><line x1="48" y1="80" x2="45" y2="95" class="body"/>
-      <line x1="60" y1="62" x2="72" y2="80" class="body"/><line x1="72" y1="80" x2="75" y2="95" class="body"/>
-      <g class="arms" transform-origin="60 40">
-        <line x1="60" y1="40" x2="36" y2="52" class="body"/><line x1="36" y1="52" x2="30" y2="38" class="body"/>
-        <line x1="60" y1="40" x2="84" y2="52" class="body"/><line x1="84" y1="52" x2="90" y2="38" class="body"/>
-        <line x1="22" y1="38" x2="98" y2="38" class="accent" stroke-width="3"/>
-      </g>
-      <line x1="20" y1="98" x2="100" y2="98" stroke="#444" stroke-width="1.5"/>
-      <text x="60" y="108" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ press overhead, lock out</text>
-    </svg>`,
-
-    curl:`<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes curl{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-70deg)}}
-        .forearm{animation:curl 1.8s ease-in-out infinite;transform-origin:72px 55px;}
-      </style>
-      <circle cx="60" cy="18" r="7" class="dot" fill-opacity="0.8"/>
-      <line x1="60" y1="25" x2="60" y2="55" class="body"/>
-      <line x1="60" y1="55" x2="48" y2="75" class="body"/><line x1="48" y1="75" x2="45" y2="90" class="body"/>
-      <line x1="60" y1="55" x2="72" y2="75" class="body"/><line x1="72" y1="75" x2="75" y2="90" class="body"/>
-      <line x1="60" y1="36" x2="48" y2="48" class="body"/>
-      <g class="forearm">
-        <line x1="72" y1="55" x2="85" y2="48" class="body"/>
-        <line x1="85" y1="48" x2="90" y2="36" class="accent" stroke-width="3"/>
-      </g>
-      <line x1="20" y1="93" x2="100" y2="93" stroke="#444" stroke-width="1.5"/>
-      <text x="60" y="8" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ curl, squeeze bicep</text>
-    </svg>`,
-
-    tricep:`<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes tricep{0%,100%{transform:rotate(0deg)}50%{transform:rotate(55deg)}}
-        .forearm{animation:tricep 1.8s ease-in-out infinite;transform-origin:75px 42px;}
-      </style>
-      <circle cx="60" cy="18" r="7" class="dot" fill-opacity="0.8"/>
-      <line x1="60" y1="25" x2="60" y2="55" class="body"/>
-      <line x1="60" y1="55" x2="48" y2="75" class="body"/><line x1="48" y1="75" x2="45" y2="90" class="body"/>
-      <line x1="60" y1="55" x2="72" y2="75" class="body"/><line x1="72" y1="75" x2="75" y2="90" class="body"/>
-      <line x1="60" y1="36" x2="48" y2="46" class="body"/>
-      <line x1="60" y1="36" x2="75" y2="42" class="body"/>
-      <g class="forearm">
-        <line x1="75" y1="42" x2="78" y2="60" class="accent" stroke-width="3"/>
-      </g>
-      <line x1="20" y1="93" x2="100" y2="93" stroke="#444" stroke-width="1.5"/>
-      <text x="60" y="8" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↓ extend, lock out tricep</text>
-    </svg>`,
-
-    plank:`<svg viewBox="0 0 140 80" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes plank{0%,100%{opacity:1}50%{opacity:0.5}}
-        .core{animation:plank 2s ease-in-out infinite;}
-      </style>
-      <circle cx="24" cy="32" r="7" class="dot" fill-opacity="0.8"/>
-      <line x1="30" y1="35" x2="100" y2="44" class="body"/>
-      <line x1="36" y1="36" x2="30" y2="50" class="body"/><line x1="30" y1="50" x2="26" y2="62" class="body"/>
-      <line x1="100" y1="44" x2="104" y2="58" class="body"/><line x1="104" y1="58" x2="106" y2="68" class="body"/>
-      <line x1="96" y1="44" x2="100" y2="58" class="body"/><line x1="100" y1="58" x2="102" y2="68" class="body"/>
-      <g class="core"><line x1="50" y1="38" x2="80" y2="42" class="accent" stroke-width="3"/></g>
-      <line x1="10" y1="70" x2="130" y2="70" stroke="#444" stroke-width="1.5"/>
-      <text x="70" y="12" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">hold tight — brace your core</text>
-    </svg>`,
-
-    crunch:`<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes crunch{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-25deg)}}
-        .upper{animation:crunch 1.8s ease-in-out infinite;transform-origin:60px 62px;}
-      </style>
-      <line x1="20" y1="88" x2="100" y2="88" stroke="#444" stroke-width="1.5"/>
-      <line x1="45" y1="88" x2="55" y2="70" class="body"/><line x1="75" y1="88" x2="65" y2="70" class="body"/>
-      <line x1="55" y1="70" x2="60" y2="62" class="body"/><line x1="65" y1="70" x2="60" y2="62" class="body"/>
-      <g class="upper">
-        <line x1="60" y1="62" x2="60" y2="42" class="body"/>
-        <line x1="60" y1="50" x2="44" y2="58" class="body"/><line x1="60" y1="50" x2="76" y2="58" class="body"/>
-        <circle cx="60" cy="34" r="7" class="dot" fill-opacity="0.8"/>
-        <line x1="44" y1="58" x2="48" y2="44" class="accent"/><line x1="76" y1="58" x2="72" y2="44" class="accent"/>
-      </g>
-      <text x="60" y="10" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ curl shoulders up, exhale</text>
-    </svg>`,
-
-    raise:`<svg viewBox="0 0 140 100" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .body{stroke:#c084fc;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .accent{stroke:#ff6b35;stroke-width:2.5;stroke-linecap:round;fill:none;}
-        .dot{fill:#c084fc;}
-        @keyframes raise{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-45deg)}}
-        .larm{animation:raise 1.8s ease-in-out infinite;transform-origin:46px 42px;}
-        @keyframes raise2{0%,100%{transform:rotate(0deg)}50%{transform:rotate(45deg)}}
-        .rarm{animation:raise2 1.8s ease-in-out infinite;transform-origin:76px 42px;}
-      </style>
-      <circle cx="61" cy="18" r="7" class="dot" fill-opacity="0.8"/>
-      <line x1="61" y1="25" x2="61" y2="58" class="body"/>
-      <line x1="61" y1="58" x2="50" y2="78" class="body"/><line x1="50" y1="78" x2="47" y2="92" class="body"/>
-      <line x1="61" y1="58" x2="72" y2="78" class="body"/><line x1="72" y1="78" x2="75" y2="92" class="body"/>
-      <g class="larm"><line x1="61" y1="42" x2="30" y2="52" class="accent" stroke-width="3"/></g>
-      <g class="rarm"><line x1="61" y1="42" x2="92" y2="52" class="accent" stroke-width="3"/></g>
-      <line x1="10" y1="95" x2="130" y2="95" stroke="#444" stroke-width="1.5"/>
-      <text x="61" y="8" text-anchor="middle" fill="#ff6b35" font-size="9" opacity="0.7">↑ raise to shoulder height</text>
-    </svg>`,
-  };
-
-  return svgs[pattern]||svgs.push;
-}
-
-// Count today's regenerations from localStorage (per user)
-function getRegenCount(userName){
-  try{
-    const k=`wp_regen_${userName}_${todayStr()}`;
-    return Number(localStorage.getItem(k)||0);
-  }catch{return 0;}
-}
-function bumpRegenCount(userName){
-  try{
-    const k=`wp_regen_${userName}_${todayStr()}`;
-    const n=getRegenCount(userName)+1;
-    localStorage.setItem(k,String(n));
-    return n;
-  }catch{return 0;}
-}
 
 // ── ACTIVE WORKOUT HELPERS (localStorage, Central time) ─────────────────────
 // Central time date string (CDT = UTC-5)
@@ -2909,7 +2508,7 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed}){
 }
 
 // ── PROFILE MODAL ────────────────────────────────────────────────────────────
-function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,onSaveWeight,onSaveGoal,onChangePin,onChangeName,onSaveProfile,onSaveBackfill,trainingBlock,onBlockUpdated}){
+function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,onSaveWeight,onSaveGoal,onChangePin,onChangeName,onSaveProfile,onSaveBackfill}){
   const [tab,setTab]=useState("stats");
   const [weight,setWeight]=useState("");
   const [weightUnit,setWeightUnit]=useState("lbs");
@@ -3234,9 +2833,6 @@ function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,o
               profile={profile}
               profiles={profiles}
               onSaveProfile={onSaveProfile}
-              history={history}
-              trainingBlock={trainingBlock}
-              onBlockUpdated={onBlockUpdated}
             />
           )}
 
@@ -3421,7 +3017,7 @@ function WorkoutSummaryDisplay({summary, workoutLabel, style={}}){
 }
 
 // ── AI TRAINER — profile settings tab ───────────────────────────────────────
-function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile, history, trainingBlock, onBlockUpdated}){
+function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile}){
   const cur=profile?.aiTrainer||{};
   const [goal,setGoal]=useState(cur.goal||"");
   const [secondaryGoal,setSecondaryGoal]=useState(cur.secondaryGoal||"none");
@@ -3431,265 +3027,111 @@ function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfile, his
   const [customInjury,setCustomInjury]=useState("");
   const [saved,setSaved]=useState(false);
   const [daysPerWeek,setDaysPerWeek]=useState(cur.daysPerWeek||3);
-  const [trainingMode,setTrainingMode]=useState(cur.trainingMode||"structured");
-  const [showBlockReset,setShowBlockReset]=useState(false);
-
-  const toggleInjury=(inj)=>{
-    setInjuries(prev=>prev.includes(inj)?prev.filter(x=>x!==inj):[...prev,inj]);
-    setSaved(false);
-  };
-
-  const addCustomInjury=()=>{
-    if(customInjury.trim()){
-      setInjuries(prev=>[...prev,customInjury.trim()]);
-      setCustomInjury("");
-      setSaved(false);
-    }
-  };
 
   const save=async()=>{
-    const updated={
-      ...profile,
-      aiTrainer:{
-        ...cur,
-        goal,
-        secondaryGoal:secondaryGoal==="none"?null:secondaryGoal,
-        experience,
-        injuries,
-        usualSetup,
-        daysPerWeek,
-        trainingMode,
-      },
-    };
-    const np={...profiles,[currentUser]:updated};
-    await fsSet("wolfpack/profiles",{users:np});
-    if(onSaveProfile)onSaveProfile(np);
-    setSaved(true);
-    setTimeout(()=>setSaved(false),2000);
+    const updated={...profile,aiTrainer:{...cur,goal,secondaryGoal:secondaryGoal==="none"?null:secondaryGoal,experience,injuries,usualSetup,daysPerWeek}};
+    const newProfiles={...profiles,[currentUser]:updated};
+    await onSaveProfile(newProfiles);
+    setSaved(true);setTimeout(()=>setSaved(false),2000);
   };
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{fontSize:11,color:"var(--muted)",lineHeight:1.5}}>
-        WOLFMODE uses this to build workouts tailored to you. Set these once — change anytime.
-      </div>
-
+    <div style={{padding:"0 4px"}}>
       {/* Goal */}
-      <div>
-        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🎯 PRIMARY GOAL</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          {AI_GOALS.map(g=>{
-            const sel=goal===g.id;
-            return(
-              <button key={g.id} onClick={()=>{setGoal(g.id);setSaved(false);}}
-                style={{
-                  padding:"10px 8px",borderRadius:10,cursor:"pointer",textAlign:"left",
-                  background:sel?"rgba(124,92,191,0.2)":"var(--bg3)",
-                  border:sel?"1px solid var(--accent)":"1px solid var(--border)",
-                  display:"flex",alignItems:"center",gap:8,
-                }}>
-                <span style={{fontSize:18}}>{g.icon}</span>
-                <span style={{fontSize:12,color:sel?"var(--accent2)":"#fff"}}>{g.label}</span>
-              </button>
-            );
-          })}
+      <div style={{marginBottom:14}}>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🎯 PRIMARY GOAL</div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {AI_GOALS.map(g=>{const sel=goal===g.id;return(
+            <button key={g.id} onClick={()=>{setGoal(g.id);setSaved(false);}} style={{padding:"10px 14px",borderRadius:12,cursor:"pointer",textAlign:"left",background:sel?"rgba(124,92,191,0.15)":"var(--bg3)",border:sel?"1px solid var(--accent)":"1px solid var(--border)",display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:20,flexShrink:0}}>{g.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,color:sel?"var(--accent2)":"#fff",marginBottom:1}}>{g.label}</div>
+                <div style={{fontSize:10,color:"var(--muted)"}}>{g.desc}</div>
+              </div>
+              {sel&&<div style={{color:"var(--accent)",fontSize:14}}>✓</div>}
+            </button>
+          );})}
         </div>
       </div>
 
-      {/* Secondary Goal */}
-      <div>
-        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--accent2)",marginBottom:4}}>➕ SECONDARY FOCUS <span style={{fontSize:9,color:"var(--muted)",fontFamily:"inherit",letterSpacing:1}}>(OPTIONAL)</span></div>
-        <div style={{fontSize:10,color:"var(--muted)",marginBottom:8}}>Shapes how workouts are programmed — primary goal still drives muscle focus.</div>
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {AI_SECONDARY_GOALS.map(s=>{
-            const sel=(secondaryGoal||"none")===s.id;
-            return(
-              <button key={s.id} onClick={()=>{setSecondaryGoal(s.id);setSaved(false);}}
-                style={{
-                  padding:"10px 12px",borderRadius:10,cursor:"pointer",textAlign:"left",
-                  background:sel?"rgba(124,92,191,0.15)":"var(--bg3)",
-                  border:sel?"1px solid var(--accent)":"1px solid var(--border)",
-                  display:"flex",alignItems:"center",gap:10,
-                }}>
-                <span style={{fontSize:16,flexShrink:0}}>{s.icon}</span>
-                <div>
-                  <div style={{fontSize:12,color:sel?"var(--accent2)":"#fff",marginBottom:1}}>{s.label}</div>
-                  <div style={{fontSize:10,color:"var(--muted)"}}>{s.desc}</div>
-                </div>
-                {sel&&<div style={{marginLeft:"auto",color:"var(--accent)",fontSize:14}}>✓</div>}
-              </button>
-            );
-          })}
-        </div>
+      {/* Secondary goal */}
+      <div style={{marginBottom:14}}>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>✨ AESTHETIC PREFERENCE <span style={{fontSize:9,color:"var(--muted)",letterSpacing:1,fontFamily:"sans-serif",textTransform:"none"}}>optional</span></div>
+        <select value={secondaryGoal} onChange={e=>{setSecondaryGoal(e.target.value);setSaved(false);}} style={{width:"100%",padding:"10px 12px",borderRadius:10,background:"var(--bg3)",border:"1px solid var(--border)",color:secondaryGoal==="none"?"var(--muted)":"#fff",fontSize:13}}>
+          <option value="none">No preference</option>
+          {AI_SECONDARY_GOALS.map(g=><option key={g.id} value={g.id}>{g.label}</option>)}
+        </select>
+        <div style={{fontSize:10,color:"var(--muted)",marginTop:4,lineHeight:1.4}}>Used to adjust emphasis only. Fat loss is always systemic — no spot reduction.</div>
       </div>
 
       {/* Experience */}
-      <div>
-        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>📊 EXPERIENCE LEVEL</div>
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {AI_EXPERIENCE.map(e=>{
-            const sel=experience===e.id;
-            return(
-              <button key={e.id} onClick={()=>{setExperience(e.id);setSaved(false);}}
-                style={{
-                  padding:"10px 12px",borderRadius:10,cursor:"pointer",textAlign:"left",
-                  background:sel?"rgba(124,92,191,0.2)":"var(--bg3)",
-                  border:sel?"1px solid var(--accent)":"1px solid var(--border)",
-                }}>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1.5,color:sel?"var(--accent2)":"#fff",marginBottom:2}}>{e.label}</div>
-                <div style={{fontSize:11,color:"var(--muted)"}}>{e.desc}</div>
-              </button>
-            );
-          })}
+      <div style={{marginBottom:14}}>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>💪 EXPERIENCE LEVEL</div>
+        <div style={{display:"flex",gap:8}}>
+          {["beginner","intermediate","advanced"].map(lvl=>{const sel=experience===lvl;return(
+            <button key={lvl} onClick={()=>{setExperience(lvl);setSaved(false);}} style={{flex:1,padding:"10px 4px",borderRadius:12,cursor:"pointer",textAlign:"center",background:sel?"rgba(124,92,191,0.15)":"var(--bg3)",border:sel?"1px solid var(--accent)":"1px solid var(--border)"}}>
+              <div style={{fontSize:11,color:sel?"var(--accent2)":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{lvl.charAt(0).toUpperCase()+lvl.slice(1)}</div>
+            </button>
+          );})}
         </div>
+      </div>
+
+      {/* Days per week */}
+      <div style={{marginBottom:14}}>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🗓️ TRAINING DAYS/WEEK</div>
+        <div style={{display:"flex",gap:8}}>
+          {DAYS_PER_WEEK_OPTIONS.map(n=>{const sel=daysPerWeek===n;return(
+            <button key={n} onClick={()=>{setDaysPerWeek(n);setSaved(false);}} style={{flex:1,padding:"12px 0",borderRadius:12,cursor:"pointer",background:sel?"linear-gradient(135deg,rgba(255,107,53,0.25),rgba(124,92,191,0.2))":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.5)":"1px solid var(--border)"}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,color:sel?"#ff6b35":"#fff"}}>{n}</div>
+              <div style={{fontSize:9,color:"var(--muted)"}}>days</div>
+            </button>
+          );})}
+        </div>
+        <div style={{fontSize:10,color:"var(--muted)",marginTop:4}}>Used for recovery calculations — not to lock you into a schedule.</div>
       </div>
 
       {/* Injuries */}
-      <div>
-        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🚨 INJURIES & LIMITATIONS</div>
-        <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>Tap any that apply. The AI will avoid movements that aggravate these.</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-          {AI_INJURIES.map(inj=>{
-            const sel=injuries.includes(inj);
-            return(
-              <button key={inj} onClick={()=>toggleInjury(inj)}
-                style={{
-                  padding:"6px 12px",borderRadius:20,cursor:"pointer",fontSize:11,
-                  background:sel?"rgba(231,76,60,0.15)":"var(--bg3)",
-                  border:sel?"1px solid var(--red)":"1px solid var(--border)",
-                  color:sel?"var(--red)":"var(--muted)",
-                }}>
-                {sel?"✕ ":""}{inj}
-              </button>
-            );
-          })}
+      <div style={{marginBottom:14}}>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🩹 INJURIES / LIMITATIONS <span style={{fontSize:9,color:"var(--muted)",letterSpacing:1,fontFamily:"sans-serif",textTransform:"none"}}>optional</span></div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+          {["Bad knees","Bad back","Shoulder injury","Wrist pain","Hip pain","Ankle issues"].map(inj=>{const sel=injuries.includes(inj);return(
+            <button key={inj} onClick={()=>{setInjuries(i=>sel?i.filter(x=>x!==inj):[...i,inj]);setSaved(false);}} style={{padding:"5px 12px",borderRadius:20,cursor:"pointer",fontSize:12,background:sel?"rgba(231,76,60,0.15)":"var(--bg3)",border:sel?"1px solid rgba(231,76,60,0.4)":"1px solid var(--border)",color:sel?"var(--red)":"var(--muted)"}}>
+              {sel?"✓ ":""}{inj}
+            </button>
+          );})}
         </div>
-        {/* Custom injuries already added (those not in AI_INJURIES) */}
-        {injuries.filter(i=>!AI_INJURIES.includes(i)).length>0&&(
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-            {injuries.filter(i=>!AI_INJURIES.includes(i)).map(inj=>(
-              <button key={inj} onClick={()=>toggleInjury(inj)}
-                style={{
-                  padding:"6px 12px",borderRadius:20,cursor:"pointer",fontSize:11,
-                  background:"rgba(231,76,60,0.15)",border:"1px solid var(--red)",color:"var(--red)",
-                }}>
-                ✕ {inj}
-              </button>
-            ))}
+        <div style={{display:"flex",gap:8}}>
+          <input className="input" placeholder="Other limitation..." value={customInjury} onChange={e=>setCustomInjury(e.target.value)} style={{flex:1,padding:"8px 12px",fontSize:12}}/>
+          <button onClick={()=>{if(customInjury.trim()){setInjuries(i=>[...i,customInjury.trim()]);setCustomInjury("");setSaved(false);}}} className="btn-ghost" style={{flexShrink:0,padding:"0 14px",fontSize:12}}>Add</button>
+        </div>
+        {injuries.filter(i=>!["Bad knees","Bad back","Shoulder injury","Wrist pain","Hip pain","Ankle issues"].includes(i)).map((inj,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginTop:6,padding:"6px 12px",background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.2)",borderRadius:8}}>
+            <span style={{flex:1,fontSize:12,color:"var(--red)"}}>{inj}</span>
+            <button onClick={()=>setInjuries(x=>x.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:16}}>×</button>
           </div>
-        )}
-        <div style={{display:"flex",gap:6}}>
-          <input className="input" placeholder="Add custom (e.g. 'plantar fasciitis')"
-            value={customInjury} onChange={e=>setCustomInjury(e.target.value)}
-            onKeyDown={e=>e.key==="Enter"&&addCustomInjury()}
-            style={{padding:8,fontSize:12,flex:1}}/>
-          <button className="btn-ghost" onClick={addCustomInjury} disabled={!customInjury.trim()} style={{padding:"6px 12px",fontSize:12}}>+ Add</button>
-        </div>
+        ))}
       </div>
 
       {/* Usual setup */}
-      <div>
-        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🏠 USUAL TRAINING SPOT</div>
-        <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>Defaults to this when you generate a workout (you can change it each time).</div>
+      <div style={{marginBottom:16}}>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🏠 DEFAULT EQUIPMENT</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          {AI_EQUIPMENT_PRESETS.map(p=>{
-            const sel=usualSetup===p.id;
-            return(
-              <button key={p.id} onClick={()=>{setUsualSetup(p.id);setSaved(false);}}
-                style={{
-                  padding:"10px 8px",borderRadius:10,cursor:"pointer",textAlign:"left",
-                  background:sel?"rgba(124,92,191,0.2)":"var(--bg3)",
-                  border:sel?"1px solid var(--accent)":"1px solid var(--border)",
-                }}>
-                <div style={{fontSize:16,marginBottom:2}}>{p.icon}</div>
-                <div style={{fontSize:11,color:sel?"var(--accent2)":"#fff"}}>{p.label}</div>
-              </button>
-            );
-          })}
+          {AI_EQUIPMENT_PRESETS.map(p=>{const sel=usualSetup===p.id;return(
+            <button key={p.id} onClick={()=>{setUsualSetup(p.id);setSaved(false);}} style={{padding:"10px 8px",borderRadius:12,cursor:"pointer",background:sel?"rgba(124,92,191,0.2)":"var(--bg3)",border:sel?"1px solid var(--accent)":"1px solid var(--border)",textAlign:"left"}}>
+              <div style={{fontSize:18,marginBottom:2}}>{p.icon}</div>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1.5,color:sel?"var(--accent2)":"#fff"}}>{p.label}</div>
+            </button>
+          );})}
         </div>
       </div>
 
-      <button className="btn-primary" onClick={save} disabled={!goal||!experience}>
+      <button className="btn-primary" onClick={save} disabled={!goal||!experience} style={{width:"100%",marginBottom:8,background:saved?"var(--green)":undefined}}>
         {saved?"✓ SAVED":"SAVE AI TRAINER SETTINGS"}
       </button>
-
-      {/* ── TRAINING PROGRAM SECTION ── */}
-      <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid var(--border)"}}>
-        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--accent2)",marginBottom:4}}>🗓️ TRAINING PROGRAM</div>
-        <div style={{fontSize:11,color:"var(--muted)",marginBottom:12,lineHeight:1.5}}>WOLFMODE uses this to build a multi-week progressive program.</div>
-        <div style={{marginBottom:14}}>
-          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>DAYS/WEEK</div>
-          <div style={{display:"flex",gap:8}}>
-            {DAYS_PER_WEEK_OPTIONS.map(n=>{const sel=daysPerWeek===n;return(
-              <button key={n} onClick={()=>{setDaysPerWeek(n);setSaved(false);}} style={{flex:1,padding:"12px 0",borderRadius:12,cursor:"pointer",background:sel?"linear-gradient(135deg,rgba(255,107,53,0.25),rgba(124,92,191,0.2))":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.5)":"1px solid var(--border)"}}>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,color:sel?"#ff6b35":"#fff"}}>{n}</div>
-                <div style={{fontSize:9,color:"var(--muted)"}}>days</div>
-              </button>
-            );})}
-          </div>
-        </div>
-        <div style={{marginBottom:14}}>
-          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>TRAINING MODE</div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {TRAINING_MODES.map(m=>{const sel=trainingMode===m.id;return(
-              <button key={m.id} onClick={()=>{setTrainingMode(m.id);setSaved(false);}} style={{padding:"12px 14px",borderRadius:12,cursor:"pointer",textAlign:"left",background:sel?"rgba(124,92,191,0.15)":"var(--bg3)",border:sel?"1px solid var(--accent)":"1px solid var(--border)",display:"flex",alignItems:"center",gap:10}}>
-                <span style={{fontSize:22,flexShrink:0}}>{m.icon}</span>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,color:sel?"var(--accent2)":"#fff",marginBottom:2}}>{m.label}</div>
-                  <div style={{fontSize:10,color:"var(--muted)",lineHeight:1.4}}>{m.desc}</div>
-                </div>
-                {sel&&<div style={{color:"var(--accent)",fontSize:14}}>✓</div>}
-              </button>
-            );})}
-          </div>
-        </div>
-        {trainingBlock&&(
-          <div style={{padding:"12px 14px",background:"rgba(46,204,113,0.06)",border:"1px solid rgba(46,204,113,0.2)",borderRadius:12,marginBottom:10}}>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--green)",marginBottom:4}}>ACTIVE PROGRAM BLOCK</div>
-            <div style={{fontSize:13,color:"#fff",marginBottom:2}}>{trainingBlock.blockName||"Training Block"}</div>
-            <div style={{fontSize:11,color:"var(--muted)"}}>Week {trainingBlock.currentWeek||1} of {trainingBlock.blockWeeks||5} · {trainingBlock.sessionsCompleted||0} sessions</div>
-            {!showBlockReset&&<button onClick={()=>setShowBlockReset(true)} style={{marginTop:8,padding:"6px 12px",borderRadius:8,cursor:"pointer",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.2)",color:"var(--red)",fontSize:11}}>Reset block</button>}
-            {showBlockReset&&(
-              <div style={{marginTop:8}}>
-                <div style={{fontSize:11,color:"var(--red)",marginBottom:6}}>Delete current block and start fresh?</div>
-                <div style={{display:"flex",gap:6}}>
-                  <button onClick={async()=>{await clearTrainingBlock(currentUser);if(onBlockUpdated)onBlockUpdated(null);setShowBlockReset(false);}} style={{flex:1,padding:"7px",borderRadius:8,cursor:"pointer",background:"var(--red)",border:"none",color:"#fff",fontSize:11}}>Yes, reset</button>
-                  <button onClick={()=>setShowBlockReset(false)} style={{flex:1,padding:"7px",borderRadius:8,cursor:"pointer",background:"var(--bg3)",border:"1px solid var(--border)",color:"var(--muted)",fontSize:11}}>Cancel</button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Reset button */}
-      <button onClick={async()=>{
-        if(!window.confirm("Clear all your AI Trainer data? This resets your goal, experience, injuries, nutrition stats, and saved plan."))return;
-        const updated={...profile,aiTrainer:{}};
-        const np={...profiles,[currentUser]:updated};
-        await fsSet("wolfpack/profiles",{users:np});
-        if(onSaveProfile)onSaveProfile(np);
-        setGoal("");setExperience("");setInjuries([]);setUsualSetup("home");setSaved(false);
-      }} style={{
-        width:"100%",padding:"10px",borderRadius:10,cursor:"pointer",
-        background:"transparent",border:"1px solid rgba(231,76,60,0.2)",
-        color:"rgba(231,76,60,0.5)",fontSize:11,marginTop:4,
-      }}>
-        🗑️ Reset all AI Trainer data
-      </button>
-
-      {/* ── AI COACH (Nutrition + Supplements) Section ── */}
-      <AICoachSection
-        currentUser={currentUser}
-        profile={profile}
-        profiles={profiles}
-        onSaveProfile={onSaveProfile}
-      />
     </div>
   );
 }
 
-// ── AI COACH — nutrition + supplements (opt-in) ─────────────────────────────
 function AICoachSection({currentUser, profile, profiles, onSaveProfile}){
   const coach=profile?.aiTrainer?.coach||{};
   const enabled=!!coach.enabled;
@@ -4508,9 +3950,8 @@ function ExerciseCard({exercise, userName, experience, injuries, idx, onSwap, sw
 
 // ── AI TRAINER MODAL ────────────────────────────────────────────────────────
 
-function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlock, onBlockUpdated, onClose, onUseWorkout, showToast}){
-  const [step,setStep]=useState("home");
-  const [mode,setMode]=useState("program");
+function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, onUseWorkout, showToast}){
+  const [step,setStep]=useState("home"); // home | setup | loading | result
   const [selectedPreset,setSelectedPreset]=useState(profile?.aiTrainer?.usualSetup||"home");
   const [customEquip,setCustomEquip]=useState("");
   const [savedPresets,setSavedPresets]=useState(profile?.aiTrainer?.savedPresets||[]);
@@ -4518,36 +3959,36 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
   const [error,setError]=useState(null);
   const [regenCount,setRegenCount]=useState(getRegenCount(currentUser));
   const [muscleGroup,setMuscleGroup]=useState(null);
+  const [aiMuscleReason,setAiMuscleReason]=useState("");
   const [numExercises,setNumExercises]=useState(5);
   const [setsPerExercise,setSetsPerExercise]=useState(4);
-  const [designingBlock,setDesigningBlock]=useState(false);
-  const [detectedPattern,setDetectedPattern]=useState(null);
-  const [showFreestyleSetup,setShowFreestyleSetup]=useState(false);
-  const [aiMuscleReason,setAiMuscleReason]=useState("");
-  const [selectedSplitDay,setSelectedSplitDay]=useState(null);
-  const [blockLoading,setBlockLoading]=useState(!trainingBlock);
   const [swappingIdx,setSwappingIdx]=useState(null);
-  const [customDuration,setCustomDuration]=useState(workout?.estimatedMinutes||null);
+  const [customDuration,setCustomDuration]=useState(null);
+  const [expandedFavGroup,setExpandedFavGroup]=useState(null);
 
-  // Give Firestore a moment to push the block before showing "No program"
-  useEffect(()=>{
-    if(trainingBlock){setBlockLoading(false);return;}
-    const timer=setTimeout(()=>setBlockLoading(false),2000);
-    return()=>clearTimeout(timer);
-  },[trainingBlock]);
   const goal=profile?.aiTrainer?.goal;
   const experience=profile?.aiTrainer?.experience;
   const injuries=(profile?.aiTrainer?.injuries||[]).join(", ");
   const daysPerWeek=profile?.aiTrainer?.daysPerWeek||3;
-  const trainingMode=profile?.aiTrainer?.trainingMode||"structured";
   const goalLabel=AI_GOALS.find(g=>g.id===goal)?.label||goal||"General Fitness";
-  const modeObj=TRAINING_MODES.find(m=>m.id===trainingMode)||TRAINING_MODES[0];
-  const blockComplete=isBlockComplete(trainingBlock);
-  const nextDay=trainingBlock&&!blockComplete?getNextSplitDay(trainingBlock):null;
+  const secondaryGoal=profile?.aiTrainer?.secondaryGoal;
+  const secondaryLabel=secondaryGoal?AI_SECONDARY_GOALS.find(s=>s.id===secondaryGoal)?.label:null;
+  const fullGoal=[goalLabel,secondaryLabel?`+ ${secondaryLabel}`:null].filter(Boolean).join(" ");
 
-  useEffect(()=>{
-    if(!trainingBlock&&history){setDetectedPattern(detectTrainingPattern(history,currentUser));}
-  },[]);
+  // Group favorites by muscle group
+  const favsByMuscle=useMemo(()=>{
+    const favs=getFavorites(currentUser);
+    const groups={};
+    favs.forEach(fav=>{
+      const mgId=fav.muscleGroup||"other";
+      const mg=AI_MUSCLE_GROUPS.find(m=>m.id===mgId);
+      const key=mg?.label||mgId;
+      const icon=mg?.icon||"💪";
+      if(!groups[key])groups[key]={icon,favs:[]};
+      groups[key].favs.push(fav);
+    });
+    return groups;
+  },[currentUser,step]);
 
   if(!goal||!experience){
     return(
@@ -4565,112 +4006,70 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
     );
   }
 
-  const handleDesignBlock=async()=>{
-    setDesigningBlock(true);setError(null);
-    const pattern=detectedPattern||detectTrainingPattern(history,currentUser);
-    const result=await aiGenerateWorkout({
-      userName:currentUser,goal:goalLabel,experience:experience||"intermediate",
-      injuries:injuries||"None",equipment:buildEquipmentString(selectedPreset,customEquip,packHomeGym),
-      recentHistory:getRecentHistoryString(history,currentUser),
-      requestType:"design_block",daysPerWeek,trainingMode,
-      detectedMuscles:pattern.topMuscles.join(", "),hasHistory:pattern.hasHistory,
-    });
-    setDesigningBlock(false);
-    if(result.ok&&result.workout?.block){
-      const block={...result.workout.block,currentWeek:1,sessionsCompleted:0,startDate:new Date().toISOString().slice(0,10),lastSessionDay:null,createdAt:Date.now()};
-      await saveTrainingBlock(currentUser,block);
-      if(onBlockUpdated)onBlockUpdated(block);
-      setStep("home");showToast("🎯 Your training program is ready! 🐺");
-    }else{setError(result.error||"Failed to design program.");setStep("home");}
-  };
-
-  const generateSession=async(isRegen=false,sessionMode=mode)=>{
+  const generate=async(isRegen=false)=>{
     if(isRegen&&regenCount>=MAX_DAILY_REGENS){showToast("Daily limit reached.");return;}
     setStep("loading");setError(null);
     const equipment=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
     const trainingLog=await getTrainingLog(currentUser);
-    const activeDay=selectedSplitDay||nextDay;
-    const priorPerf=buildPriorPerformanceString(trainingLog,activeDay?.label||"");
-    const secondaryGoal=profile?.aiTrainer?.secondaryGoal;
-    const secondaryLabel=secondaryGoal?AI_SECONDARY_GOALS.find(s=>s.id===secondaryGoal)?.label:null;
-    const fullGoal=[goalLabel,secondaryLabel?`+ ${secondaryLabel}`:null].filter(Boolean).join(" ");
     const muscleLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label:"AI choice";
-    // Pass previous exercise names on regen so AI avoids repeating them
+    const priorPerf=buildPriorPerformanceString(trainingLog,muscleLabel);
     const prevExercises=isRegen&&workout?workout.exercises?.map(e=>e.name)||[]:[];
     const result=await aiGenerateWorkout({
-      userName:currentUser,goal:fullGoal,experience:experience||"intermediate",
-      injuries:injuries||"None",equipment,recentHistory:getRecentHistoryString(history,currentUser),
-      muscleGroup:sessionMode==="program"?(activeDay?.label||"AI choice"):muscleLabel,
-      requestType:sessionMode==="program"?"program_session":"freestyle",
-      trainingMode,numExercises,setsPerExercise,
-      blockContext:sessionMode==="program"&&trainingBlock?JSON.stringify({
-        blockName:trainingBlock.blockName,week:trainingBlock.currentWeek||1,
-        blockWeeks:trainingBlock.blockWeeks||5,sessionsCompleted:trainingBlock.sessionsCompleted||0,
-        coreLifts:activeDay?.coreLifts||trainingBlock.coreLifts||[],
-        dayType:activeDay?.id||"fullbody",
-        rotationPct:modeObj.rotationPct,
-        accessoryPool:activeDay?.accessoryPool||[],
-      }):"",
+      userName:currentUser,
+      goal:fullGoal,
+      experience:experience||"intermediate",
+      injuries:injuries||"None",
+      equipment,
+      recentHistory:getRecentHistoryString(history,currentUser),
+      muscleGroup:muscleLabel,
+      requestType:"freestyle",
+      numExercises,
+      setsPerExercise,
+      daysPerWeek,
       priorPerformance:priorPerf,
       previousExercises:prevExercises,
       isRegen,
     });
-    if(result.ok){setWorkout(result.workout);setCustomDuration(result.workout?.estimatedMinutes||45);setStep("result");if(isRegen)setRegenCount(bumpRegenCount(currentUser));}
-    else{setError(result.error);setStep(sessionMode==="program"?"home":"setup");}
-  };
-
-  const handleUseWorkout=()=>{
-    if(!workout)return;
-    const activeDay=selectedSplitDay||nextDay;
-    const mg=mode==="program"?(activeDay?.id||"fullbody"):muscleGroup||"fullbody";
-    const finalMinutes=customDuration!==null?Number(customDuration):workout.estimatedMinutes;
-    saveActiveWorkout(currentUser,{...workout,estimatedMinutes:finalMinutes},mg,"today");
-    if(mode==="program"&&trainingBlock){
-      const activeDays=trainingBlock.split?.filter(d=>d.id!=="own")||[];
-      const updatedBlock={
-        ...trainingBlock,
-        sessionsCompleted:(trainingBlock.sessionsCompleted||0)+1,
-        currentWeek:Math.max(1,Math.ceil(((trainingBlock.sessionsCompleted||0)+1)/Math.max(1,activeDays.length))),
-        lastSessionDay:activeDay?.id||null,
-        lastSessionDate:new Date().toISOString().slice(0,10),
-      };
-      saveTrainingBlock(currentUser,updatedBlock);if(onBlockUpdated)onBlockUpdated(updatedBlock);
+    if(result.ok){
+      setWorkout(result.workout);
+      setCustomDuration(result.workout?.estimatedMinutes||45);
+      setStep("result");
+      if(isRegen)setRegenCount(bumpRegenCount(currentUser));
+    }else{
+      setError(result.error);
+      setStep("setup");
     }
-    showToast("🔥 Workout saved! Find it on the Pack tab.");
-    onUseWorkout&&onUseWorkout();onClose();
   };
 
   const handleSwapExercise=async(idx,exercise)=>{
-    if(swappingIdx!==null)return; // already swapping
+    if(swappingIdx!==null)return;
     setSwappingIdx(idx);
     const equipment=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
-    // All other exercise names — the new one must be different from all of them
     const otherExercises=workout.exercises.map(e=>e.name);
     const result=await aiGenerateWorkout({
-      userName:currentUser,
-      goal:goalLabel,
-      experience:experience||"intermediate",
-      injuries:injuries||"None",
-      equipment,
-      muscleGroup:exercise.primaryMuscle||muscleGroup||"",
-      requestType:"swap_exercise",
-      exerciseToReplace:exercise.name,
-      exerciseMuscle:exercise.primaryMuscle||"",
-      otherExercises,
-      numExercises:1,
-      setsPerExercise:exercise.sets||4,
+      userName:currentUser,goal:goalLabel,experience:experience||"intermediate",
+      injuries:injuries||"None",equipment,muscleGroup:exercise.primaryMuscle||muscleGroup||"",
+      requestType:"swap_exercise",exerciseToReplace:exercise.name,
+      exerciseMuscle:exercise.primaryMuscle||"",otherExercises,
+      numExercises:1,setsPerExercise:exercise.sets||4,
     });
     setSwappingIdx(null);
     if(result.ok&&result.workout?.exercises?.[0]){
-      // Replace just this exercise in the workout
       const newExercise={...result.workout.exercises[0],sets:exercise.sets,isCoreLift:false};
       const newExercises=[...workout.exercises];
       newExercises[idx]=newExercise;
       setWorkout({...workout,exercises:newExercises});
       showToast(`🔄 Swapped ${exercise.name} → ${newExercise.name}`);
-    }else{
-      showToast("Couldn't find a swap — try again");
-    }
+    }else{showToast("Couldn't find a swap — try again");}
+  };
+
+  const handleUseWorkout=()=>{
+    if(!workout)return;
+    const mg=muscleGroup||"fullbody";
+    const finalMinutes=customDuration!==null?Number(customDuration):workout.estimatedMinutes;
+    saveActiveWorkout(currentUser,{...workout,estimatedMinutes:finalMinutes},mg,"today");
+    showToast("🔥 Workout saved! Find it on the Pack tab.");
+    onUseWorkout&&onUseWorkout();onClose();
   };
 
   return(
@@ -4678,187 +4077,95 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
       <div className="modal" style={{maxHeight:"92dvh",overflowY:"auto"}}>
         <div className="modal-handle"/>
 
+        {/* ── HOME ── */}
         {step==="home"&&(
           <>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
               <div style={{fontSize:26}}>🔥</div>
               <div style={{flex:1}}>
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1}}>WOLFMODE</div>
-                <div style={{fontSize:10,color:"var(--muted)"}}>{goalLabel} · {experience} · {modeObj.icon} {modeObj.label}</div>
+                <div style={{fontSize:10,color:"var(--muted)"}}>{goalLabel}{secondaryLabel?` · ${secondaryLabel}`:""} · {experience}</div>
               </div>
             </div>
 
-            {blockComplete&&(
-              <div style={{padding:"16px",marginBottom:12,background:"linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,107,53,0.08))",border:"1px solid rgba(255,215,0,0.3)",borderRadius:16,textAlign:"center"}}>
-                <div style={{fontSize:32,marginBottom:6}}>🏆</div>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2,color:"#ffd700",marginBottom:4}}>BLOCK COMPLETE!</div>
-                <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginBottom:4}}>{trainingBlock?.blockName} · {trainingBlock?.blockWeeks} weeks</div>
-                <div style={{fontSize:11,color:"var(--muted)",marginBottom:12}}>{trainingBlock?.sessionsCompleted} sessions completed 🎉</div>
-                <button className="btn-primary" onClick={handleDesignBlock} disabled={designingBlock} style={{background:"linear-gradient(135deg,#ffd700,#ff6b35)",border:"none",color:"#000",maxWidth:220,margin:"0 auto"}}>
-                  {designingBlock?"DESIGNING...":"🎯 START NEW BLOCK"}
-                </button>
-              </div>
-            )}
-
-            {trainingBlock&&!blockComplete&&(
-              <div style={{padding:"12px 14px",marginBottom:12,background:"rgba(124,92,191,0.08)",border:"1px solid rgba(124,92,191,0.2)",borderRadius:14}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                  <div>
-                    <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--accent2)"}}>{trainingBlock.blockName||"TRAINING BLOCK"}</div>
-                    <div style={{fontSize:11,color:"var(--muted)"}}>Week {trainingBlock.currentWeek||1} of {trainingBlock.blockWeeks||5}</div>
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,color:"var(--accent2)"}}>{trainingBlock.sessionsCompleted||0}</div>
-                    <div style={{fontSize:9,color:"var(--muted)"}}>sessions</div>
-                  </div>
-                </div>
-                <div style={{height:4,background:"rgba(255,255,255,0.08)",borderRadius:2,overflow:"hidden",marginBottom:8}}>
-                  <div style={{height:"100%",background:"linear-gradient(90deg,#ff6b35,#c084fc)",borderRadius:2,width:`${Math.min(100,((trainingBlock.sessionsCompleted||0)/Math.max(1,(trainingBlock.blockWeeks||5)*Math.max(1,(trainingBlock.split?.filter(d=>d.id!=="own").length||daysPerWeek))))*100)}%`,transition:"width 0.3s"}}/>
-                </div>
-                {nextDay&&<div style={{fontSize:11,color:"rgba(255,255,255,0.7)"}}>Next up: <span style={{color:"#ff6b35",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{nextDay.label}</span></div>}
-                {trainingBlock.split&&(
-                  <div style={{marginTop:8,display:"flex",gap:4,flexWrap:"wrap"}}>
-                    {trainingBlock.split.map((d,i)=>(
-                      <span key={i} style={{padding:"2px 8px",borderRadius:20,fontSize:9,background:d.id===nextDay?.id?"rgba(255,107,53,0.2)":d.id==="own"?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.06)",border:d.id===nextDay?.id?"1px solid rgba(255,107,53,0.4)":"1px solid rgba(255,255,255,0.08)",color:d.id===nextDay?.id?"#ff6b35":d.id==="own"?"rgba(255,255,255,0.2)":"rgba(255,255,255,0.5)"}}>
-                        {d.label}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {!trainingBlock&&(
-              blockLoading?(
-                <div style={{padding:"20px",marginBottom:12,textAlign:"center",background:"rgba(255,255,255,0.02)",border:"1px solid var(--border)",borderRadius:14}}>
-                  <div style={{fontSize:24,marginBottom:8,animation:"spin 1.5s linear infinite",display:"inline-block"}}>⚙️</div>
-                  <div style={{fontSize:12,color:"var(--muted)"}}>Loading your program...</div>
-                  <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
-                </div>
-              ):(
-                <div style={{padding:"14px",marginBottom:12,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:14}}>
-                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"#ff6b35",marginBottom:4}}>NO PROGRAM YET</div>
-                  {detectedPattern?.hasHistory?(
-                    <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginBottom:10,lineHeight:1.5}}>
-                      We detected ~{detectedPattern.avgDaysPerWeek} training days/week.{detectedPattern.topMuscles.length>0?` Top muscles: ${detectedPattern.topMuscles.slice(0,3).join(", ")}.`:""} Ready to build your program?
-                    </div>
-                  ):(
-                    <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginBottom:10,lineHeight:1.5}}>Set your training days/week and mode in your profile, then let the AI design your full program.</div>
-                  )}
-                  <button className="btn-primary" onClick={handleDesignBlock} disabled={designingBlock} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-                    {designingBlock?"DESIGNING YOUR PROGRAM...":"🎯 DESIGN MY PROGRAM"}
-                  </button>
-                </div>
-              )
-            )}
-
-            {getFavorites(currentUser).length>0&&(
-              <div style={{marginBottom:12}}>
+            {/* Favorites grouped by muscle */}
+            {Object.keys(favsByMuscle).length>0&&(
+              <div style={{marginBottom:14}}>
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⭐ MY FAVORITES</div>
-                {getFavorites(currentUser).map(fav=>(
-                  <div key={fav.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:6,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:12}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1.5,color:"#fff",marginBottom:1}}>{fav.title}</div>
-                      <div style={{fontSize:10,color:"var(--muted)"}}>{AI_MUSCLE_GROUPS.find(m=>m.id===fav.muscleGroup)?.label||fav.muscleGroup} · {fav.workout?.exercises?.length||0} exercises</div>
-                    </div>
-                    <button onClick={()=>{setWorkout(fav.workout);setMuscleGroup(fav.muscleGroup);setMode("freestyle");setStep("result");}} style={{padding:"6px 14px",borderRadius:10,cursor:"pointer",background:"rgba(255,107,53,0.15)",border:"1px solid rgba(255,107,53,0.3)",color:"#ff6b35",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,flexShrink:0}}>USE</button>
-                    <button onClick={()=>{removeFavorite(currentUser,fav.id);setStep(s=>s);}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:16,padding:"0 2px"}}>×</button>
-                  </div>
-                ))}
-                <div style={{height:1,background:"var(--border)",margin:"4px 0 10px"}}/>
-              </div>
-            )}
-
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {trainingBlock&&!blockComplete&&(
-                <div style={{marginBottom:4}}>
-                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>📋 FOLLOW MY PROGRAM</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:8}}>
-                    {(trainingBlock.split||[]).filter(d=>d.id!=="own").map((day,i)=>{
-                      const isNext=day.id===nextDay?.id;
-                      const isSel=selectedSplitDay?.id===day.id||(selectedSplitDay===null&&isNext);
-                      return(
-                        <button key={i} onClick={()=>setSelectedSplitDay(day)} style={{
-                          padding:"12px 14px",borderRadius:12,cursor:"pointer",
-                          display:"flex",alignItems:"center",gap:10,
-                          background:isSel?"linear-gradient(135deg,rgba(255,107,53,0.2),rgba(124,92,191,0.15))":"var(--bg3)",
-                          border:isSel?"1px solid rgba(255,107,53,0.5)":"1px solid var(--border)",
-                          textAlign:"left",
-                        }}>
-                          <div style={{flex:1}}>
-                            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1.5,color:isSel?"#ff6b35":"#fff"}}>{day.label}</div>
-                            <div style={{fontSize:10,color:"var(--muted)",marginTop:1}}>{day.muscles?.join(", ")}</div>
+                {Object.entries(favsByMuscle).map(([groupLabel,{icon,favs}])=>(
+                  <div key={groupLabel} style={{marginBottom:6}}>
+                    <button onClick={()=>setExpandedFavGroup(expandedFavGroup===groupLabel?null:groupLabel)} style={{width:"100%",padding:"8px 12px",borderRadius:10,cursor:"pointer",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",gap:8,marginBottom:expandedFavGroup===groupLabel?4:0}}>
+                      <span style={{fontSize:16}}>{icon}</span>
+                      <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1.5,color:"rgba(255,255,255,0.7)",flex:1,textAlign:"left"}}>{groupLabel}</span>
+                      <span style={{fontSize:11,color:"var(--muted)"}}>{favs.length}</span>
+                      <span style={{fontSize:12,color:"var(--muted)",transform:expandedFavGroup===groupLabel?"rotate(180deg)":"rotate(0)",transition:"transform .2s"}}>▾</span>
+                    </button>
+                    {expandedFavGroup===groupLabel&&(
+                      <div style={{display:"flex",flexDirection:"column",gap:5,paddingLeft:8}}>
+                        {favs.map(fav=>(
+                          <div key={fav.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.15)",borderRadius:10}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1.5,color:"#fff"}}>{fav.title}</div>
+                              <div style={{fontSize:10,color:"var(--muted)"}}>{fav.workout?.exercises?.length||0} exercises</div>
+                            </div>
+                            <button onClick={()=>{setWorkout(fav.workout);setMuscleGroup(fav.muscleGroup);setCustomDuration(fav.workout?.estimatedMinutes||45);setStep("result");}} style={{padding:"5px 12px",borderRadius:8,cursor:"pointer",background:"rgba(255,107,53,0.15)",border:"1px solid rgba(255,107,53,0.3)",color:"#ff6b35",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,flexShrink:0}}>USE</button>
+                            <button onClick={()=>{const favId=getFavoriteId(currentUser,fav.workout?.title);if(favId)removeFavorite(currentUser,favId);setStep(s=>s);}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:16,padding:"0 2px"}}>×</button>
                           </div>
-                          {isNext&&<span style={{fontSize:9,padding:"2px 8px",borderRadius:20,background:"rgba(255,107,53,0.15)",border:"1px solid rgba(255,107,53,0.3)",color:"#ff6b35",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>NEXT UP</span>}
-                          {isSel&&<span style={{color:"#ff6b35",fontSize:14}}>✓</span>}
-                        </button>
-                      );
-                    })}
-                    {(trainingBlock.split||[]).filter(d=>d.id==="own").length>0&&(
-                      <div style={{padding:"8px 12px",borderRadius:10,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)"}}>
-                        {(trainingBlock.split||[]).filter(d=>d.id==="own").map((day,i)=>(
-                          <div key={i} style={{fontSize:11,color:"rgba(255,255,255,0.3)"}}>📝 {day.label} — your own plan</div>
                         ))}
                       </div>
                     )}
                   </div>
-                  <button className="btn-primary" onClick={()=>{
-                    const dayToUse=selectedSplitDay||nextDay;
-                    if(dayToUse){
-                      // temporarily override nextDay by setting it via block context
-                      setMode("program");setShowFreestyleSetup(false);setStep("setup");
-                    }
-                  }} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-                    🔥 TRAIN {(selectedSplitDay||nextDay)?.label?.toUpperCase()||"TODAY"}
-                  </button>
-                </div>
-              )}
-              <button onClick={()=>{setMode("freestyle");setShowFreestyleSetup(true);setStep("setup");}} style={{width:"100%",padding:"12px",borderRadius:12,cursor:"pointer",background:"var(--bg3)",border:"1px solid var(--border)",color:"var(--muted)",fontSize:13,fontFamily:"'Bebas Neue',cursive",letterSpacing:2}}>
-                ⚡ FREESTYLE SESSION
-              </button>
-            </div>
+                ))}
+                <div style={{height:1,background:"var(--border)",margin:"8px 0"}}/>
+              </div>
+            )}
+
+            <button className="btn-primary" onClick={()=>setStep("setup")} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+              🔥 GENERATE WORKOUT
+            </button>
             {error&&<div style={{padding:10,marginTop:10,background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:10,color:"var(--red)",fontSize:12}}>{error}</div>}
           </>
         )}
 
+        {/* ── SETUP ── */}
         {step==="setup"&&(
           <>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
               <button onClick={()=>setStep("home")} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:20,padding:"0 4px"}}>←</button>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,color:"#fff"}}>{mode==="program"?`📋 ${(selectedSplitDay||nextDay)?.label||"Program Session"}`:"⚡ FREESTYLE"}</div>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,color:"#fff"}}>⚡ GENERATE WORKOUT</div>
             </div>
 
-            {showFreestyleSetup&&(
-              <div style={{marginBottom:14}}>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🎯 MUSCLE GROUP</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:8}}>
-                  {AI_MUSCLE_GROUPS.map(mg=>{const sel=muscleGroup===mg.id;return(
-                    <button key={mg.id} onClick={()=>{setMuscleGroup(mg.id);setAiMuscleReason("");}} style={{padding:"8px 4px",borderRadius:10,cursor:"pointer",textAlign:"center",background:sel?"rgba(255,107,53,0.2)":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)"}}>
-                      <div style={{fontSize:16,marginBottom:2}}>{mg.icon}</div>
-                      <div style={{fontSize:9,color:sel?"#ff6b35":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{mg.label}</div>
-                    </button>
-                  );})}
-                </div>
-                <button onClick={()=>{
-                  const groups=["chest","back","legs","glutes","shoulders","arms","core"];
-                  const counts={};groups.forEach(g=>{counts[g]=0;});
-                  const lower=getRecentHistoryString(history,currentUser).toLowerCase();
-                  ["chest","back","shoulder","arm","core"].forEach(k=>{if(lower.includes(k))counts[k]=(counts[k]||0)+2;});
-                  if(lower.includes("leg")||lower.includes("squat"))counts.legs+=2;if(lower.includes("glute"))counts.glutes+=2;
-                  const pick=groups.sort((a,b)=>(counts[a]||0)-(counts[b]||0))[0];
-                  const mg=AI_MUSCLE_GROUPS.find(m=>m.id===pick)||AI_MUSCLE_GROUPS[7];
-                  setMuscleGroup(mg.id);setAiMuscleReason(`You haven't trained ${mg.label.toLowerCase()} much recently.`);
-                }} style={{width:"100%",padding:"10px 12px",borderRadius:10,cursor:"pointer",background:!muscleGroup?"rgba(124,92,191,0.2)":"var(--bg3)",border:!muscleGroup?"1px solid var(--accent)":"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:16}}>🤖</span>
-                  <div style={{textAlign:"left",flex:1}}>
-                    <div style={{fontSize:12,color:!muscleGroup?"var(--accent2)":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1.5}}>AI PICK FOR ME</div>
-                    {aiMuscleReason&&<div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>{aiMuscleReason}</div>}
-                  </div>
-                  {!muscleGroup&&<div style={{fontSize:14,color:"var(--accent)"}}>✓</div>}
-                </button>
+            {/* Muscle picker */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🎯 MUSCLE GROUP</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:8}}>
+                {AI_MUSCLE_GROUPS.map(mg=>{const sel=muscleGroup===mg.id;return(
+                  <button key={mg.id} onClick={()=>{setMuscleGroup(mg.id);setAiMuscleReason("");}} style={{padding:"8px 4px",borderRadius:10,cursor:"pointer",textAlign:"center",background:sel?"rgba(255,107,53,0.2)":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)"}}>
+                    <div style={{fontSize:16,marginBottom:2}}>{mg.icon}</div>
+                    <div style={{fontSize:9,color:sel?"#ff6b35":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{mg.label}</div>
+                  </button>
+                );})}
               </div>
-            )}
+              <button onClick={()=>{
+                const groups=["chest","back","legs","glutes","shoulders","arms","core"];
+                const counts={};groups.forEach(g=>{counts[g]=0;});
+                const lower=getRecentHistoryString(history,currentUser).toLowerCase();
+                ["chest","back","shoulder","arm","core"].forEach(k=>{if(lower.includes(k))counts[k]=(counts[k]||0)+2;});
+                if(lower.includes("leg")||lower.includes("squat"))counts.legs+=2;if(lower.includes("glute"))counts.glutes+=2;
+                const pick=groups.sort((a,b)=>(counts[a]||0)-(counts[b]||0))[0];
+                const mg=AI_MUSCLE_GROUPS.find(m=>m.id===pick)||AI_MUSCLE_GROUPS[7];
+                setMuscleGroup(mg.id);setAiMuscleReason(`You haven\'t trained ${mg.label.toLowerCase()} much recently.`);
+              }} style={{width:"100%",padding:"10px 12px",borderRadius:10,cursor:"pointer",background:!muscleGroup?"rgba(124,92,191,0.2)":"var(--bg3)",border:!muscleGroup?"1px solid var(--accent)":"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:16}}>🤖</span>
+                <div style={{textAlign:"left",flex:1}}>
+                  <div style={{fontSize:12,color:!muscleGroup?"var(--accent2)":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1.5}}>AI PICK FOR ME</div>
+                  {aiMuscleReason&&<div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>{aiMuscleReason}</div>}
+                </div>
+                {!muscleGroup&&<div style={{fontSize:14,color:"var(--accent)"}}>✓</div>}
+              </button>
+            </div>
 
+            {/* Volume */}
             <div style={{marginBottom:14}}>
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⚙️ VOLUME</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -4881,6 +4188,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
               </div>
             </div>
 
+            {/* Equipment */}
             <div style={{marginBottom:14}}>
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🏠 EQUIPMENT</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
@@ -4898,22 +4206,24 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
               );})}
             </div>
 
-            <button className="btn-primary" onClick={()=>generateSession(false,mode)} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-              🔥 {mode==="program"?"GENERATE PROGRAM SESSION":"GENERATE FREESTYLE"}
+            <button className="btn-primary" onClick={()=>generate(false)} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+              🔥 GENERATE
             </button>
-            <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:6}}>{MAX_DAILY_REGENS-regenCount} regens remaining</div>
+            <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:6}}>{MAX_DAILY_REGENS-regenCount} regens remaining today</div>
           </>
         )}
 
+        {/* ── LOADING ── */}
         {step==="loading"&&(
           <div style={{textAlign:"center",padding:"40px 20px"}}>
             <div style={{fontSize:48,marginBottom:14,animation:"spin 1.5s linear infinite",display:"inline-block"}}>🔥</div>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:6,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>{mode==="program"?"BUILDING YOUR SESSION":"GENERATING WORKOUT"}</div>
-            <div style={{fontSize:12,color:"var(--muted)"}}>{mode==="program"?`Week ${trainingBlock?.currentWeek||1} · ${(selectedSplitDay||nextDay)?.label||""}...`:"Picking exercises..."}</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:6,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>BUILDING YOUR SESSION</div>
+            <div style={{fontSize:12,color:"var(--muted)"}}>Personalizing for your goal...</div>
             <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
           </div>
         )}
 
+        {/* ── RESULT ── */}
         {step==="result"&&workout&&(
           <>
             <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
@@ -4921,23 +4231,13 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
               <div style={{flex:1}}>
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:2,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.1}}>{workout.title}</div>
                 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2,flexWrap:"wrap"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:4}}>
-                    <span style={{fontSize:11,color:"var(--muted)"}}>⏱</span>
-                    <input
-                      type="number"
-                      value={customDuration!==null?customDuration:workout.estimatedMinutes}
-                      onChange={e=>setCustomDuration(e.target.value?Number(e.target.value):workout.estimatedMinutes)}
-                      onBlur={e=>{if(!e.target.value||Number(e.target.value)<1)setCustomDuration(workout.estimatedMinutes);}}
-                      style={{width:44,padding:"2px 6px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,color:"rgba(255,255,255,0.7)",fontSize:11,textAlign:"center"}}
-                      min={1}
-                    />
-                    <span style={{fontSize:11,color:"var(--muted)"}}>min · {workout.exercises?.length} exercises</span>
-                  </div>
-                  {customDuration!==null&&customDuration!==workout.estimatedMinutes&&(
-                    <span style={{fontSize:10,color:"rgba(255,107,53,0.6)"}}>edited</span>
-                  )}
+                  <span style={{fontSize:11,color:"var(--muted)"}}>⏱</span>
+                  <input type="number" value={customDuration!==null?customDuration:workout.estimatedMinutes}
+                    onChange={e=>setCustomDuration(e.target.value?Number(e.target.value):workout.estimatedMinutes)}
+                    onBlur={e=>{if(!e.target.value||Number(e.target.value)<1)setCustomDuration(workout.estimatedMinutes);}}
+                    style={{width:44,padding:"2px 6px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,color:"rgba(255,255,255,0.7)",fontSize:11,textAlign:"center"}} min={1}/>
+                  <span style={{fontSize:11,color:"var(--muted)"}}>min · {workout.exercises?.length} exercises</span>
                 </div>
-                {mode==="program"&&trainingBlock&&<div style={{fontSize:10,color:"var(--accent2)",marginTop:2}}>📋 {trainingBlock.blockName} · Week {trainingBlock.currentWeek||1}</div>}
               </div>
             </div>
             {workout.reasoning&&<div style={{padding:"10px 12px",marginBottom:12,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:10,fontSize:12,color:"rgba(255,255,255,0.8)",lineHeight:1.5,fontStyle:"italic"}}>💭 {workout.reasoning}</div>}
@@ -4946,9 +4246,9 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
             ))}
             <div style={{display:"flex",gap:8,marginTop:12}}>
               <button className="btn-primary" onClick={handleUseWorkout} style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-                {mode==="program"?"🔥 TRAIN TODAY":"USE THIS WORKOUT"}
+                🔥 USE THIS WORKOUT
               </button>
-              <button className="btn-ghost" onClick={()=>generateSession(true,mode)} disabled={regenCount>=MAX_DAILY_REGENS} style={{flex:"0 0 auto",padding:"0 14px"}}>
+              <button className="btn-ghost" onClick={()=>generate(true)} disabled={regenCount>=MAX_DAILY_REGENS} style={{flex:"0 0 auto",padding:"0 14px"}}>
                 🔄 ({MAX_DAILY_REGENS-regenCount})
               </button>
             </div>
@@ -4960,7 +4260,6 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, trainingBlo
   );
 }
 
-// ── EFFORT RATING MODAL ──────────────────────────────────────────────────────
 function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose}){
   const [step,setStep]=useState("checklist");
   const [done,setDone]=useState(()=>Object.fromEntries((exercises||[]).map(e=>[e.name,true])));
@@ -5696,7 +4995,6 @@ export default function App(){
   const [lastSeen,setLastSeen]=useState({feed:0,challenges:0,gym:0});
   const [packGoals,setPackGoals]=useState([]);
   const [garageEquipment,setGarageEquipment]=useState(HOME_GYM_DEFAULT);
-  const [trainingBlock,setTrainingBlock]=useState(null);
   const [reactions,setReactions]=useState({});
   const [editWorkout,setEditWorkout]=useState(null);
   const [weeklyRecap,setWeeklyRecap]=useState(null);
@@ -5718,7 +5016,6 @@ export default function App(){
       const u5=fsListen("wolfpack/gym",d=>{if(d)setGymSlots(d.slots||[]);});
       const u6=fsListen("wolfpack/packgoals",d=>{if(d)setPackGoals(d.list||[]);});
       const u8=fsListen("wolfpack/settings",d=>{if(d?.garageEquipment)setGarageEquipment(d.garageEquipment);});
-      const u9=fsListen("wolfpack/training_blocks",d=>{setTrainingBlock(d?.users?.[currentUser]||null);});
       const u7=fsListen("wolfpack/reactions",d=>{if(d)setReactions(d.data||{});});
       unsubs.current=[u1,u2,u3,u4,u5,u6,u7];
       const ad=await fsGet("wolfpack/admin");if(ad?.name)setAdminName(ad.name);
@@ -6222,7 +5519,7 @@ export default function App(){
         })}
       </nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
-      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} trainingBlock={trainingBlock} onBlockUpdated={setTrainingBlock} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
+      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)}/>}
       {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={async(effortId,logged)=>{
         setPendingEffortRating(null);
@@ -6238,7 +5535,7 @@ export default function App(){
         }catch(err){console.warn(err);}}
       }} onClose={()=>setPendingEffortRating(null)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
-      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill} trainingBlock={trainingBlock} onBlockUpdated={setTrainingBlock}/>}
+      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet("wolfpack/settings",{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
     </div>
   );
