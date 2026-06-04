@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { fsGet, fsSet, fsDelete, fsListen, requestNotifPermission, onForegroundMessage, aiGenerateWorkout, aiGenerateFormCues, aiGenerateNutritionPlan } from "./firebase";
 
 const INVITE_CODE = "WOLF2026";
