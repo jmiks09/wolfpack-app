@@ -247,7 +247,45 @@ const EFFORT_RATINGS = [
 
 // ── WOLFMODE COACH — Training modes ─────────────────────────────────────────
 
-const DAYS_PER_WEEK_OPTIONS=[2,3,4,5];
+const APP_VERSION = "v19";
+const WHATS_NEW = [
+  {icon:"🎯", title:"Smarter workouts", desc:"AI now targets all muscles in a group — back day hits lats, rhomboids, traps, and rear delts, not just lats 5 times."},
+  {icon:"🔄", title:"Repeat last workout", desc:"Choose a muscle group and WOLFMODE shows your last session. Tap Repeat + Progress and weights auto-advance based on your effort rating."},
+  {icon:"📅", title:"Monthly workout history", desc:"Stats tab now shows workouts by month. Tap any day to expand and see your exercises. Tap Edit Exercises & Weights to fix any mistakes."},
+  {icon:"✏️", title:"Edit completed workouts", desc:"Made a mistake logging weights? Open Stats → tap a day → expand → Edit Exercises & Weights."},
+  {icon:"🏋️", title:"Gym booking fixed", desc:"Slots that would run past 8 PM closing are now greyed out and blocked."},
+];
+
+function WhatsNewModal({onClose}){
+  return(
+    <div className="modal-overlay" style={{zIndex:2000}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" style={{maxHeight:"88dvh",overflowY:"auto"}}>
+        <div className="modal-handle"/>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:32,marginBottom:6}}>🐺</div>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WHAT'S NEW</div>
+          <div style={{fontSize:11,color:"var(--muted)",marginTop:2,letterSpacing:1}}>WOLFPACK UPDATE {APP_VERSION}</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:18}}>
+          {WHATS_NEW.map((item,i)=>(
+            <div key={i} style={{display:"flex",gap:12,padding:"10px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12}}>
+              <div style={{fontSize:22,flexShrink:0,lineHeight:1.3}}>{item.icon}</div>
+              <div>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1.5,color:"#fff",marginBottom:2}}>{item.title}</div>
+                <div style={{fontSize:11,color:"var(--muted)",lineHeight:1.5}}>{item.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button className="btn-primary" onClick={onClose} style={{width:"100%",background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+          GOT IT 🐺
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 
 // ── AI Coach (Nutrition + Supplements) constants ────────────────────────────
 const AI_BULK_CUT = [
@@ -1664,7 +1702,9 @@ function GymTab({currentUser,gymSlots,onBook,onCancel}){
   const [selStartIdx,setSelStartIdx]=useState(null);
   const [selDuration,setSelDuration]=useState(1);
   const [conflictErr,setConflictErr]=useState(false);
-  const showConflict=()=>{setConflictErr(true);setTimeout(()=>setConflictErr(false),3000);};
+  const [closingErr,setClosingErr]=useState(false);
+  const showConflict=()=>{setConflictErr(true);setTimeout(()=>setConflictErr(false),3500);};
+  const showClosingErr=()=>{setClosingErr(true);setTimeout(()=>setClosingErr(false),4000);};
   const dates=next7Days();
   const daySlots=gymSlots.filter(s=>s.date===sel);
   const mySlots=gymSlots.filter(s=>s.bookedBy===currentUser&&s.date>=todayStr());
@@ -1673,10 +1713,15 @@ function GymTab({currentUser,gymSlots,onBook,onCancel}){
   const getSlotBooking=(slot)=>daySlots.find(s=>slotOverlaps(slot.h,slot.m,s));
   const isSlotMine=(slot)=>{const b=getSlotBooking(slot);return b&&b.bookedBy===currentUser;};
 
+  const GYM_CLOSE_MINS = 20 * 60; // 8:00 PM in minutes from midnight
+
   const handleBook=()=>{
     if(selStartIdx===null)return;
     const slot=GYM_HOURS[selStartIdx];
     const durMins=GYM_DURATION_MINS[selDuration];
+    // Hard block — session must end by 8:00 PM
+    const endMins=slot.h*60+slot.m+durMins;
+    if(endMins>GYM_CLOSE_MINS){showClosingErr();return;}
     const slotsNeeded=GYM_HOURS.filter((_,i)=>{
       const s=GYM_HOURS[i];
       const sStart=s.h*60+s.m;
@@ -1900,16 +1945,20 @@ function GymTab({currentUser,gymSlots,onBook,onCancel}){
                   const taken=!!booking&&booking.bookedBy!==currentUser;
                   const mine=isSlotMine(slot);
                   const sel2=selStartIdx===i;
+                  const durMins=GYM_DURATION_MINS[selDuration];
+                  const wouldRunPast=(slot.h*60+slot.m+durMins)>GYM_CLOSE_MINS;
+                  const disabled=taken||wouldRunPast;
                   return(
-                    <button key={i} onClick={()=>!taken&&setSelStartIdx(i)} style={{
-                      padding:"6px 4px",borderRadius:8,cursor:taken?"default":"pointer",textAlign:"center",
-                      background:sel2?"rgba(124,92,191,0.3)":taken?"rgba(231,76,60,0.1)":mine?"rgba(124,92,191,0.1)":"var(--bg3)",
-                      border:sel2?"1px solid var(--accent)":taken?"1px solid rgba(231,76,60,0.3)":mine?"1px solid rgba(124,92,191,0.3)":"1px solid var(--border)",
-                      opacity:taken?0.7:1,
+                    <button key={i} onClick={()=>!disabled&&setSelStartIdx(i)} style={{
+                      padding:"6px 4px",borderRadius:8,cursor:disabled?"default":"pointer",textAlign:"center",
+                      background:sel2?"rgba(124,92,191,0.3)":taken?"rgba(231,76,60,0.1)":wouldRunPast?"rgba(255,255,255,0.02)":mine?"rgba(124,92,191,0.1)":"var(--bg3)",
+                      border:sel2?"1px solid var(--accent)":taken?"1px solid rgba(231,76,60,0.3)":wouldRunPast?"1px solid rgba(255,255,255,0.04)":mine?"1px solid rgba(124,92,191,0.3)":"1px solid var(--border)",
+                      opacity:disabled?0.35:1,
                     }}>
-                      <div style={{fontSize:11,color:sel2?"var(--accent2)":taken?"var(--red)":mine?"var(--accent2)":"var(--text)"}}>{slot.label}</div>
+                      <div style={{fontSize:11,color:sel2?"var(--accent2)":taken?"var(--red)":wouldRunPast?"var(--muted)":mine?"var(--accent2)":"var(--text)"}}>{slot.label}</div>
                       {taken&&<div style={{fontSize:9,color:"var(--red)",fontWeight:700}}>BOOKED</div>}
                       {mine&&<div style={{fontSize:9,color:"var(--accent2)"}}>YOURS</div>}
+                      {wouldRunPast&&!taken&&<div style={{fontSize:8,color:"var(--muted)"}}>CLOSES</div>}
                     </button>
                   );
                 })}
@@ -1917,7 +1966,7 @@ function GymTab({currentUser,gymSlots,onBook,onCancel}){
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,marginBottom:8}}>DURATION</div>
               <div style={{display:"flex",gap:8,marginBottom:12}}>
                 {GYM_DURATIONS.map((d,i)=>(
-                  <button key={i} onClick={()=>setSelDuration(i)} style={{flex:1,padding:"8px 4px",borderRadius:8,cursor:"pointer",fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,background:selDuration===i?"rgba(124,92,191,0.2)":"var(--bg3)",border:selDuration===i?"1px solid var(--accent)":"1px solid var(--border)",color:selDuration===i?"var(--accent2)":"var(--muted)"}}>{d}</button>
+                  <button key={i} onClick={()=>{setSelDuration(i);setSelStartIdx(null);}} style={{flex:1,padding:"8px 4px",borderRadius:8,cursor:"pointer",fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,background:selDuration===i?"rgba(124,92,191,0.2)":"var(--bg3)",border:selDuration===i?"1px solid var(--accent)":"1px solid var(--border)",color:selDuration===i?"var(--accent2)":"var(--muted)"}}>{d}</button>
                 ))}
               </div>
               {selStartIdx!==null&&(
@@ -1926,9 +1975,10 @@ function GymTab({currentUser,gymSlots,onBook,onCancel}){
                 </div>
               )}
               {conflictErr&&<div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,fontSize:12,color:"var(--red)",marginBottom:8}}>⚠️ That time overlaps with an existing booking. Pick a different time.</div>}
+              {closingErr&&<div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,fontSize:12,color:"var(--red)",marginBottom:8}}>🔒 Session would run past 8:00 PM closing. Choose an earlier start or shorter duration.</div>}
               <div style={{display:"flex",gap:8}}>
                 <button className="btn-primary" onClick={handleBook} disabled={selStartIdx===null} style={{flex:1}}>CONFIRM BOOKING</button>
-                <button className="btn-ghost" onClick={()=>{setBookingOpen(false);setSelStartIdx(null);setConflictErr(false);}} style={{flex:1}}>Cancel</button>
+                <button className="btn-ghost" onClick={()=>{setBookingOpen(false);setSelStartIdx(null);setConflictErr(false);setClosingErr(false);}} style={{flex:1}}>Cancel</button>
               </div>
             </div>
           )}
@@ -2536,9 +2586,79 @@ function ChallengesTab({currentUser,adminName,members,profiles,challenges,histor
   );
 }
 
-function StatsTab({currentUser,members,profiles,history,challenges,feed}){
+function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditExercises}){
   const last30=Array.from({length:30},(_,i)=>{const d=new Date();d.setDate(d.getDate()-29+i);return{date:localDateStr(d),day:d.getDate()};});
   const mb=computeBadges(currentUser,history,feed,challenges,profiles[currentUser]);
+
+  // Compute all stats from history
+  const allEntries=Object.entries(history).filter(([,d])=>d?.[currentUser]?.done);
+  const totalSessions=allEntries.length;
+  const totalMinutes=allEntries.reduce((sum,[,d])=>sum+(d[currentUser]?.duration||d[currentUser]?.wolfmodeSession?.estimatedMinutes||45),0);
+
+  // Workout type breakdown
+  const typeCounts={};
+  allEntries.forEach(([,d])=>{
+    const entry=d[currentUser];
+    if(entry.wolfmodeSession||entry.workoutLabel?.includes("WOLFMODE")){
+      typeCounts["Weight Training"]=(typeCounts["Weight Training"]||0)+1;
+    } else {
+      const types=entry.workouts||[];
+      if(types.length>0){
+        types.forEach(t=>{const label=t.label||t.id||"Other";typeCounts[label]=(typeCounts[label]||0)+1;});
+      } else {
+        const label=entry.workoutLabel||"Other";
+        const key=label.includes("Run")?"Running":label.includes("Walk")?"Walking":label.includes("Cardio")||label.includes("HIIT")?"Cardio":"Other";
+        typeCounts[key]=(typeCounts[key]||0)+1;
+      }
+    }
+  });
+  const typeTotal=Object.values(typeCounts).reduce((a,b)=>a+b,0)||1;
+  const typeData=Object.entries(typeCounts).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([label,count])=>({label,count,pct:Math.round(count/typeTotal*100)}));
+  const topType=typeData[0]?.label||"—";
+
+  // Muscle group breakdown (weight training only)
+  const muscleCounts={};
+  allEntries.forEach(([,d])=>{
+    const entry=d[currentUser];
+    const mg=entry.wolfmodeSession?.muscleGroup;
+    if(mg){
+      const label=AI_MUSCLE_GROUPS?.find(m=>m.id===mg)?.label||mg;
+      muscleCounts[label]=(muscleCounts[label]||0)+1;
+    }
+  });
+  const muscleTotal=Object.values(muscleCounts).reduce((a,b)=>a+b,0)||1;
+  const muscleData=Object.entries(muscleCounts).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([label,count])=>({label,count,pct:Math.round(count/muscleTotal*100)}));
+  const topMuscle=muscleData[0]?.label||"—";
+
+  // Sessions per week (last 8 weeks)
+  const weeklyData=Array.from({length:8},(_,wi)=>{
+    const weekEnd=new Date();weekEnd.setDate(weekEnd.getDate()-wi*7);
+    const weekStart=new Date(weekEnd);weekStart.setDate(weekEnd.getDate()-6);
+    const label=weekStart.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+    let count=0;
+    for(let i=0;i<7;i++){
+      const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);
+      if(history[localDateStr(d)]?.[currentUser]?.done)count++;
+    }
+    return{label,count,isCurrent:wi===0};
+  }).reverse();
+  const maxWeekly=Math.max(...weeklyData.map(w=>w.count),1);
+
+  // Donut chart helper
+  const DONUT_COLORS=["#7F77DD","#D85A30","#1D9E75","#EF9F27","#B4B2A9"];
+  const buildDonut=(data,total)=>{
+    const circumference=2*Math.PI*38;
+    let offset=0;
+    return data.map((item,i)=>{
+      const dash=(item.count/total)*circumference;
+      const el={dash,offset,color:DONUT_COLORS[i]};
+      offset+=dash;
+      return el;
+    });
+  };
+  const typeArcs=buildDonut(typeData,typeTotal);
+  const muscleArcs=buildDonut(muscleData,muscleTotal);
+
   return(
     <div>
       <div className="section-label" style={{marginTop:12}}>LAST 30 DAYS</div>
@@ -2552,6 +2672,97 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed}){
           <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:10,height:10,borderRadius:2,background:"rgba(255,255,255,0.02)",display:"inline-block"}}/>Weekend</span>
         </div>
       </div>
+
+      {/* ── 3-stat row ── */}
+      <div className="section-label">MY STATS</div>
+      <div style={{padding:"0 16px 16px"}}>
+        <div style={{display:"flex",gap:8,padding:"10px 14px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:14,alignItems:"center",justifyContent:"space-around"}}>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,color:"#ff6b35",letterSpacing:1}}>{totalMinutes.toLocaleString()}</div>
+            <div style={{fontSize:9,color:"var(--muted)",letterSpacing:1,textTransform:"uppercase"}}>min logged</div>
+          </div>
+          <div style={{width:1,height:32,background:"var(--border)"}}/>
+          <div style={{textAlign:"center",flex:1,minWidth:0}}>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,color:"var(--accent2)",letterSpacing:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{topType}</div>
+            <div style={{fontSize:9,color:"var(--muted)",letterSpacing:1,textTransform:"uppercase"}}>top workout</div>
+          </div>
+          <div style={{width:1,height:32,background:"var(--border)"}}/>
+          <div style={{textAlign:"center",flex:1,minWidth:0}}>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,color:"var(--accent2)",letterSpacing:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{topMuscle}</div>
+            <div style={{fontSize:9,color:"var(--muted)",letterSpacing:1,textTransform:"uppercase"}}>top muscle</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Workout type donut ── */}
+      {typeData.length>0&&(
+        <>
+          <div className="section-label">WORKOUT TYPE BREAKDOWN</div>
+          <div style={{padding:"0 16px 16px",display:"flex",alignItems:"center",gap:16}}>
+            <svg width={100} height={100} viewBox="0 0 110 110" style={{flexShrink:0}}>
+              {typeArcs.map((arc,i)=>(
+                <circle key={i} cx={55} cy={55} r={38} fill="none" stroke={arc.color} strokeWidth={18}
+                  strokeDasharray={`${arc.dash} ${2*Math.PI*38-arc.dash}`}
+                  strokeDashoffset={-arc.offset} transform="rotate(-90 55 55)"/>
+              ))}
+              <text x={55} y={51} textAnchor="middle" fontSize={15} fontWeight="500" fill="rgba(255,255,255,0.9)">{typeData[0]?.pct}%</text>
+              <text x={55} y={63} textAnchor="middle" fontSize={9} fill="rgba(255,255,255,0.4)">{(typeData[0]?.label||"").split(" ")[0]}</text>
+            </svg>
+            <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
+              {typeData.map((item,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{width:8,height:8,borderRadius:2,background:DONUT_COLORS[i],flexShrink:0}}/>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</span>
+                  <span style={{fontSize:11,fontFamily:"'Bebas Neue',cursive",color:"#fff",letterSpacing:1}}>{item.pct}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Muscle group donut ── */}
+      {muscleData.length>0&&(
+        <>
+          <div className="section-label">MUSCLE GROUP BREAKDOWN</div>
+          <div style={{padding:"0 16px 16px",display:"flex",alignItems:"center",gap:16}}>
+            <svg width={100} height={100} viewBox="0 0 110 110" style={{flexShrink:0}}>
+              {muscleArcs.map((arc,i)=>(
+                <circle key={i} cx={55} cy={55} r={38} fill="none" stroke={arc.color} strokeWidth={18}
+                  strokeDasharray={`${arc.dash} ${2*Math.PI*38-arc.dash}`}
+                  strokeDashoffset={-arc.offset} transform="rotate(-90 55 55)"/>
+              ))}
+              <text x={55} y={51} textAnchor="middle" fontSize={14} fontWeight="500" fill="rgba(255,255,255,0.9)">{muscleData[0]?.label?.split(" ")[0]}</text>
+              <text x={55} y={63} textAnchor="middle" fontSize={9} fill="rgba(255,255,255,0.4)">most trained</text>
+            </svg>
+            <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
+              {muscleData.map((item,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{width:8,height:8,borderRadius:2,background:DONUT_COLORS[i],flexShrink:0}}/>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",flex:1}}>{item.label}</span>
+                  <span style={{fontSize:11,fontFamily:"'Bebas Neue',cursive",color:"#fff",letterSpacing:1}}>{item.pct}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Sessions per week bar chart ── */}
+      <div className="section-label">SESSIONS PER WEEK</div>
+      <div style={{padding:"0 16px 16px"}}>
+        {weeklyData.map((week,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <div style={{fontSize:10,color:"var(--muted)",width:52,textAlign:"right",flexShrink:0}}>{week.label}</div>
+            <div style={{flex:1,height:8,background:"rgba(255,255,255,0.05)",borderRadius:4,overflow:"hidden"}}>
+              <div style={{height:"100%",borderRadius:4,width:`${week.count/maxWeekly*100}%`,background:week.isCurrent?"#ff6b35":"#7F77DD",transition:"width 0.3s"}}/>
+            </div>
+            <div style={{fontSize:10,color:week.isCurrent?"#ff6b35":"var(--muted)",width:14,textAlign:"right",flexShrink:0,fontFamily:"'Bebas Neue',cursive"}}>{week.count}</div>
+          </div>
+        ))}
+        <div style={{fontSize:10,color:"var(--muted)",marginTop:4}}>Current week in orange</div>
+      </div>
+
       <div className="section-label">BADGES</div>
       <div className="badge-grid" style={{marginBottom:16}}>
         {BADGES.map(b=>{const earned=mb.includes(b.id);return<div key={b.id} className={`badge-item ${earned?"earned":"locked"}`}><div style={{fontSize:28,marginBottom:4}}>{b.icon}</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1}}>{b.label}</div><div style={{fontSize:10,color:"var(--muted)",marginTop:2,lineHeight:1.3}}>{b.desc}</div></div>;})}
@@ -2562,12 +2773,12 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed}){
         return<div key={m} className="member-row" style={{margin:"0 16px 8px"}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,color:"var(--muted)",width:22}}>{i+1}</div><AvatarDisplay profile={profiles[m]} size={36}/><div style={{flex:1}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1}}>{m}{m===currentUser&&" (you)"}</span><span style={{fontSize:12,color:"var(--muted)"}}>{t} workouts</span></div><div className="progress-bar" style={{height:4}}><div className="progress-fill" style={{width:`${(t/mx)*100}%`}}/></div><div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>🔥{s} day streak</div></div></div>;
       })}
       <div className="section-label">MY WORKOUT HISTORY</div>
-      <WorkoutHistorySection currentUser={currentUser} history={history}/>
+      <WorkoutHistorySection currentUser={currentUser} history={history} onEditExercises={onEditExercises}/>
     </div>
   );
 }
 
-function WorkoutHistorySection({currentUser, history}){
+function WorkoutHistorySection({currentUser, history, onEditExercises}){
   const now=new Date();
   const [viewYear,setViewYear]=useState(now.getFullYear());
   const [viewMonth,setViewMonth]=useState(now.getMonth()); // 0-indexed
@@ -2673,6 +2884,11 @@ function WorkoutHistorySection({currentUser, history}){
                         );
                       })}
                     </div>
+                    {onEditExercises&&(
+                      <button onClick={()=>onEditExercises(date,entry)} style={{marginTop:10,width:"100%",padding:"7px",borderRadius:8,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",color:"var(--muted)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                        ✏️ EDIT EXERCISES & WEIGHTS
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -4793,6 +5009,91 @@ function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose
   };
 
 // ── WEIGHT LOG MODAL ─────────────────────────────────────────────────────────
+// ── EDIT COMPLETED WORKOUT MODAL ─────────────────────────────────────────────
+function EditCompletedWorkoutModal({date, entry, currentUser, onSave, onClose}){
+  const exercises=entry?.wolfmodeSession?.exercises||entry?.details?.lift?.exercises||[];
+  const [editedExercises,setEditedExercises]=useState(()=>exercises.map(ex=>({...ex})));
+  const [saving,setSaving]=useState(false);
+
+  const updateField=(idx,field,val)=>{
+    setEditedExercises(exs=>exs.map((ex,i)=>i===idx?{...ex,[field]:val}:ex));
+  };
+
+  const save=async()=>{
+    setSaving(true);
+    await onSave(date,editedExercises);
+    setSaving(false);
+    onClose();
+  };
+
+  if(exercises.length===0){
+    return(
+      <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+        <div className="modal">
+          <div className="modal-handle"/>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,marginBottom:8}}>EDIT EXERCISES</div>
+          <div style={{fontSize:13,color:"var(--muted)",marginBottom:16}}>No exercise data found for this workout. Only WOLFMODE workouts with logged weights can be edited here.</div>
+          <button className="btn-ghost" onClick={onClose} style={{width:"100%"}}>Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  return(
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" style={{maxHeight:"92dvh",overflowY:"auto"}}>
+        <div className="modal-handle"/>
+        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,marginBottom:2}}>EDIT EXERCISES</div>
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:14}}>Update weights, reps, or sets for any exercise.</div>
+
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+          {editedExercises.map((ex,idx)=>{
+            const isSkipped=ex.skipped&&!ex.substitutedWith;
+            const displayName=ex.substitutedWith||ex.name;
+            return(
+              <div key={idx} style={{padding:"10px 12px",background:isSkipped?"rgba(255,255,255,0.02)":"var(--bg3)",border:`1px solid ${isSkipped?"rgba(255,255,255,0.05)":"var(--border)"}`,borderRadius:12,opacity:isSkipped?0.4:1}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1.5,color:"#fff",marginBottom:6}}>
+                  {displayName}
+                  {ex.substitutedWith&&<span style={{fontSize:9,color:"rgba(255,107,53,0.6)",marginLeft:6,fontFamily:"sans-serif",letterSpacing:0}}>(subbed)</span>}
+                  {isSkipped&&<span style={{fontSize:9,color:"var(--muted)",marginLeft:6,fontFamily:"sans-serif"}}>skipped</span>}
+                </div>
+                {!isSkipped&&(
+                  <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:3}}>
+                      <input type="number" value={ex.sets||""} onChange={e=>updateField(idx,"sets",e.target.value?Number(e.target.value):"")}
+                        placeholder="—" style={{width:38,padding:"5px 4px",textAlign:"center",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:7,color:"#fff",fontSize:12}}/>
+                      <span style={{fontSize:10,color:"var(--muted)"}}>sets</span>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:3}}>
+                      <input type="number" value={ex.actualReps||ex.reps||""} onChange={e=>updateField(idx,"actualReps",e.target.value)}
+                        placeholder="—" style={{width:38,padding:"5px 4px",textAlign:"center",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:7,color:"#fff",fontSize:12}}/>
+                      <span style={{fontSize:10,color:"var(--muted)"}}>reps</span>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:3}}>
+                      <input type="text" value={ex.weightUsed?.replace(/[^0-9.]/g,"")||""} onChange={e=>updateField(idx,"weightUsed",e.target.value?`${e.target.value} lbs`:"")}
+                        placeholder="—" style={{width:46,padding:"5px 4px",textAlign:"center",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:7,color:"#fff",fontSize:12}}/>
+                      <span style={{fontSize:10,color:"var(--muted)"}}>lbs</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:12,padding:"8px 10px",background:"rgba(255,255,255,0.02)",borderRadius:8}}>
+          💡 All weights are total loaded weight including the bar.
+        </div>
+
+        <button className="btn-primary" onClick={save} disabled={saving} style={{width:"100%",background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+          {saving?"SAVING...":"SAVE CHANGES"}
+        </button>
+        <button className="btn-ghost" onClick={onClose} style={{width:"100%",marginTop:8}}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, userName, experience, injuries}){
   const [data,setData]=useState(()=>getActiveWorkout(currentUser, targetDate));
   const [expanded,setExpanded]=useState(false);
@@ -5267,6 +5568,13 @@ export default function App(){
   const [gymSlots,setGymSlots]=useState([]);
   const [adminName,setAdminName]=useState(null);
   const [view,setView]=useState("pack");
+  const [whatsNewOpen,setWhatsNewOpen]=useState(()=>{
+    try{return localStorage.getItem("wp_seen_version")!==APP_VERSION;}catch{return false;}
+  });
+  const dismissWhatsNew=()=>{
+    try{localStorage.setItem("wp_seen_version",APP_VERSION);}catch{}
+    setWhatsNewOpen(false);
+  };
   const [workoutOpen,setWorkoutOpen]=useState(false);
   const [adminOpen,setAdminOpen]=useState(false);
   const [profileOpen,setProfileOpen]=useState(false);
@@ -5275,6 +5583,7 @@ export default function App(){
   const [garageEquipment,setGarageEquipment]=useState(HOME_GYM_DEFAULT);
   const [reactions,setReactions]=useState({});
   const [editWorkout,setEditWorkout]=useState(null);
+  const [editCompletedWorkout,setEditCompletedWorkout]=useState(null); // {date, entry}
   const [weeklyRecap,setWeeklyRecap]=useState(null);
   const [aiTrainerOpen,setAiTrainerOpen]=useState(false);
   const [nutritionOpen,setNutritionOpen]=useState(false);
@@ -5409,6 +5718,21 @@ export default function App(){
     setHistory(newHistory);
     setSharedData(newHistory);
     setEditWorkout(null);showToast("Workout updated!");
+  };
+
+  const handleSaveEditedExercises=async(date,editedExercises)=>{
+    const existing=history[date]?.[currentUser];
+    if(!existing)return;
+    let updatedEntry={...existing};
+    if(existing.wolfmodeSession?.exercises){
+      updatedEntry={...existing,wolfmodeSession:{...existing.wolfmodeSession,exercises:editedExercises}};
+    }else if(existing.details?.lift?.exercises){
+      updatedEntry={...existing,details:{...existing.details,lift:{...existing.details.lift,exercises:editedExercises}}};
+    }
+    const newHistory={...history,[date]:{...(history[date]||{}),[currentUser]:updatedEntry}};
+    await fsSet("wolfpack/workouts",{byDate:newHistory});
+    setHistory(newHistory);setSharedData(newHistory);
+    showToast("✅ Exercises updated!");
   };
   const handleDeleteWorkout=async(date)=>{
     const newDay={...(history[date]||{})};
@@ -5774,7 +6098,7 @@ export default function App(){
         {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost} onComment={handleComment} onDeleteComment={handleDeleteComment}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
         {view==="challenges"&&<ChallengesTab currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)} onMarkPaid={handleMarkPaid} onLogPayment={handleLogPayment}/>}
-        {view==="stats"&&<StatsTab currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed}/>}
+        {view==="stats"&&<StatsTab currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed} onEditExercises={(date,entry)=>setEditCompletedWorkout({date,entry})}/>}
       </div>
       <nav className="nav">
         {NAV.map(n=>{
@@ -5826,6 +6150,8 @@ export default function App(){
         }catch(err){console.warn(err);}}
       }} onClose={()=>setPendingEffortRating(null)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
+      {editCompletedWorkout&&<EditCompletedWorkoutModal date={editCompletedWorkout.date} entry={editCompletedWorkout.entry} currentUser={currentUser} onSave={handleSaveEditedExercises} onClose={()=>setEditCompletedWorkout(null)}/>}
+      {whatsNewOpen&&<WhatsNewModal onClose={dismissWhatsNew}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet("wolfpack/settings",{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
     </div>
