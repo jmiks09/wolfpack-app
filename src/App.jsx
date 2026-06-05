@@ -264,7 +264,7 @@ function WhatsNewModal({onClose}){
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{fontSize:32,marginBottom:6}}>🐺</div>
           <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WHAT'S NEW</div>
-          <div style={{fontSize:11,color:"var(--muted)",marginTop:2,letterSpacing:1}}>WOLFPACK UPDATE {APP_VERSION}</div>
+          <div style={{fontSize:11,color:"var(--muted)",marginTop:2,letterSpacing:1}}>LATEST WOLFPACK UPDATES</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:18}}>
           {WHATS_NEW.map((item,i)=>(
