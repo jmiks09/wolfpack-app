@@ -3,7 +3,7 @@ import { fsGet, fsSet, fsDelete, fsListen, requestNotifPermission, onForegroundM
 
 const INVITE_CODE = "WOLF2026";
 const WORKOUT_TYPES = [
-  {id:"lift",icon:"🏋️",label:"Lifting"},{id:"run",icon:"🏃",label:"Running"},
+  {id:"lift",icon:"🏋️",label:"Weight Training"},{id:"run",icon:"🏃",label:"Running"},
   {id:"bike",icon:"🚴",label:"Cycling"},{id:"hiit",icon:"⚡",label:"HIIT"},
   {id:"cardio",icon:"❤️‍🔥",label:"Mixed Cardio"},{id:"walk",icon:"🚶",label:"Walking"},
   {id:"other",icon:"💪",label:"Other"},
@@ -2604,7 +2604,7 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditEx
     } else {
       const types=entry.workouts||[];
       if(types.length>0){
-        types.forEach(t=>{const label=t.label||t.id||"Other";typeCounts[label]=(typeCounts[label]||0)+1;});
+        types.forEach(t=>{let label=t.label||t.id||"Other";if(label==="Lifting"||t.id==="lift")label="Weight Training";typeCounts[label]=(typeCounts[label]||0)+1;});
       } else {
         const label=entry.workoutLabel||"Other";
         const key=label.includes("Run")?"Running":label.includes("Walk")?"Walking":label.includes("Cardio")||label.includes("HIIT")?"Cardio":"Other";
