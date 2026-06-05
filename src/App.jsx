@@ -405,6 +405,27 @@ function bumpRegenCount(userName){
 }
 
 // ── WORKOUT GENERATION HELPERS ───────────────────────────────────────────────
+// Get the last WOLFMODE workout for a specific muscle group from history
+function getLastWorkoutForMuscle(history, userName, muscleGroupId){
+  for(let i=1;i<=30;i++){
+    const d=new Date();d.setDate(d.getDate()-i);
+    const ds=localDateStr(d);
+    const entry=history[ds]?.[userName];
+    if(entry?.done&&entry?.wolfmodeSession){
+      const sessionMg=entry.wolfmodeSession.muscleGroup;
+      if(sessionMg===muscleGroupId||sessionMg===muscleGroupId?.toLowerCase()){
+        return{
+          date:ds,
+          exercises:entry.wolfmodeSession.exercises||[],
+          effortRating:entry.wolfmodeSession.effortRating||null,
+          muscleGroup:sessionMg,
+          daysAgo:i,
+        };
+      }
+    }
+  }
+  return null;
+}
 // Build equipment string for AI prompt
 function buildEquipmentString(presetId, customEquipment, packHomeGym){
   if(presetId==="custom"&&customEquipment) return customEquipment;
@@ -4026,6 +4047,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
   const [swappingIdx,setSwappingIdx]=useState(null);
   const [customDuration,setCustomDuration]=useState(null);
   const [expandedFavGroup,setExpandedFavGroup]=useState(null);
+  const [repeatMode,setRepeatMode]=useState(false); // true = repeat last workout
 
   const goal=profile?.aiTrainer?.goal;
   const experience=profile?.aiTrainer?.experience;
@@ -4075,6 +4097,44 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     const muscleLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label:"AI choice";
     const priorPerf=buildPriorPerformanceString(trainingLog,muscleLabel);
     const prevExercises=isRegen&&workout?workout.exercises?.map(e=>e.name)||[]:[];
+
+    // Repeat mode — load last workout and ask AI to progress weights
+    if(repeatMode&&muscleGroup){
+      const lastWorkout=getLastWorkoutForMuscle(history,currentUser,muscleGroup);
+      if(lastWorkout?.exercises?.length){
+        const result=await aiGenerateWorkout({
+          userName:currentUser,
+          goal:fullGoal,
+          experience:experience||"intermediate",
+          injuries:injuries||"None",
+          equipment,
+          recentHistory:getRecentHistoryString(history,currentUser),
+          muscleGroup:muscleLabel,
+          requestType:"repeat_progression",
+          lastWorkoutExercises:JSON.stringify(lastWorkout.exercises.map(e=>({
+            name:e.name,
+            sets:e.sets,
+            reps:e.actualReps||e.reps,
+            weight:e.weightUsed||e.weight,
+            primaryMuscle:e.primaryMuscle,
+          }))),
+          lastWorkoutEffort:lastWorkout.effortRating||"normal",
+          daysAgo:lastWorkout.daysAgo,
+          numExercises,
+          setsPerExercise,
+        });
+        if(result.ok){
+          setWorkout(result.workout);
+          setCustomDuration(result.workout?.estimatedMinutes||45);
+          setStep("result");
+          if(isRegen)setRegenCount(bumpRegenCount(currentUser));
+        }else{
+          setError(result.error);setStep("setup");
+        }
+        return;
+      }
+    }
+
     const result=await aiGenerateWorkout({
       userName:currentUser,
       goal:fullGoal,
@@ -4215,7 +4275,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
                 if(lower.includes("leg")||lower.includes("squat"))counts.legs+=2;if(lower.includes("glute"))counts.glutes+=2;
                 const pick=groups.sort((a,b)=>(counts[a]||0)-(counts[b]||0))[0];
                 const mg=AI_MUSCLE_GROUPS.find(m=>m.id===pick)||AI_MUSCLE_GROUPS[7];
-                setMuscleGroup(mg.id);setAiMuscleReason(`You haven\'t trained ${mg.label.toLowerCase()} much recently.`);
+                setMuscleGroup(mg.id);setAiMuscleReason(`You haven\'t trained ${mg.label.toLowerCase()} much recently.`);setRepeatMode(false);
               }} style={{width:"100%",padding:"10px 12px",borderRadius:10,cursor:"pointer",background:!muscleGroup?"rgba(124,92,191,0.2)":"var(--bg3)",border:!muscleGroup?"1px solid var(--accent)":"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
                 <span style={{fontSize:16}}>🤖</span>
                 <div style={{textAlign:"left",flex:1}}>
@@ -4225,6 +4285,39 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
                 {!muscleGroup&&<div style={{fontSize:14,color:"var(--accent)"}}>✓</div>}
               </button>
             </div>
+
+            {/* Repeat last workout suggestion — shows when muscle group selected */}
+            {(()=>{
+              if(!muscleGroup)return null;
+              const lastWorkout=getLastWorkoutForMuscle(history,currentUser,muscleGroup);
+              if(!lastWorkout||!lastWorkout.exercises?.length)return null;
+              const effortMap={easy:"Too Easy",normal:"Just Right",hard:"Hard",wrecked:"Wrecked"};
+              const progressMap={easy:"Increase weights ~10%",normal:"Progress weights ~5%",hard:"Keep same weights",wrecked:"Reduce weights slightly"};
+              const effort=lastWorkout.effortRating||"normal";
+              const daysLabel=lastWorkout.daysAgo===7?"Last week":lastWorkout.daysAgo<=3?`${lastWorkout.daysAgo} days ago`:`${lastWorkout.daysAgo} days ago`;
+              return(
+                <div style={{marginBottom:14,padding:"12px 14px",background:"rgba(46,204,113,0.06)",border:"1px solid rgba(46,204,113,0.2)",borderRadius:14}}>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--green)",marginBottom:6}}>
+                    📋 PREVIOUS {AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label?.toUpperCase()||""} WORKOUT · {daysLabel.toUpperCase()}
+                  </div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginBottom:4,lineHeight:1.5}}>
+                    {lastWorkout.exercises.filter(e=>!e.skipped).slice(0,3).map(e=>e.name).join(" · ")}
+                    {lastWorkout.exercises.filter(e=>!e.skipped).length>3&&<span style={{color:"var(--muted)"}}> +{lastWorkout.exercises.filter(e=>!e.skipped).length-3} more</span>}
+                  </div>
+                  {effort&&<div style={{fontSize:10,color:"var(--muted)",marginBottom:10}}>Last rating: {effortMap[effort]||effort} → <span style={{color:"rgba(46,204,113,0.8)"}}>{progressMap[effort]||"Progress from last session"}</span></div>}
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>{setRepeatMode(true);generate(false);}}
+                      style={{flex:1,padding:"9px",borderRadius:10,cursor:"pointer",background:"rgba(46,204,113,0.15)",border:"1px solid rgba(46,204,113,0.3)",color:"var(--green)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                      🔄 REPEAT + PROGRESS
+                    </button>
+                    <button onClick={()=>{setRepeatMode(false);}}
+                      style={{flex:1,padding:"9px",borderRadius:10,cursor:"pointer",background:!repeatMode?"rgba(255,107,53,0.15)":"rgba(255,255,255,0.04)",border:!repeatMode?"1px solid rgba(255,107,53,0.4)":"1px solid var(--border)",color:!repeatMode?"#ff6b35":"var(--muted)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                      ✨ NEW WORKOUT
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Volume */}
             <div style={{marginBottom:14}}>
@@ -4609,12 +4702,14 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
   const [data,setData]=useState(()=>getActiveWorkout(currentUser, targetDate));
   const [expanded,setExpanded]=useState(false);
   const [favorited,setFavorited]=useState(()=>data?.workout?isWorkoutFavorited(currentUser,data?.workout?.title):false);
+  const [editingDuration,setEditingDuration]=useState(false);
+  const [localDuration,setLocalDuration]=useState(null);
 
-  // Re-check localStorage whenever the card mounts or key props change
   useEffect(()=>{
     const d=getActiveWorkout(currentUser, targetDate);
     setData(d);
     setFavorited(d?.workout?isWorkoutFavorited(currentUser,d?.workout?.title):false);
+    setLocalDuration(null);
   },[currentUser, targetDate]);
 
   if(!data)return null;
@@ -4622,6 +4717,18 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
   const {workout,muscleGroup,completed}=data;
   const isToday=targetDate==="today";
   const mgObj=AI_MUSCLE_GROUPS?.find(m=>m.id===muscleGroup);
+  const displayMinutes=localDuration!==null?localDuration:workout.estimatedMinutes;
+
+  const saveDuration=(newMins)=>{
+    if(!newMins||Number(newMins)<1)return;
+    const updated={...data,workout:{...workout,estimatedMinutes:Number(newMins)}};
+    const date=targetDate==="tomorrow"?centralDateStr(1):centralDateStr(0);
+    const key=`wp_active_${currentUser}_${date}`;
+    try{localStorage.setItem(key,JSON.stringify(updated));}catch{}
+    setLocalDuration(Number(newMins));
+    setData(updated);
+    setEditingDuration(false);
+  };
 
   const toggleFavorite=(e)=>{
     e.stopPropagation();
@@ -4657,9 +4764,24 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
           <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:17,letterSpacing:1.5,color:"#fff",lineHeight:1.1}}>
             {workout.title}
           </div>
-          <div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>
-            {workout.estimatedMinutes} min · {workout.exercises?.length} exercises
-            {mgObj?` · ${mgObj.label}`:""}
+          <div style={{fontSize:10,color:"var(--muted)",marginTop:2,display:"flex",alignItems:"center",gap:4}}>
+            {editingDuration?(
+              <input
+                type="number"
+                defaultValue={displayMinutes}
+                autoFocus
+                onClick={e=>e.stopPropagation()}
+                onBlur={e=>saveDuration(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter")saveDuration(e.target.value);if(e.key==="Escape")setEditingDuration(false);}}
+                style={{width:44,padding:"1px 5px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,107,53,0.5)",borderRadius:6,color:"#ff6b35",fontSize:11,textAlign:"center"}}
+                min={1}
+              />
+            ):(
+              <span onClick={e=>{e.stopPropagation();setEditingDuration(true);}} style={{cursor:"text",borderBottom:"1px dashed rgba(255,255,255,0.2)",paddingBottom:1}} title="Tap to edit">
+                {displayMinutes}
+              </span>
+            )}
+            <span>min · {workout.exercises?.length} exercises{mgObj?` · ${mgObj.label}`:""}</span>
           </div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
