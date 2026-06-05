@@ -5296,7 +5296,20 @@ export default function App(){
 
   // Edit workout
   const handleSaveEditedWorkout=async(date,entry)=>{
-    const newHistory={...history,[date]:{...(history[date]||{}),[currentUser]:entry}};
+    // Rebuild workoutLabel with updated duration so Pack card shows correct time
+    let updatedEntry={...entry};
+    if(entry.duration&&entry.workoutLabel){
+      // Replace any existing "XX min" in the label with the new duration
+      const newLabel=entry.workoutLabel.replace(/\d+ min/g,`${entry.duration} min`);
+      // If no "min" in label, append it
+      const finalLabel=newLabel.includes("min")?newLabel:`${newLabel} · ${entry.duration} min`;
+      // Also update summary array if present
+      const newSummary=Array.isArray(entry.summary)
+        ?entry.summary.map(s=>s.replace(/\d+ min/g,`${entry.duration} min`))
+        :entry.summary;
+      updatedEntry={...entry,workoutLabel:finalLabel,summary:newSummary};
+    }
+    const newHistory={...history,[date]:{...(history[date]||{}),[currentUser]:updatedEntry}};
     await fsSet("wolfpack/workouts",{byDate:newHistory});
     setHistory(newHistory);
     setSharedData(newHistory);
