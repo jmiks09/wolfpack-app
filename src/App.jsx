@@ -247,16 +247,20 @@ const EFFORT_RATINGS = [
 
 // ── WOLFMODE COACH — Training modes ─────────────────────────────────────────
 
-const APP_VERSION = "v19";
-const WHATS_NEW = [
-  {icon:"🎯", title:"Smarter workouts", desc:"AI now targets all muscles in a group — back day hits lats, rhomboids, traps, and rear delts, not just lats 5 times."},
-  {icon:"🔄", title:"Repeat last workout", desc:"Choose a muscle group and WOLFMODE shows your last session. Tap Repeat + Progress and weights auto-advance based on your effort rating."},
-  {icon:"📅", title:"Monthly workout history", desc:"Stats tab now shows workouts by month. Tap any day to expand and see your exercises. Tap Edit Exercises & Weights to fix any mistakes."},
-  {icon:"✏️", title:"Edit completed workouts", desc:"Made a mistake logging weights? Open Stats → tap a day → expand → Edit Exercises & Weights."},
-  {icon:"🏋️", title:"Gym booking fixed", desc:"Slots that would run past 8 PM closing are now greyed out and blocked."},
-];
+// What's New — fallback content if Firestore hasn't been set yet
+const WHATS_NEW_FALLBACK = {
+  version:"v19",
+  items:[
+    {icon:"🎯", title:"Smarter workouts", desc:"AI now targets all muscles in a group — back day hits lats, rhomboids, traps, and rear delts, not just lats 5 times."},
+    {icon:"🔄", title:"Repeat last workout", desc:"Choose a muscle group and WOLFMODE shows your last session. Tap Repeat + Progress and weights auto-advance based on your effort rating."},
+    {icon:"📅", title:"Monthly workout history", desc:"Stats tab now shows workouts by month. Tap any day to expand and see your exercises. Tap Edit Exercises & Weights to fix any mistakes."},
+    {icon:"✏️", title:"Edit completed workouts", desc:"Made a mistake logging weights? Open Stats → tap a day → expand → Edit Exercises & Weights."},
+    {icon:"🏋️", title:"Gym booking fixed", desc:"Slots that would run past 8 PM closing are now greyed out and blocked."},
+  ],
+};
 
-function WhatsNewModal({onClose}){
+function WhatsNewModal({onClose, whatsNewData}){
+  const data=whatsNewData||WHATS_NEW_FALLBACK;
   return(
     <div className="modal-overlay" style={{zIndex:2000}} onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal" style={{maxHeight:"88dvh",overflowY:"auto"}}>
@@ -267,7 +271,7 @@ function WhatsNewModal({onClose}){
           <div style={{fontSize:11,color:"var(--muted)",marginTop:2,letterSpacing:1}}>LATEST WOLFPACK UPDATES</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:18}}>
-          {WHATS_NEW.map((item,i)=>(
+          {(data.items||[]).map((item,i)=>(
             <div key={i} style={{display:"flex",gap:12,padding:"10px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12}}>
               <div style={{fontSize:22,flexShrink:0,lineHeight:1.3}}>{item.icon}</div>
               <div>
@@ -284,7 +288,6 @@ function WhatsNewModal({onClose}){
     </div>
   );
 }
-
 
 
 // ── AI Coach (Nutrition + Supplements) constants ────────────────────────────
@@ -765,6 +768,22 @@ function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteA
   const [backfillMember,setBackfillMember]=useState(null);
   const [backfillDate,setBackfillDate]=useState("");
   const [backfillWorkouts,setBackfillWorkouts]=useState([]);
+  // What's New editor
+  const [wnVersion,setWnVersion]=useState("");
+  const [wnItems,setWnItems]=useState([{icon:"🔥",title:"",desc:""}]);
+  const [wnSaved,setWnSaved]=useState(false);
+  const [wnPreview,setWnPreview]=useState(false);
+
+  const addWnItem=()=>setWnItems(items=>[...items,{icon:"✨",title:"",desc:""}]);
+  const removeWnItem=idx=>setWnItems(items=>items.filter((_,i)=>i!==idx));
+  const updateWnItem=(idx,field,val)=>setWnItems(items=>items.map((item,i)=>i===idx?{...item,[field]:val}:item));
+
+  const saveWhatsNew=async()=>{
+    if(!wnVersion.trim()||wnItems.every(i=>!i.title.trim()))return;
+    const data={version:wnVersion.trim(),items:wnItems.filter(i=>i.title.trim())};
+    await fsSet("wolfpack/whats_new",data);
+    setWnSaved(true);setTimeout(()=>setWnSaved(false),2500);
+  };
   const [backfillSaving,setBackfillSaving]=useState(false);
   const [backfillDone,setBackfillDone]=useState(false);
   // Garage equipment editor state
@@ -936,6 +955,65 @@ function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteA
           }} style={{width:"100%",marginBottom:8}}>
             {equipSaved?"✓ SAVED":"SAVE EQUIPMENT LIST"}
           </button>
+        </div>
+
+        {/* ── WHAT'S NEW EDITOR ── */}
+        <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid var(--border)"}}>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--accent2)",marginBottom:4}}>📢 WHAT'S NEW EDITOR</div>
+          <div style={{fontSize:11,color:"var(--muted)",marginBottom:12,lineHeight:1.5}}>Edit this and save — users will see a popup the next time they open the app. Use a new Update ID each time to trigger it.</div>
+
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:11,color:"var(--muted)",marginBottom:4}}>Update ID <span style={{color:"rgba(255,255,255,0.3)"}}>(change this to trigger the popup for everyone)</span></div>
+            <input className="input" placeholder="e.g. june-update, v20, week-3..." value={wnVersion} onChange={e=>setWnVersion(e.target.value)} style={{padding:"8px 12px",fontSize:13}}/>
+          </div>
+
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>Update items</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {wnItems.map((item,idx)=>(
+                <div key={idx} style={{padding:"10px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12}}>
+                  <div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
+                    <input className="input" placeholder="Icon" value={item.icon} onChange={e=>updateWnItem(idx,"icon",e.target.value)}
+                      style={{width:52,padding:"6px 8px",fontSize:18,textAlign:"center"}}/>
+                    <input className="input" placeholder="Title (e.g. New feature name)" value={item.title} onChange={e=>updateWnItem(idx,"title",e.target.value)}
+                      style={{flex:1,padding:"6px 10px",fontSize:12}}/>
+                    {wnItems.length>1&&<button onClick={()=>removeWnItem(idx)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:18,padding:"0 4px",flexShrink:0}}>×</button>}
+                  </div>
+                  <textarea className="input" placeholder="Description — what changed and why users will love it" value={item.desc} onChange={e=>updateWnItem(idx,"desc",e.target.value)}
+                    rows={2} style={{width:"100%",resize:"none",padding:"6px 10px",fontSize:12}}/>
+                </div>
+              ))}
+            </div>
+            <button className="btn-ghost" onClick={addWnItem} style={{width:"100%",marginTop:8,fontSize:12,padding:"8px"}}>
+              + Add another item
+            </button>
+          </div>
+
+          <div style={{display:"flex",gap:8,marginBottom:8}}>
+            <button className="btn-primary" onClick={saveWhatsNew} disabled={!wnVersion.trim()||wnItems.every(i=>!i.title.trim())}
+              style={{flex:1,background:wnSaved?"var(--green)":"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+              {wnSaved?"✓ SAVED — USERS WILL SEE THIS":"PUBLISH UPDATE"}
+            </button>
+            <button className="btn-ghost" onClick={()=>setWnPreview(true)} style={{flexShrink:0,padding:"0 14px",fontSize:12}}>
+              👁 Preview
+            </button>
+          </div>
+
+          {wnPreview&&(
+            <div style={{padding:"12px 14px",background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:12,marginBottom:8}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"#ff6b35",marginBottom:8}}>PREVIEW — THIS IS WHAT USERS WILL SEE:</div>
+              {wnItems.filter(i=>i.title.trim()).map((item,i)=>(
+                <div key={i} style={{display:"flex",gap:10,marginBottom:8}}>
+                  <div style={{fontSize:18,flexShrink:0}}>{item.icon}</div>
+                  <div>
+                    <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,color:"#fff"}}>{item.title}</div>
+                    <div style={{fontSize:11,color:"var(--muted)",lineHeight:1.4}}>{item.desc}</div>
+                  </div>
+                </div>
+              ))}
+              <button onClick={()=>setWnPreview(false)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:11,marginTop:4}}>Close preview</button>
+            </div>
+          )}
         </div>
 
         {/* ── ADMIN TOOLS ── */}
@@ -5568,11 +5646,10 @@ export default function App(){
   const [gymSlots,setGymSlots]=useState([]);
   const [adminName,setAdminName]=useState(null);
   const [view,setView]=useState("pack");
-  const [whatsNewOpen,setWhatsNewOpen]=useState(()=>{
-    try{return localStorage.getItem("wp_seen_version")!==APP_VERSION;}catch{return false;}
-  });
+  const [whatsNewData,setWhatsNewData]=useState(null);
+  const [whatsNewOpen,setWhatsNewOpen]=useState(false);
   const dismissWhatsNew=()=>{
-    try{localStorage.setItem("wp_seen_version",APP_VERSION);}catch{}
+    try{localStorage.setItem("wp_seen_version",(whatsNewData||WHATS_NEW_FALLBACK).version);}catch{}
     setWhatsNewOpen(false);
   };
   const [workoutOpen,setWorkoutOpen]=useState(false);
@@ -5604,7 +5681,23 @@ export default function App(){
       const u6=fsListen("wolfpack/packgoals",d=>{if(d)setPackGoals(d.list||[]);});
       const u8=fsListen("wolfpack/settings",d=>{if(d?.garageEquipment)setGarageEquipment(d.garageEquipment);});
       const u7=fsListen("wolfpack/reactions",d=>{if(d)setReactions(d.data||{});});
-      unsubs.current=[u1,u2,u3,u4,u5,u6,u7];
+      const u9=fsListen("wolfpack/whats_new",d=>{
+        if(d?.version&&d?.items){
+          setWhatsNewData(d);
+          // Check if user has seen this version
+          try{
+            const seen=localStorage.getItem("wp_seen_version");
+            if(seen!==d.version)setWhatsNewOpen(true);
+          }catch{}
+        } else {
+          // No Firestore data yet — use fallback
+          try{
+            const seen=localStorage.getItem("wp_seen_version");
+            if(seen!==WHATS_NEW_FALLBACK.version)setWhatsNewOpen(true);
+          }catch{}
+        }
+      });
+      unsubs.current=[u1,u2,u3,u4,u5,u6,u7,u8,u9];
       const ad=await fsGet("wolfpack/admin");if(ad?.name)setAdminName(ad.name);
       setScreen(m.length>0?"login":"onboard");
     })();
@@ -6151,7 +6244,7 @@ export default function App(){
       }} onClose={()=>setPendingEffortRating(null)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {editCompletedWorkout&&<EditCompletedWorkoutModal date={editCompletedWorkout.date} entry={editCompletedWorkout.entry} currentUser={currentUser} onSave={handleSaveEditedExercises} onClose={()=>setEditCompletedWorkout(null)}/>}
-      {whatsNewOpen&&<WhatsNewModal onClose={dismissWhatsNew}/>}
+      {whatsNewOpen&&<WhatsNewModal onClose={dismissWhatsNew} whatsNewData={whatsNewData||WHATS_NEW_FALLBACK}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet("wolfpack/settings",{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
     </div>
