@@ -246,7 +246,7 @@ const EFFORT_RATINGS = [
 ];
 
 // ── WOLFMODE COACH — Training modes ─────────────────────────────────────────
-const DAYS_PER_WEEK_OPTIONS=[2,3,4,5];
+
 // What's New — fallback content if Firestore hasn't been set yet
 const WHATS_NEW_FALLBACK = {
   version:"v19",
@@ -2700,8 +2700,7 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditEx
     const entry=d[currentUser];
     const mg=entry.wolfmodeSession?.muscleGroup;
     if(mg){
-      const SPLIT_NORMALIZE={"push":"Chest & Shoulders","pull":"Back","legs":"Legs & Glutes","upper":"Upper Body","lower":"Legs & Glutes","chest":"Chest","back":"Back","shoulders":"Shoulders","arms":"Arms","fullbody":"Full Body"};
-      const label=AI_MUSCLE_GROUPS?.find(m=>m.id===mg)?.label||SPLIT_NORMALIZE[mg.toLowerCase()]||mg;
+      const label=AI_MUSCLE_GROUPS?.find(m=>m.id===mg)?.label||mg;
       muscleCounts[label]=(muscleCounts[label]||0)+1;
     }
   });
@@ -4489,8 +4488,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     const prevExercises=isRegen&&workout?workout.exercises?.map(e=>e.name)||[]:[];
 
     // Repeat mode — load last workout and ask AI to progress weights
-    if((repeatMode||forceRepeat)&&muscleGroup){
-      console.log("REPEAT MODE:", repeatMode, "muscle:", muscleGroup);
+    if((forceRepeat||repeatMode)&&muscleGroup){
       const lastWorkout=getLastWorkoutForMuscle(history,currentUser,muscleGroup);
       if(lastWorkout?.exercises?.length){
         const result=await aiGenerateWorkout({
