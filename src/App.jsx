@@ -246,7 +246,7 @@ const EFFORT_RATINGS = [
 ];
 
 // ── WOLFMODE COACH — Training modes ─────────────────────────────────────────
-
+const DAYS_PER_WEEK_OPTIONS=[2,3,4,5];
 // What's New — fallback content if Firestore hasn't been set yet
 const WHATS_NEW_FALLBACK = {
   version:"v19",
