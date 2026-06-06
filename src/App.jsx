@@ -4490,6 +4490,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
 
     // Repeat mode — load last workout and ask AI to progress weights
     if(repeatMode&&muscleGroup){
+      console.log("REPEAT MODE:", repeatMode, "muscle:", muscleGroup);
       const lastWorkout=getLastWorkoutForMuscle(history,currentUser,muscleGroup);
       if(lastWorkout?.exercises?.length){
         const result=await aiGenerateWorkout({
