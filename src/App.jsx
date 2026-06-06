@@ -4479,7 +4479,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     );
   }
 
-  const generate=async(isRegen=false)=>{
+  const generate=async(isRegen=false,forceRepeat=false)=>{
     if(isRegen&&regenCount>=MAX_DAILY_REGENS){showToast("Daily limit reached.");return;}
     setStep("loading");setError(null);
     const equipment=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
@@ -4489,7 +4489,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
     const prevExercises=isRegen&&workout?workout.exercises?.map(e=>e.name)||[]:[];
 
     // Repeat mode — load last workout and ask AI to progress weights
-    if(repeatMode&&muscleGroup){
+    if((repeatMode||forceRepeat)&&muscleGroup){
       console.log("REPEAT MODE:", repeatMode, "muscle:", muscleGroup);
       const lastWorkout=getLastWorkoutForMuscle(history,currentUser,muscleGroup);
       if(lastWorkout?.exercises?.length){
@@ -4697,7 +4697,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
                   </div>
                   {effort&&<div style={{fontSize:10,color:"var(--muted)",marginBottom:10}}>Last rating: {effortMap[effort]||effort} → <span style={{color:"rgba(46,204,113,0.8)"}}>{progressMap[effort]||"Progress from last session"}</span></div>}
                   <div style={{display:"flex",gap:8}}>
-                    <button onClick={()=>{setRepeatMode(true);generate(false);}}
+                    <button onClick={()=>{setRepeatMode(true);generate(false,true);}}
                       style={{flex:1,padding:"9px",borderRadius:10,cursor:"pointer",background:"rgba(46,204,113,0.15)",border:"1px solid rgba(46,204,113,0.3)",color:"var(--green)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
                       🔄 REPEAT + PROGRESS
                     </button>
