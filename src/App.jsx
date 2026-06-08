@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { fsGet, fsSet, fsDelete, fsListen, requestNotifPermission, onForegroundMessage, aiGenerateWorkout, aiGenerateFormCues, aiGenerateNutritionPlan } from "./firebase";
+import { fsGet, fsSet, fsDelete, fsListen, requestNotifPermission, onForegroundMessage, aiGenerateWorkout, aiGenerateFormCues, aiGenerateNutritionPlan, aiScanMeal } from "./firebase";
 
 const INVITE_CODE = "WOLF2026";
 const WORKOUT_TYPES = [
@@ -1468,7 +1468,7 @@ function MemberCard({m,i,done,isMe,ms,restToday,td,profiles,sessionExercises,ses
   );
 }
 
-function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,onOpenAITrainer,onOpenNutrition,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,reactions,onReact,weeklyRecap,onDismissRecap}){
+function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,onOpenAITrainer,onOpenNutrition,onOpenMealScanner,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,reactions,onReact,weeklyRecap,onDismissRecap}){
   const key=todayStr(),td=sharedData[key]||{},my=td[currentUser],str=getStreak(history,currentUser,profiles[currentUser]),tot=getTotalWorkouts(history,currentUser),we=isRestDay(key,profiles[currentUser]);
   const sorted=[...members].sort((a,b)=>{const sa=getStreak(history,a,profiles[a]),sb=getStreak(history,b,profiles[b]);if(sb!==sa)return sb-sa;return b===currentUser?1:a===currentUser?-1:0;});
 
@@ -1567,6 +1567,22 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
             <div style={{fontSize:14,color:"var(--green)"}}>›</div>
           </button>
         )}
+        {/* Meal Scanner shortcut — always visible */}
+        <button onClick={onOpenMealScanner} style={{
+          width:"100%",marginTop:8,
+          padding:"10px 14px",
+          background:"rgba(255,107,53,0.06)",
+          border:"1px solid rgba(255,107,53,0.2)",
+          borderRadius:12,cursor:"pointer",
+          display:"flex",alignItems:"center",gap:10,
+        }}>
+          <span style={{fontSize:18}}>📷</span>
+          <div style={{textAlign:"left",flex:1}}>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"#ff6b35"}}>MEAL SCANNER</div>
+            <div style={{fontSize:10,color:"var(--muted)"}}>Snap a photo to estimate calories & macros</div>
+          </div>
+          <div style={{fontSize:14,color:"#ff6b35"}}>›</div>
+        </button>
       </div>
 
       {/* ── SINGLE COLUMN MEMBER CARDS ── */}
@@ -3967,8 +3983,165 @@ function CoachStatsModal({coach, onSave, onClose}){
   );
 }
 
+// ── MEAL SCANNER MODAL ───────────────────────────────────────────────────────
+function MealScannerModal({onClose}){
+  const [step,setStep]=useState("pick"); // pick | scanning | result | error
+  const [scan,setScan]=useState(null);
+  const [error,setError]=useState(null);
+  const [preview,setPreview]=useState(null);
+  const fileRef=useRef(null);
+
+  const handleFile=async(file)=>{
+    if(!file)return;
+    // Show preview
+    const reader=new FileReader();
+    reader.onload=e=>setPreview(e.target.result);
+    reader.readAsDataURL(file);
+    // Convert to base64
+    const b64reader=new FileReader();
+    b64reader.onload=async(e)=>{
+      const dataUrl=e.target.result;
+      const base64=dataUrl.split(",")[1];
+      const mediaType=file.type||"image/jpeg";
+      setStep("scanning");
+      const result=await aiScanMeal(base64,mediaType);
+      if(result.ok){setScan(result.scan);setStep("result");}
+      else{setError(result.error);setStep("error");}
+    };
+    b64reader.readAsDataURL(file);
+  };
+
+  const confidenceColor={high:"var(--green)",medium:"#EF9F27",low:"var(--red)"};
+  const confidenceLabel={high:"High confidence",medium:"Moderate confidence",low:"Low confidence — complex dish"};
+
+  return(
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()} style={{zIndex:1200}}>
+      <div className="modal" style={{maxHeight:"92dvh",overflowY:"auto"}}>
+        <div className="modal-handle"/>
+
+        {/* Pick */}
+        {step==="pick"&&(
+          <>
+            <div style={{textAlign:"center",marginBottom:16}}>
+              <div style={{fontSize:36,marginBottom:6}}>📷</div>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>MEAL SCANNER</div>
+              <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>Take or upload a photo of your meal to estimate calories & macros</div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
+              <button onClick={()=>fileRef.current&&(fileRef.current.accept="image/*",fileRef.current.capture="environment",fileRef.current.click())} style={{padding:"16px",borderRadius:14,cursor:"pointer",background:"rgba(255,107,53,0.1)",border:"1px solid rgba(255,107,53,0.3)",display:"flex",alignItems:"center",gap:12}}>
+                <span style={{fontSize:28}}>📷</span>
+                <div style={{textAlign:"left"}}>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1.5,color:"#ff6b35"}}>TAKE A PHOTO</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>Use your camera</div>
+                </div>
+              </button>
+              <button onClick={()=>fileRef.current&&(fileRef.current.accept="image/*",fileRef.current.removeAttribute("capture"),fileRef.current.click())} style={{padding:"16px",borderRadius:14,cursor:"pointer",background:"var(--bg3)",border:"1px solid var(--border)",display:"flex",alignItems:"center",gap:12}}>
+                <span style={{fontSize:28}}>🖼️</span>
+                <div style={{textAlign:"left"}}>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:1.5,color:"#fff"}}>UPLOAD PHOTO</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>Choose from library</div>
+                </div>
+              </button>
+            </div>
+            <div style={{padding:"10px 12px",background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:10,fontSize:11,color:"var(--muted)",lineHeight:1.5}}>
+              💡 Tips for better accuracy: include a fork or hand for scale, good lighting, and show the whole plate
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>handleFile(e.target.files[0])}/>
+            <button className="btn-ghost" onClick={onClose} style={{width:"100%",marginTop:12}}>Cancel</button>
+          </>
+        )}
+
+        {/* Scanning */}
+        {step==="scanning"&&(
+          <div style={{textAlign:"center",padding:"40px 20px"}}>
+            {preview&&<img src={preview} alt="meal" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:12,marginBottom:16}}/>}
+            <div style={{fontSize:36,marginBottom:10,animation:"spin 1.5s linear infinite",display:"inline-block"}}>🔍</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2,marginBottom:6}}>ANALYSING YOUR MEAL</div>
+            <div style={{fontSize:12,color:"var(--muted)"}}>Estimating calories and macros...</div>
+            <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+          </div>
+        )}
+
+        {/* Error */}
+        {step==="error"&&(
+          <div style={{textAlign:"center",padding:"30px 20px"}}>
+            <div style={{fontSize:36,marginBottom:10}}>😬</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:2,marginBottom:8}}>COULDN'T SCAN</div>
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14}}>{error}</div>
+            <button className="btn-primary" onClick={()=>setStep("pick")} style={{maxWidth:200,margin:"0 auto"}}>TRY AGAIN</button>
+          </div>
+        )}
+
+        {/* Result */}
+        {step==="result"&&scan&&(
+          <>
+            {preview&&<img src={preview} alt="meal" style={{width:"100%",maxHeight:180,objectFit:"cover",borderRadius:12,marginBottom:12}}/>}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2}}>MEAL ESTIMATE</div>
+              <span style={{fontSize:10,padding:"3px 8px",borderRadius:10,background:"rgba(255,255,255,0.06)",color:confidenceColor[scan.confidence]||"var(--muted)",border:`1px solid ${confidenceColor[scan.confidence]||"var(--border)"}`}}>
+                {confidenceLabel[scan.confidence]||scan.confidence}
+              </span>
+            </div>
+
+            {/* Total calories big display */}
+            <div style={{padding:"14px",background:"linear-gradient(135deg,rgba(255,107,53,0.12),rgba(124,92,191,0.08))",border:"1px solid rgba(255,107,53,0.25)",borderRadius:14,marginBottom:12,textAlign:"center"}}>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:42,color:"#ff6b35",letterSpacing:2,lineHeight:1}}>{scan.totalCalories}</div>
+              <div style={{fontSize:11,color:"var(--muted)",letterSpacing:1}}>ESTIMATED CALORIES</div>
+            </div>
+
+            {/* Macros row */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+              {[{label:"Protein",val:scan.protein,color:"#7F77DD",unit:"g"},{label:"Carbs",val:scan.carbs,color:"#EF9F27",unit:"g"},{label:"Fat",val:scan.fat,color:"#D85A30",unit:"g"}].map(m=>(
+                <div key={m.label} style={{padding:"10px 8px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12,textAlign:"center"}}>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,color:m.color,letterSpacing:1}}>{m.val}{m.unit}</div>
+                  <div style={{fontSize:10,color:"var(--muted)"}}>{m.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Item breakdown */}
+            {scan.items?.length>0&&(
+              <div style={{marginBottom:12}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>BREAKDOWN</div>
+                <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                  {scan.items.map((item,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,color:"#fff",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{item.name}</div>
+                        <div style={{fontSize:10,color:"var(--muted)"}}>{item.portionEstimate}</div>
+                      </div>
+                      <div style={{fontSize:12,color:"#ff6b35",fontFamily:"'Bebas Neue',cursive",letterSpacing:1,flexShrink:0}}>{item.calories} cal</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {scan.note&&(
+              <div style={{padding:"8px 12px",background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:10,fontSize:11,color:"var(--muted)",lineHeight:1.5,marginBottom:12,fontStyle:"italic"}}>
+                💭 {scan.note}
+              </div>
+            )}
+
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.25)",textAlign:"center",marginBottom:12}}>
+              These are estimates only. Actual values may vary based on preparation and exact portions.
+            </div>
+
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn-primary" onClick={()=>{setStep("pick");setScan(null);setPreview(null);}} style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+                📷 SCAN ANOTHER
+              </button>
+              <button className="btn-ghost" onClick={onClose} style={{flex:1}}>Done</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── AI COACH — nutrition plan modal (results) ───────────────────────────────
-function CoachPlanModal({currentUser, profile, coach, onPlanGenerated, onClose}){
+function CoachPlanModal({currentUser, profile, coach, onPlanGenerated, onClose, onOpenScanner}){
   const [step,setStep]=useState(coach.lastPlan?"result":"loading");
   const [plan,setPlan]=useState(coach.lastPlan||null);
   const [error,setError]=useState(null);
@@ -4116,10 +4289,15 @@ function CoachPlanModal({currentUser, profile, coach, onPlanGenerated, onClose})
               ⚠️ Informational only — not medical advice. Consult a healthcare provider before starting any supplement or significant diet change.
             </div>
 
-            <div style={{display:"flex",gap:8}}>
+            <div style={{display:"flex",gap:8,marginBottom:8}}>
               <button className="btn-primary" onClick={generate} style={{flex:1}}>🔄 REGENERATE</button>
               <button className="btn-ghost" onClick={onClose} style={{flex:1}}>CLOSE</button>
             </div>
+            {onOpenScanner&&(
+              <button onClick={onOpenScanner} style={{width:"100%",padding:"10px",borderRadius:12,cursor:"pointer",background:"rgba(255,107,53,0.08)",border:"1px solid rgba(255,107,53,0.2)",color:"#ff6b35",fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1.5}}>
+                📷 SCAN A MEAL
+              </button>
+            )}
           </>
         )}
       </div>
@@ -5700,6 +5878,7 @@ export default function App(){
   const [weeklyRecap,setWeeklyRecap]=useState(null);
   const [aiTrainerOpen,setAiTrainerOpen]=useState(false);
   const [nutritionOpen,setNutritionOpen]=useState(false);
+  const [mealScannerOpen,setMealScannerOpen]=useState(false);
   const [pendingEffortRating,setPendingEffortRating]=useState(null);
   const [activeWorkoutRefresh,setActiveWorkoutRefresh]=useState(0);
   const [toast,setToast]=useState("");
@@ -6221,7 +6400,7 @@ export default function App(){
                 setActiveWorkoutRefresh(r=>r+1);
               }}
             />
-            <PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
+            <PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onOpenMealScanner={()=>setMealScannerOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
           </>
         )}
         {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost} onComment={handleComment} onDeleteComment={handleDeleteComment}/>}
@@ -6264,7 +6443,8 @@ export default function App(){
       </nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
       {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
-      {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)}/>}
+      {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)} onOpenScanner={()=>{setNutritionOpen(false);setMealScannerOpen(true);}}/>}
+      {mealScannerOpen&&<MealScannerModal onClose={()=>setMealScannerOpen(false)}/>}
       {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={async(effortId,logged)=>{
         setPendingEffortRating(null);
         const effort=EFFORT_RATINGS.find(r=>r.id===effortId);

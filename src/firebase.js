@@ -98,3 +98,42 @@ export const aiGenerateNutritionPlan = async (params) => {
     return { ok: false, error: e.message || "Failed to generate nutrition plan." };
   }
 };
+
+export const aiScanMeal = async (base64Image, mediaType="image/jpeg") => {
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "anthropic-version": "2023-06-01"},
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {type: "base64", media_type: mediaType, data: base64Image},
+            },
+            {
+              type: "text",
+              text: `Analyze this meal photo and estimate calories and macros. Be practical and realistic about portion sizes.
+Return ONLY valid JSON, no markdown:
+{"totalCalories":0,"protein":0,"carbs":0,"fat":0,"confidence":"low|medium|high","items":[{"name":"","calories":0,"protein":0,"carbs":0,"fat":0,"portionEstimate":""}],"note":""}
+
+Confidence guide: high=simple identifiable foods, medium=mixed dish or unclear portions, low=very unclear or complex dish.`
+            }
+          ]
+        }]
+      })
+    });
+    if (!response.ok) return {ok: false, error: "API error"};
+    const data = await response.json();
+    const text = data.content[0].text;
+    const cleaned = text.replace(/```json\s*/g,"").replace(/```\s*/g,"").trim();
+    const parsed = JSON.parse(cleaned);
+    return {ok: true, scan: parsed};
+  } catch(e) {
+    return {ok: false, error: e.message||"Failed to scan meal."};
+  }
+};
+
