@@ -2700,7 +2700,7 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditEx
     const entry=d[currentUser];
     const mg=entry.wolfmodeSession?.muscleGroup;
     if(mg){
-      const SPLIT_NORMALIZE={"push":"Chest & Shoulders","pull":"Back","legs":"Legs & Glutes","upper":"Upper Body","lower":"Legs & Glutes","chest":"Chest","back":"Back","shoulders":"Shoulders","arms":"Arms","fullbody":"Full Body"};
+      const SPLIT_NORMALIZE={"push":"Chest & Shoulders","pull":"Back","legs":"Legs & Glutes","upper":"Upper Body","lower":"Legs & Glutes","chest":"Chest","back":"Back","shoulders":"Shoulders","arms":"Arms","fullbody":"Full Body","glutes":"Legs & Glutes","core":"Core","biceps":"Arms","triceps":"Arms","hamstrings":"Legs & Glutes","quads":"Legs & Glutes","calves":"Legs & Glutes","rear delts":"Shoulders","lats":"Back","traps":"Back"};
       const label=AI_MUSCLE_GROUPS?.find(m=>m.id===mg)?.label||SPLIT_NORMALIZE[mg.toLowerCase()]||mg;
       muscleCounts[label]=(muscleCounts[label]||0)+1;
     }
