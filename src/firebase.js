@@ -100,6 +100,7 @@ export const aiGenerateNutritionPlan = async (params) => {
 };
 
 const scanMealFn = httpsCallable(functions, 'scanMeal');
+const recalculateMealFn = httpsCallable(functions, 'recalculateMeal');
 
 export const aiScanMeal = async (base64Image, mediaType="image/jpeg", userName="unknown") => {
   try {
@@ -107,6 +108,15 @@ export const aiScanMeal = async (base64Image, mediaType="image/jpeg", userName="
     return {ok: true, scan: result.data.scan};
   } catch(e) {
     return {ok: false, error: e.message||"Failed to scan meal."};
+  }
+};
+
+export const aiRecalculateMeal = async (userName, items) => {
+  try {
+    const result = await recalculateMealFn({userName, items});
+    return {ok: true, scan: result.data.scan};
+  } catch(e) {
+    return {ok: false, error: e.message||"Failed to recalculate."};
   }
 };
 

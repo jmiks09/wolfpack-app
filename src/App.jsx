@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { fsGet, fsSet, fsDelete, fsListen, requestNotifPermission, onForegroundMessage, aiGenerateWorkout, aiGenerateFormCues, aiGenerateNutritionPlan, aiScanMeal } from "./firebase";
+import { fsGet, fsSet, fsDelete, fsListen, requestNotifPermission, onForegroundMessage, aiGenerateWorkout, aiGenerateFormCues, aiGenerateNutritionPlan, aiScanMeal, aiRecalculateMeal } from "./firebase";
 
 const INVITE_CODE = "WOLF2026";
 const WORKOUT_TYPES = [
@@ -3985,10 +3985,12 @@ function CoachStatsModal({coach, onSave, onClose}){
 
 // ── MEAL SCANNER MODAL ───────────────────────────────────────────────────────
 function MealScannerModal({onClose, currentUser}){
-  const [step,setStep]=useState("pick"); // pick | scanning | result | error
+  const [step,setStep]=useState("pick"); // pick | scanning | recalculating | result | error
   const [scan,setScan]=useState(null);
+  const [editedItems,setEditedItems]=useState([]);
   const [error,setError]=useState(null);
   const [preview,setPreview]=useState(null);
+  const [showEditItems,setShowEditItems]=useState(false);
   const fileRef=useRef(null);
 
   const handleFile=async(file)=>{
@@ -4019,12 +4021,21 @@ function MealScannerModal({onClose, currentUser}){
     try{
       const {base64,mediaType}=await compress();
       const result=await aiScanMeal(base64,mediaType,currentUser);
-      if(result.ok){setScan(result.scan);setStep("result");}
+      if(result.ok){setScan(result.scan);setEditedItems(result.scan.items?.map(i=>({...i,edited:false}))||[]);setStep("result");}
       else{setError(result.error);setStep("error");}
     }catch(e){
       setError("Failed to process image. Try again.");
       setStep("error");
     }
+  };
+
+  const recalculate=async()=>{
+    setStep("recalculating");
+    try{
+      const result=await aiRecalculateMeal(currentUser,editedItems.map(i=>({name:i.name,portionEstimate:i.portionEstimate||"medium serving"})));
+      if(result.ok){setScan(result.scan);setEditedItems(result.scan.items?.map(i=>({...i,edited:false}))||[]);}
+      setStep("result");
+    }catch(e){setStep("result");}
   };
 
   const confidenceColor={high:"var(--green)",medium:"#EF9F27",low:"var(--red)"};
@@ -4088,6 +4099,16 @@ function MealScannerModal({onClose, currentUser}){
           </div>
         )}
 
+        {/* Recalculating */}
+        {step==="recalculating"&&(
+          <div style={{textAlign:"center",padding:"40px 20px"}}>
+            {preview&&<img src={preview} alt="meal" style={{width:"100%",maxHeight:160,objectFit:"cover",borderRadius:12,marginBottom:16}}/>}
+            <div style={{fontSize:36,marginBottom:10,animation:"spin 1.5s linear infinite",display:"inline-block"}}>🔄</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2,marginBottom:6}}>RECALCULATING</div>
+            <div style={{fontSize:12,color:"var(--muted)"}}>Updating calories with your corrections...</div>
+          </div>
+        )}
+
         {/* Result */}
         {step==="result"&&scan&&(
           <>
@@ -4115,21 +4136,56 @@ function MealScannerModal({onClose, currentUser}){
               ))}
             </div>
 
-            {/* Item breakdown */}
-            {scan.items?.length>0&&(
+            {/* Item breakdown — editable */}
+            {editedItems.length>0&&(
               <div style={{marginBottom:12}}>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>BREAKDOWN</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)"}}>BREAKDOWN</div>
+                  <button onClick={()=>setShowEditItems(e=>!e)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                    {showEditItems?"DONE EDITING":"✏️ CORRECT ITEMS"}
+                  </button>
+                </div>
                 <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                  {scan.items.map((item,i)=>(
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,color:"#fff",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{item.name}</div>
-                        <div style={{fontSize:10,color:"var(--muted)"}}>{item.portionEstimate}</div>
+                  {editedItems.map((item,i)=>(
+                    <div key={i} style={{padding:"7px 10px",background:"var(--bg3)",border:`1px solid ${item.edited?"rgba(255,107,53,0.4)":"var(--border)"}`,borderRadius:10}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          {showEditItems?(
+                            <input
+                              className="input"
+                              value={item.name}
+                              onChange={e=>setEditedItems(items=>items.map((it,idx)=>idx===i?{...it,name:e.target.value,edited:true}:it))}
+                              style={{padding:"4px 8px",fontSize:12,width:"100%"}}
+                            />
+                          ):(
+                            <div style={{fontSize:12,color:item.edited?"#ff6b35":"#fff",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                              {item.name}{item.edited&&<span style={{fontSize:9,color:"rgba(255,107,53,0.6)",marginLeft:6,fontFamily:"sans-serif"}}>edited</span>}
+                            </div>
+                          )}
+                          <div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>{item.portionEstimate}</div>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                          <div style={{fontSize:12,color:"#ff6b35",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{item.calories} cal</div>
+                          {showEditItems&&<button onClick={()=>setEditedItems(items=>items.filter((_,idx)=>idx!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:16,padding:"0 2px"}}>×</button>}
+                        </div>
                       </div>
-                      <div style={{fontSize:12,color:"#ff6b35",fontFamily:"'Bebas Neue',cursive",letterSpacing:1,flexShrink:0}}>{item.calories} cal</div>
                     </div>
                   ))}
+                  {showEditItems&&(
+                    <button onClick={()=>setEditedItems(items=>[...items,{name:"",calories:0,protein:0,carbs:0,fat:0,portionEstimate:"medium serving",edited:true}])}
+                      style={{padding:"7px",borderRadius:10,cursor:"pointer",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.1)",color:"var(--muted)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                      + ADD ITEM
+                    </button>
+                  )}
                 </div>
+                {editedItems.some(i=>i.edited)&&!showEditItems&&(
+                  <button onClick={()=>{
+                    setShowEditItems(false);
+                    recalculate();
+                  }} style={{width:"100%",marginTop:8,padding:"10px",borderRadius:10,cursor:"pointer",background:"rgba(46,204,113,0.12)",border:"1px solid rgba(46,204,113,0.3)",color:"var(--green)",fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1.5}}>
+                    🔄 RECALCULATE WITH CORRECTIONS
+                  </button>
+                )}
               </div>
             )}
 
@@ -4144,7 +4200,7 @@ function MealScannerModal({onClose, currentUser}){
             </div>
 
             <div style={{display:"flex",gap:8}}>
-              <button className="btn-primary" onClick={()=>{setStep("pick");setScan(null);setPreview(null);}} style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+              <button className="btn-primary" onClick={()=>{setStep("pick");setScan(null);setPreview(null);setEditedItems([]);setShowEditItems(false);}} style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
                 📷 SCAN ANOTHER
               </button>
               <button className="btn-ghost" onClick={onClose} style={{flex:1}}>Done</button>
