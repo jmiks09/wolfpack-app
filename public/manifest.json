@@ -1,0 +1,25 @@
+{
+  "name": "WOLFPACK",
+  "short_name": "WOLFPACK",
+  "description": "Pack accountability fitness app",
+  "start_url": "/wolfpack-app/",
+  "scope": "/wolfpack-app/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0f",
+  "theme_color": "#ff6b35",
+  "icons": [
+    {
+      "src": "/wolfpack-app/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/wolfpack-app/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
