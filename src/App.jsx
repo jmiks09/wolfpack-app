@@ -3997,18 +3997,34 @@ function MealScannerModal({onClose, currentUser}){
     const reader=new FileReader();
     reader.onload=e=>setPreview(e.target.result);
     reader.readAsDataURL(file);
-    // Convert to base64
-    const b64reader=new FileReader();
-    b64reader.onload=async(e)=>{
-      const dataUrl=e.target.result;
-      const base64=dataUrl.split(",")[1];
-      const mediaType=file.type||"image/jpeg";
-      setStep("scanning");
+    // Compress image before sending — resize to max 800px and reduce quality
+    const compress=()=>new Promise((resolve)=>{
+      const img=new Image();
+      img.onload=()=>{
+        const MAX=800;
+        let w=img.width,h=img.height;
+        if(w>MAX||h>MAX){
+          if(w>h){h=Math.round(h*MAX/w);w=MAX;}
+          else{w=Math.round(w*MAX/h);h=MAX;}
+        }
+        const canvas=document.createElement("canvas");
+        canvas.width=w;canvas.height=h;
+        canvas.getContext("2d").drawImage(img,0,0,w,h);
+        const dataUrl=canvas.toDataURL("image/jpeg",0.7);
+        resolve({base64:dataUrl.split(",")[1],mediaType:"image/jpeg"});
+      };
+      img.src=URL.createObjectURL(file);
+    });
+    setStep("scanning");
+    try{
+      const {base64,mediaType}=await compress();
       const result=await aiScanMeal(base64,mediaType,currentUser);
       if(result.ok){setScan(result.scan);setStep("result");}
       else{setError(result.error);setStep("error");}
-    };
-    b64reader.readAsDataURL(file);
+    }catch(e){
+      setError("Failed to process image. Try again.");
+      setStep("error");
+    }
   };
 
   const confidenceColor={high:"var(--green)",medium:"#EF9F27",low:"var(--red)"};
