@@ -2700,7 +2700,8 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditEx
     const entry=d[currentUser];
     const mg=entry.wolfmodeSession?.muscleGroup;
     if(mg){
-      const label=AI_MUSCLE_GROUPS?.find(m=>m.id===mg)?.label||mg;
+      const SPLIT_NORMALIZE={"push":"Chest & Shoulders","pull":"Back","legs":"Legs & Glutes","upper":"Upper Body","lower":"Legs & Glutes","chest":"Chest","back":"Back","shoulders":"Shoulders","arms":"Arms","fullbody":"Full Body"};
+      const label=AI_MUSCLE_GROUPS?.find(m=>m.id===mg)?.label||SPLIT_NORMALIZE[mg.toLowerCase()]||mg;
       muscleCounts[label]=(muscleCounts[label]||0)+1;
     }
   });
