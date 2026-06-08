@@ -1547,7 +1547,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
             <style>{`@keyframes wolfPulse{0%{box-shadow:0 0 0 0 rgba(255,107,53,0.4)}50%{box-shadow:0 0 0 6px rgba(255,107,53,0)}100%{box-shadow:0 0 0 0 rgba(255,107,53,0)}}`}</style>
             <div style={{fontSize:22,marginBottom:3}}>🔥</div>
             <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1.5,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFMODE</div>
-            <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:1}}>AI Workouts</div>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:1}}>AI Coach</div>
           </button>
 
           {/* NUTRITION */}
