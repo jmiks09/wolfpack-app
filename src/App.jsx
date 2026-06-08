@@ -246,7 +246,7 @@ const EFFORT_RATINGS = [
 ];
 
 // ── WOLFMODE COACH — Training modes ─────────────────────────────────────────
-const DAYS_PER_WEEK_OPTIONS=[2,3,4,5];
+
 // What's New — fallback content if Firestore hasn't been set yet
 const WHATS_NEW_FALLBACK = {
   version:"v19",
@@ -2696,30 +2696,47 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditEx
 
   // Muscle group breakdown (weight training only)
   const muscleCounts={};
-  const SPLIT_NORMALIZE={"push":"Chest & Shoulders","pull":"Back","legs":"Legs & Glutes","upper":"Upper Body","lower":"Legs & Glutes","chest":"Chest","back":"Back","shoulders":"Shoulders","arms":"Arms","fullbody":"Full Body","glutes":"Legs & Glutes","core":"Core","biceps":"Arms","triceps":"Arms","hamstrings":"Legs & Glutes","quads":"Legs & Glutes","calves":"Legs & Glutes","rear delts":"Shoulders","lats":"Back","traps":"Back","legs & glutes":"Legs & Glutes","chest & shoulders":"Chest & Shoulders"};
+  const SPLIT_NORMALIZE={"push":"Chest & Shoulders","pull":"Back","legs":"Legs & Glutes","upper":"Upper Body","lower":"Legs & Glutes","chest":"Chest","back":"Back","shoulders":"Shoulders","arms":"Arms","fullbody":"Full Body","glutes":"Glutes","core":"Core","biceps":"Arms","triceps":"Arms","hamstrings":"Legs & Glutes","quads":"Legs & Glutes","calves":"Legs & Glutes","rear delts":"Shoulders","lats":"Back","traps":"Back","legs & glutes":"Legs & Glutes","chest & shoulders":"Chest & Shoulders"};
   allEntries.forEach(([,d])=>{
     const entry=d[currentUser];
-    // Try wolfmodeSession.muscleGroup first
-    let mg=entry.wolfmodeSession?.muscleGroup;
-    // Fall back to parsing workoutLabel (e.g. "WOLFMODE · Weight Training · Back · 5 exercises")
-    if(!mg&&entry.workoutLabel){
-      const parts=entry.workoutLabel.split("·").map(p=>p.trim());
-      // Find the muscle group part — comes after "Weight Training", must not be a number/duration/exercise count
-      const wtIdx=parts.findIndex(p=>p.toLowerCase().includes("weight training")||p.toLowerCase().includes("wolfmode"));
-      if(wtIdx>=0){
-        // Look for a part that is a muscle group name — not a number, not "X exercises", not "X min"
-        for(let i=wtIdx+1;i<parts.length;i++){
-          const part=parts[i].trim();
-          if(part&&!/^\d/.test(part)&&!part.toLowerCase().includes("min")&&!part.toLowerCase().includes("exercise")){
-            mg=part.toLowerCase();
-            break;
+    let mg=null;
+
+    // 1. wolfmodeSession.muscleGroup (WOLFMODE sessions)
+    if(entry.wolfmodeSession?.muscleGroup){
+      mg=entry.wolfmodeSession.muscleGroup;
+    }
+    // 2. details.lift.muscles (manual log sessions)
+    else if(entry.details?.lift?.muscles?.length){
+      mg=entry.details.lift.muscles[0];
+    }
+    // 3. details.lift.focus (manual log focus field)
+    else if(entry.details?.lift?.focus){
+      mg=entry.details.lift.focus;
+    }
+    // 4. Parse from summary array or workoutLabel
+    else{
+      const labelStr=Array.isArray(entry.summary)?entry.summary[0]:(entry.workoutLabel||"");
+      if(labelStr.toLowerCase().includes("weight training")||labelStr.toLowerCase().includes("wolfmode")){
+        // Handle "Weight Training: glutes · 52 min" format
+        const colonMatch=labelStr.match(/weight training[:\s]+([a-zA-Z\s&]+?)(?:\s*·|\s*\d|$)/i);
+        if(colonMatch)mg=colonMatch[1].trim();
+        // Handle "WOLFMODE · Weight Training · Back · 5 exercises" format
+        else{
+          const parts=labelStr.split(/[·]/).map(p=>p.trim());
+          const wtIdx=parts.findIndex(p=>p.toLowerCase().includes("weight training")||p.toLowerCase().includes("wolfmode"));
+          for(let i=wtIdx+1;i<parts.length;i++){
+            const part=parts[i].trim();
+            if(part&&!/^\d/.test(part)&&!part.toLowerCase().includes("min")&&!part.toLowerCase().includes("exercise")){
+              mg=part;break;
+            }
           }
         }
       }
     }
+
     if(mg){
       const normalized=mg.toLowerCase().trim();
-      const label=AI_MUSCLE_GROUPS?.find(m=>m.id===normalized||m.label?.toLowerCase()===normalized)?.label||SPLIT_NORMALIZE[normalized]||mg;
+      const label=AI_MUSCLE_GROUPS?.find(m=>m.id===normalized||m.label?.toLowerCase()===normalized)?.label||SPLIT_NORMALIZE[normalized]||mg.charAt(0).toUpperCase()+mg.slice(1);
       if(label)muscleCounts[label]=(muscleCounts[label]||0)+1;
     }
   });
