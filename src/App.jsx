@@ -246,7 +246,7 @@ const EFFORT_RATINGS = [
 ];
 
 // ── WOLFMODE COACH — Training modes ─────────────────────────────────────────
-const DAYS_PER_WEEK_OPTIONS=[2,3,4,5];
+
 // What's New — fallback content if Firestore hasn't been set yet
 const WHATS_NEW_FALLBACK = {
   version:"v19",
@@ -2703,11 +2703,18 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditEx
     let mg=entry.wolfmodeSession?.muscleGroup;
     // Fall back to parsing workoutLabel (e.g. "WOLFMODE · Weight Training · Back · 5 exercises")
     if(!mg&&entry.workoutLabel){
-      const parts=entry.workoutLabel.split("·").map(p=>p.trim().toLowerCase());
-      // Find the muscle group part — it comes after "weight training"
-      const wtIdx=parts.findIndex(p=>p.includes("weight training")||p.includes("wolfmode"));
-      if(wtIdx>=0&&parts[wtIdx+1]){
-        mg=parts[wtIdx+1].replace(/\d+ exercises?/,"").trim();
+      const parts=entry.workoutLabel.split("·").map(p=>p.trim());
+      // Find the muscle group part — comes after "Weight Training", must not be a number/duration/exercise count
+      const wtIdx=parts.findIndex(p=>p.toLowerCase().includes("weight training")||p.toLowerCase().includes("wolfmode"));
+      if(wtIdx>=0){
+        // Look for a part that is a muscle group name — not a number, not "X exercises", not "X min"
+        for(let i=wtIdx+1;i<parts.length;i++){
+          const part=parts[i].trim();
+          if(part&&!/^\d/.test(part)&&!part.toLowerCase().includes("min")&&!part.toLowerCase().includes("exercise")){
+            mg=part.toLowerCase();
+            break;
+          }
+        }
       }
     }
     if(mg){
