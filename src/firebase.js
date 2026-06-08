@@ -18,7 +18,7 @@ const firebaseConfig = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── REPLACE WITH YOUR FCM VAPID KEY (from Firebase Console → Cloud Messaging) ─
-export const VAPID_KEY = "YOUR_VAPID_KEY";
+export const VAPID_KEY = "BGiY6669LuWmiersii6p-VKXTyb-WoJZdriU4qGlT5sKsS0a53Ot_T67kKGA00K0BzN4ZjvO895gLGzMFj3lobY";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const app = initializeApp(firebaseConfig);
@@ -46,12 +46,18 @@ export const fsListen = (path, cb) => {
   });
 };
 
-export const requestNotifPermission = async () => {
+export const requestNotifPermission = async (userName) => {
   if (!messaging) return null;
   try {
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return null;
     const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+    if (token && userName) {
+      // Save token to Firestore so Cloud Function can send notifications
+      await setDoc(doc(db, "wolfpack", "fcm_tokens"), {
+        [userName]: { token, updatedAt: Date.now(), platform: "web" }
+      }, { merge: true });
+    }
     return token;
   } catch (e) {
     console.warn("FCM token error:", e);
