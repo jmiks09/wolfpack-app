@@ -1474,115 +1474,106 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
 
   return(
     <div>
-      {/* Quote */}
-      <div style={{padding:"14px 16px 8px"}}>
-        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:3,color:"var(--muted)",marginBottom:5}}>TODAY'S HOWL</div>
-        <div style={{fontSize:14,color:"rgba(255,255,255,0.7)",fontStyle:"italic",lineHeight:1.5}}>"{getQuote()}"</div>
+      {/* ── COMPACT QUOTE ── subtle, not dominating */}
+      <div style={{padding:"10px 16px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontSize:12,color:"rgba(255,255,255,0.3)",fontStyle:"italic",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:8}}>"{getQuote()}"</div>
       </div>
 
+      {/* ── WEEKLY RECAP BANNER — top of screen, easy to see and dismiss ── */}
+      {weeklyRecap&&!weeklyRecap.dismissed&&(
+        <div style={{margin:"0 16px 8px",padding:"12px 14px",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.25)",borderRadius:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--accent2)"}}>📊 LAST WEEK RECAP</div>
+            <button onClick={onDismissRecap} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:18,lineHeight:1,padding:"0 2px"}}>×</button>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {weeklyRecap.stats?.map((s,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <AvatarDisplay profile={profiles[s.name]} size={20}/>
+                  <span style={{fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:100}}>{s.name}</span>
+                </div>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  <span style={{fontSize:11,color:"var(--muted)"}}>{s.days} days</span>
+                  <span style={{fontSize:11,color:s.days>=5?"var(--green)":s.days>=3?"var(--orange)":"var(--red)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
+                    {s.days>=5?"🔥 Crushed it":s.days>=3?"💪 Solid":s.days>0?"📈 Keep going":"😴 Rest week"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* Log workout / rest day */}
-      <div style={{padding:"10px 16px 4px"}}>
+      {/* ── LOG WORKOUT / REST DAY ── */}
+      <div style={{padding:"4px 16px 8px"}}>
         {we?(
-          <div style={{padding:"12px 16px",background:"var(--bg3)",borderRadius:14,textAlign:"center"}}><div style={{fontSize:24,marginBottom:4}}>😴</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)"}}>REST DAY — YOU EARNED IT</div></div>
+          <div style={{padding:"12px 16px",background:"var(--bg3)",borderRadius:14,textAlign:"center"}}>
+            <div style={{fontSize:22,marginBottom:4}}>😴</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)"}}>REST DAY — YOU EARNED IT</div>
+          </div>
         ):!my?.done?(
-          <button className="btn-primary" onClick={onLogWorkout}>🐺 LOG TODAY'S WORKOUT</button>
+          <button className="btn-primary" onClick={onLogWorkout} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>🐺 LOG TODAY'S WORKOUT</button>
         ):(
-          <div style={{background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.3)",borderRadius:16,padding:"14px 16px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{flex:1}}>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--accent2)",marginBottom:4}}>✓ LOGGED · {my.time}</div>
+          <div style={{background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.25)",borderRadius:16,padding:"12px 14px"}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--green)",marginBottom:3}}>✓ LOGGED · {my.time}</div>
                 {Array.isArray(my.summary)
-                  ?my.summary.map((line,i)=><div key={i} style={{fontSize:13,color:"var(--green)",lineHeight:1.6}}>{line}</div>)
-                  :<div style={{fontSize:13,color:"var(--green)"}}>{my.workoutLabel}</div>
+                  ?my.summary.map((line,i)=><div key={i} style={{fontSize:12,color:"rgba(255,255,255,0.8)",lineHeight:1.5}}>{line}</div>)
+                  :<div style={{fontSize:12,color:"rgba(255,255,255,0.8)"}}>{my.workoutLabel}</div>
                 }
-                {my.note&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>"{my.note}"</div>}
+                {my.note&&<div style={{fontSize:11,color:"var(--muted)",marginTop:3,fontStyle:"italic"}}>"{my.note}"</div>}
               </div>
             </div>
-            <div style={{display:"flex",gap:8,marginTop:10}}>
-              <button className="btn-ghost" onClick={onLogWorkout} style={{flex:1,fontSize:12}}>+ Log Another</button>
-              <button onClick={onEditWorkout} style={{padding:"8px 14px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,cursor:"pointer",color:"var(--muted)",fontSize:12}}>✏️ Edit</button>
+            <div style={{display:"flex",gap:8,marginTop:8}}>
+              <button className="btn-ghost" onClick={onLogWorkout} style={{flex:1,fontSize:11,padding:"6px 0"}}>+ Log Another</button>
+              <button onClick={onEditWorkout} style={{padding:"6px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--muted)",fontSize:11}}>✏️ Edit</button>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── WOLFMODE BUTTON ── */}
-      <div style={{padding:"6px 16px 0"}}>
-        <style>{`
-          @keyframes wolfPulse {
-            0%   { box-shadow: 0 0 0 0 rgba(255,107,53,0.5), 0 0 12px rgba(124,92,191,0.4); }
-            50%  { box-shadow: 0 0 0 8px rgba(255,107,53,0), 0 0 24px rgba(255,107,53,0.3); }
-            100% { box-shadow: 0 0 0 0 rgba(255,107,53,0), 0 0 12px rgba(124,92,191,0.4); }
-          }
-        `}</style>
-        <button onClick={onOpenAITrainer} style={{
-          width:"100%",
-          padding:"14px 16px",
-          background:"linear-gradient(135deg, rgba(255,107,53,0.18), rgba(124,92,191,0.2))",
-          border:"1px solid rgba(255,107,53,0.5)",
-          borderRadius:16,
-          cursor:"pointer",
-          display:"flex",alignItems:"center",gap:12,
-          animation:"wolfPulse 2.5s ease-in-out infinite",
-        }}>
-          <div style={{
-            width:42,height:42,borderRadius:12,
-            background:"linear-gradient(135deg, rgba(255,107,53,0.3), rgba(124,92,191,0.3))",
-            display:"flex",alignItems:"center",justifyContent:"center",
-            fontSize:22,flexShrink:0,
-          }}>🔥</div>
-          <div style={{textAlign:"left",flex:1}}>
-            <div style={{
-              fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,
-              background:"linear-gradient(90deg, #ff6b35, #c084fc)",
-              WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
-              lineHeight:1.1,
-            }}>WOLFMODE</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:1}}>Train Smarter · AI-Powered Workouts</div>
-          </div>
-          <div style={{fontSize:18,color:"rgba(255,107,53,0.7)"}}>›</div>
-        </button>
-
-        {/* Nutrition shortcut — only shows if user has enabled the coach */}
-        {profiles[currentUser]?.aiTrainer?.coach?.enabled&&profiles[currentUser]?.aiTrainer?.coach?.stats&&(
-          <button onClick={onOpenNutrition} style={{
-            width:"100%",marginTop:8,
-            padding:"10px 14px",
-            background:"rgba(46,204,113,0.06)",
-            border:"1px solid rgba(46,204,113,0.25)",
-            borderRadius:12,
-            cursor:"pointer",
-            display:"flex",alignItems:"center",gap:10,
+      {/* ── AI TOOLS ROW — compact icon buttons ── */}
+      <div style={{padding:"0 16px 10px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+          {/* WOLFMODE */}
+          <button onClick={onOpenAITrainer} style={{
+            padding:"10px 8px",borderRadius:14,cursor:"pointer",textAlign:"center",
+            background:"linear-gradient(135deg,rgba(255,107,53,0.18),rgba(124,92,191,0.2))",
+            border:"1px solid rgba(255,107,53,0.4)",
+            position:"relative",overflow:"hidden",
           }}>
-            <span style={{fontSize:18}}>🥩</span>
-            <div style={{textAlign:"left",flex:1}}>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--green)"}}>NUTRITION & SUPPS</div>
-              <div style={{fontSize:10,color:"var(--muted)"}}>
-                {profiles[currentUser]?.aiTrainer?.coach?.lastPlan
-                  ? `Last plan: ${new Date(profiles[currentUser].aiTrainer.coach.lastPlan.generatedAt).toLocaleDateString()}`
-                  : "Tap to generate your plan"}
-              </div>
-            </div>
-            <div style={{fontSize:14,color:"var(--green)"}}>›</div>
+            <style>{`@keyframes wolfPulse{0%{box-shadow:0 0 0 0 rgba(255,107,53,0.4)}50%{box-shadow:0 0 0 6px rgba(255,107,53,0)}100%{box-shadow:0 0 0 0 rgba(255,107,53,0)}}`}</style>
+            <div style={{fontSize:22,marginBottom:3}}>🔥</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1.5,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFMODE</div>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:1}}>AI Workouts</div>
           </button>
-        )}
-        {/* Meal Scanner shortcut — always visible */}
-        <button onClick={onOpenMealScanner} style={{
-          width:"100%",marginTop:8,
-          padding:"10px 14px",
-          background:"rgba(255,107,53,0.06)",
-          border:"1px solid rgba(255,107,53,0.2)",
-          borderRadius:12,cursor:"pointer",
-          display:"flex",alignItems:"center",gap:10,
-        }}>
-          <span style={{fontSize:18}}>📷</span>
-          <div style={{textAlign:"left",flex:1}}>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"#ff6b35"}}>MEAL SCANNER</div>
-            <div style={{fontSize:10,color:"var(--muted)"}}>Snap a photo to estimate calories & macros</div>
-          </div>
-          <div style={{fontSize:14,color:"#ff6b35"}}>›</div>
-        </button>
+
+          {/* NUTRITION */}
+          <button onClick={onOpenNutrition} style={{
+            padding:"10px 8px",borderRadius:14,cursor:"pointer",textAlign:"center",
+            background:"rgba(46,204,113,0.08)",
+            border:"1px solid rgba(46,204,113,0.2)",
+          }}>
+            <div style={{fontSize:22,marginBottom:3}}>🥩</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1.5,color:"var(--green)"}}>NUTRITION</div>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:1}}>
+              {profiles[currentUser]?.aiTrainer?.coach?.lastPlan?"Plan ready":"Get your plan"}
+            </div>
+          </button>
+
+          {/* MEAL SCANNER */}
+          <button onClick={onOpenMealScanner} style={{
+            padding:"10px 8px",borderRadius:14,cursor:"pointer",textAlign:"center",
+            background:"rgba(255,107,53,0.06)",
+            border:"1px solid rgba(255,107,53,0.15)",
+          }}>
+            <div style={{fontSize:22,marginBottom:3}}>📷</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1.5,color:"#ff6b35"}}>MEAL SCAN</div>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:1}}>Snap & estimate</div>
+          </button>
+        </div>
       </div>
 
       {/* ── SINGLE COLUMN MEMBER CARDS ── */}
@@ -1608,30 +1599,6 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
           );
         })}
       </div>
-
-      {/* Weekly recap dismissible card */}
-      {weeklyRecap&&!weeklyRecap.dismissed&&(
-        <div style={{margin:"0 16px 12px",padding:"14px 16px",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.3)",borderRadius:16}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--accent2)"}}>📊 LAST WEEK RECAP</div>
-            <button onClick={onDismissRecap} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:18,lineHeight:1}}>×</button>
-          </div>
-          {weeklyRecap.stats?.map((s,i)=>(
-            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <AvatarDisplay profile={profiles[s.name]} size={24}/>
-                <span style={{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:100}}>{s.name}</span>
-              </div>
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <span style={{fontSize:12,color:"var(--muted)"}}>{s.days} days</span>
-                <span style={{fontSize:12,color:s.days>=5?"var(--green)":s.days>=3?"var(--orange)":"var(--red)",fontWeight:700}}>
-                  {s.days>=5?"🔥 Crushed it":s.days>=3?"💪 Solid":s.days>0?"📈 Keep going":"😴 Rest week"}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Pack Goals — includes personal goals from profiles */}
       <PackGoals currentUser={currentUser} packGoals={packGoals} profiles={profiles} members={members} onAddGoal={onAddGoal} onCheer={onCheer} onDeleteGoal={onDeleteGoal}/>
