@@ -1547,7 +1547,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
             <style>{`@keyframes wolfPulse{0%{box-shadow:0 0 0 0 rgba(255,107,53,0.4)}50%{box-shadow:0 0 0 6px rgba(255,107,53,0)}100%{box-shadow:0 0 0 0 rgba(255,107,53,0)}}`}</style>
             <div style={{fontSize:22,marginBottom:3}}>🔥</div>
             <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1.5,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFMODE</div>
-            <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:1}}>AI Coach</div>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:1}}>AI Workouts</div>
           </button>
 
           {/* NUTRITION */}
@@ -2160,11 +2160,33 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
   const payments=c.payments||{}; // {memberName: [{amount, method, date, ts}]}
   const isAdmin=currentUser===adminName||currentUser===c.createdBy;
 
-  // Total earned (all missed workouts regardless of payments) = prize pot
+  // Total earned (all missed workouts regardless of payments) = total pot
   const grandTotal=acceptedParts.reduce((sum,m)=>{
     const p=penalties[m]||{};
     return sum+(p.forfeited?c.forfeitCap||0:p.totalOwed||0);
   },0);
+
+  // Eligible pot for current user — only penalties accrued AFTER they joined
+  const myJoinDate=c.participants[currentUser]?.acceptedAt||c.startDate;
+  const myEligiblePot=acceptedParts.filter(m=>m!==currentUser).reduce((sum,m)=>{
+    const pData=c.participants[m];
+    const theirJoinDate=pData?.acceptedAt||c.startDate;
+    // Only count penalties from the LATER of the two join dates
+    const overlapStart=myJoinDate>theirJoinDate?myJoinDate:theirJoinDate;
+    const cap=todayStr()<c.endDate?todayStr():c.endDate;
+    if(overlapStart>cap)return sum;
+    // Count their missed days from overlapStart onwards
+    const overlapDays=getDateRange(overlapStart,cap);
+    const profile=profiles?.[m];
+    let overlapOwed=0;
+    overlapDays.forEach(d=>{
+      if(!history[d]?.[m]?.done&&!isRestDay(d,profile))overlapOwed+=c.penaltyAmt;
+    });
+    if(c.forfeitCap&&overlapOwed>c.forfeitCap)overlapOwed=c.forfeitCap;
+    return sum+overlapOwed;
+  },0);
+
+  const joinedLate=myJoinDate>c.startDate;
 
   // How much each person has paid
   const paidAmount=m=>(payments[m]||[]).reduce((s,p)=>s+p.amount,0);
@@ -2210,8 +2232,24 @@ function PenaltyTracker({challenge:c,history,profiles,currentUser,adminName,onMa
           <span>💸</span>
           <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:2,color:"var(--muted)"}}>PENALTY TRACKER — ${c.penaltyAmt}/MISS</span>
         </div>
-        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:"var(--gold)"}}>🏆 POT: ${grandTotal}</div>
+        <div style={{textAlign:"right"}}>
+          {joinedLate?(
+            <div>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:"var(--gold)"}}>🏆 YOUR POT: ${myEligiblePot}</div>
+              <div style={{fontSize:9,color:"var(--muted)"}}>Total pot: ${grandTotal} (joined late)</div>
+            </div>
+          ):(
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1,color:"var(--gold)"}}>🏆 POT: ${grandTotal}</div>
+          )}
+        </div>
       </div>
+
+      {/* Late joiner notice */}
+      {joinedLate&&(
+        <div style={{padding:"8px 12px",background:"rgba(255,165,0,0.06)",borderBottom:"1px solid rgba(255,165,0,0.15)",fontSize:11,color:"rgba(255,165,0,0.8)",lineHeight:1.5}}>
+          ⚡ You joined on {new Date(myJoinDate).toLocaleDateString("en-US",{month:"short",day:"numeric"})}. You can only win penalties accrued after your join date (${myEligiblePot} so far). The ${grandTotal-myEligiblePot} earned before you joined goes to original members.
+        </div>
+      )}
 
       {/* Column headers */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 70px 60px",padding:"5px 12px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
