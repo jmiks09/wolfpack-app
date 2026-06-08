@@ -3984,7 +3984,7 @@ function CoachStatsModal({coach, onSave, onClose}){
 }
 
 // ── MEAL SCANNER MODAL ───────────────────────────────────────────────────────
-function MealScannerModal({onClose}){
+function MealScannerModal({onClose, currentUser}){
   const [step,setStep]=useState("pick"); // pick | scanning | result | error
   const [scan,setScan]=useState(null);
   const [error,setError]=useState(null);
@@ -4004,7 +4004,7 @@ function MealScannerModal({onClose}){
       const base64=dataUrl.split(",")[1];
       const mediaType=file.type||"image/jpeg";
       setStep("scanning");
-      const result=await aiScanMeal(base64,mediaType);
+      const result=await aiScanMeal(base64,mediaType,currentUser);
       if(result.ok){setScan(result.scan);setStep("result");}
       else{setError(result.error);setStep("error");}
     };
@@ -6444,7 +6444,7 @@ export default function App(){
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
       {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onClose={()=>setNutritionOpen(false)} onOpenScanner={()=>{setNutritionOpen(false);setMealScannerOpen(true);}}/>}
-      {mealScannerOpen&&<MealScannerModal onClose={()=>setMealScannerOpen(false)}/>}
+      {mealScannerOpen&&<MealScannerModal currentUser={currentUser} onClose={()=>setMealScannerOpen(false)}/>}
       {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={async(effortId,logged)=>{
         setPendingEffortRating(null);
         const effort=EFFORT_RATINGS.find(r=>r.id===effortId);
