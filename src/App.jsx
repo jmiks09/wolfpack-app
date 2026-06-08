@@ -246,7 +246,7 @@ const EFFORT_RATINGS = [
 ];
 
 // ── WOLFMODE COACH — Training modes ─────────────────────────────────────────
-const DAYS_PER_WEEK_OPTIONS=[2,3,4,5];
+
 // What's New — fallback content if Firestore hasn't been set yet
 const WHATS_NEW_FALLBACK = {
   version:"v19",
@@ -2696,13 +2696,24 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditEx
 
   // Muscle group breakdown (weight training only)
   const muscleCounts={};
+  const SPLIT_NORMALIZE={"push":"Chest & Shoulders","pull":"Back","legs":"Legs & Glutes","upper":"Upper Body","lower":"Legs & Glutes","chest":"Chest","back":"Back","shoulders":"Shoulders","arms":"Arms","fullbody":"Full Body","glutes":"Legs & Glutes","core":"Core","biceps":"Arms","triceps":"Arms","hamstrings":"Legs & Glutes","quads":"Legs & Glutes","calves":"Legs & Glutes","rear delts":"Shoulders","lats":"Back","traps":"Back","legs & glutes":"Legs & Glutes","chest & shoulders":"Chest & Shoulders"};
   allEntries.forEach(([,d])=>{
     const entry=d[currentUser];
-    const mg=entry.wolfmodeSession?.muscleGroup;
+    // Try wolfmodeSession.muscleGroup first
+    let mg=entry.wolfmodeSession?.muscleGroup;
+    // Fall back to parsing workoutLabel (e.g. "WOLFMODE · Weight Training · Back · 5 exercises")
+    if(!mg&&entry.workoutLabel){
+      const parts=entry.workoutLabel.split("·").map(p=>p.trim().toLowerCase());
+      // Find the muscle group part — it comes after "weight training"
+      const wtIdx=parts.findIndex(p=>p.includes("weight training")||p.includes("wolfmode"));
+      if(wtIdx>=0&&parts[wtIdx+1]){
+        mg=parts[wtIdx+1].replace(/\d+ exercises?/,"").trim();
+      }
+    }
     if(mg){
-      const SPLIT_NORMALIZE={"push":"Chest & Shoulders","pull":"Back","legs":"Legs & Glutes","upper":"Upper Body","lower":"Legs & Glutes","chest":"Chest","back":"Back","shoulders":"Shoulders","arms":"Arms","fullbody":"Full Body","glutes":"Legs & Glutes","core":"Core","biceps":"Arms","triceps":"Arms","hamstrings":"Legs & Glutes","quads":"Legs & Glutes","calves":"Legs & Glutes","rear delts":"Shoulders","lats":"Back","traps":"Back"};
-      const label=AI_MUSCLE_GROUPS?.find(m=>m.id===mg)?.label||SPLIT_NORMALIZE[mg.toLowerCase()]||mg;
-      muscleCounts[label]=(muscleCounts[label]||0)+1;
+      const normalized=mg.toLowerCase().trim();
+      const label=AI_MUSCLE_GROUPS?.find(m=>m.id===normalized||m.label?.toLowerCase()===normalized)?.label||SPLIT_NORMALIZE[normalized]||mg;
+      if(label)muscleCounts[label]=(muscleCounts[label]||0)+1;
     }
   });
   const muscleTotal=Object.values(muscleCounts).reduce((a,b)=>a+b,0)||1;
@@ -6246,7 +6257,7 @@ export default function App(){
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {editCompletedWorkout&&<EditCompletedWorkoutModal date={editCompletedWorkout.date} entry={editCompletedWorkout.entry} currentUser={currentUser} onSave={handleSaveEditedExercises} onClose={()=>setEditCompletedWorkout(null)}/>}
       {whatsNewOpen&&<WhatsNewModal onClose={dismissWhatsNew} whatsNewData={whatsNewData||WHATS_NEW_FALLBACK}/>}
-      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={async np=>{await fsSet("wolfpack/profiles",{users:np});setProfiles(np);}} onSaveBackfill={handleSaveBackfill}/>}
+      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
       {adminOpen&&<AdminPanel members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet("wolfpack/settings",{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
     </div>
   );
