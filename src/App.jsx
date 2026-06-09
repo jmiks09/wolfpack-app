@@ -6532,7 +6532,7 @@ export default function App(){
     );
   })();
 
-  if(screen==="loading")return<div className="loading-screen"><div className="loading-wolf"><WolfIcon size={80}/></div>><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:32,letterSpacing:6,background:"linear-gradient(135deg,#fff,#9b7de0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFPACK</div><div style={{color:"var(--muted)",fontSize:13}}>Loading the pack...</div></div>;
+  if(screen==="loading")return<div className="loading-screen"><div className="loading-wolf"><img src="/wolfpack-app/wolf-icon.png" alt="wolf" style={{width:80,height:80,objectFit:"contain"}}/></div>><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:32,letterSpacing:6,background:"linear-gradient(135deg,#fff,#9b7de0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFPACK</div><div style={{color:"var(--muted)",fontSize:13}}>Loading the pack...</div></div>;
   if(screen==="onboard")return<Onboarding onJoin={handleJoin}/>;
   if(screen==="login")return<Login members={members} profiles={profiles} onLogin={handleLogin} adminName={adminName}/>;
 
