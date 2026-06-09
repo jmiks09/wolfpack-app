@@ -5089,7 +5089,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, userFavorit
                       style={{flex:1,padding:"9px",borderRadius:10,cursor:"pointer",background:"rgba(46,204,113,0.15)",border:"1px solid rgba(46,204,113,0.3)",color:"var(--green)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
                       🔄 REPEAT + PROGRESS
                     </button>
-                    <button onClick={()=>{setRepeatMode(false);}}
+                    <button onClick={()=>{setRepeatMode(false);generate(false,false);}}
                       style={{flex:1,padding:"9px",borderRadius:10,cursor:"pointer",background:!repeatMode?"rgba(255,107,53,0.15)":"rgba(255,255,255,0.04)",border:!repeatMode?"1px solid rgba(255,107,53,0.4)":"1px solid var(--border)",color:!repeatMode?"#ff6b35":"var(--muted)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
                       ✨ NEW WORKOUT
                     </button>
