@@ -89,7 +89,8 @@ export const aiGenerateWorkout = async (params) => {
     const result = await generateWorkoutFn(params);
     return { ok: true, ...result.data };
   } catch (e) {
-    return { ok: false, error: e.message || "Failed to generate workout." };
+    const msg = e?.details || e?.message || "Failed to generate workout.";
+    return { ok: false, error: msg };
   }
 };
 
