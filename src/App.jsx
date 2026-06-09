@@ -246,6 +246,18 @@ const EFFORT_RATINGS = [
 ];
 
 // ── WOLFMODE COACH — Training modes ─────────────────────────────────────────
+// ── WOLF ICON — reusable branded icon replaces 🐺 emoji ─────────────────────
+const WOLF_ICON_SRC = "/wolfpack-app/wolf-icon.png";
+function WolfIcon({size=20, style={}}){
+  return(
+    <img
+      src={WOLF_ICON_SRC}
+      alt="🐺"
+      style={{width:size,height:size,objectFit:"contain",display:"inline-block",verticalAlign:"middle",...style}}
+    />
+  );
+}
+
 const DAYS_PER_WEEK_OPTIONS=[2,3,4,5];
 // What's New — fallback content if Firestore hasn't been set yet
 const WHATS_NEW_FALLBACK = {
@@ -266,7 +278,7 @@ function WhatsNewModal({onClose, whatsNewData}){
       <div className="modal" style={{maxHeight:"88dvh",overflowY:"auto"}}>
         <div className="modal-handle"/>
         <div style={{textAlign:"center",marginBottom:16}}>
-          <div style={{fontSize:32,marginBottom:6}}>🐺</div>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:6}}><WolfIcon size={48}/></div>
           <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WHAT'S NEW</div>
           <div style={{fontSize:11,color:"var(--muted)",marginTop:2,letterSpacing:1}}>LATEST WOLFPACK UPDATES</div>
         </div>
@@ -282,7 +294,7 @@ function WhatsNewModal({onClose, whatsNewData}){
           ))}
         </div>
         <button className="btn-primary" onClick={onClose} style={{width:"100%",background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
-          GOT IT 🐺
+          GOT IT <WolfIcon size={16} style={{marginLeft:4}}/>
         </button>
       </div>
     </div>
@@ -311,7 +323,7 @@ const AI_GENDERS = [
   {id:"na",     label:"Prefer not to say"},
 ];
 
-const NAV=[{id:"pack",icon:"🐺",label:"PACK"},{id:"feed",icon:"💬",label:"FEED"},{id:"gym",icon:"🏋️",label:"GYM"},{id:"challenges",icon:"⚔️",label:"CHALLENGES"},{id:"stats",icon:"📊",label:"STATS"}];
+const NAV=[{id:"pack",icon:null,label:"PACK"},{id:"feed",icon:"💬",label:"FEED"},{id:"gym",icon:"🏋️",label:"GYM"},{id:"challenges",icon:"⚔️",label:"CHALLENGES"},{id:"stats",icon:"📊",label:"STATS"}];
 
 const todayStr=()=>{
   const d=new Date();
@@ -666,7 +678,7 @@ function Onboarding({onJoin}){
 
   return(
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",minHeight:"100dvh",padding:"36px 24px 100px",gap:16,overflowY:"auto",WebkitOverflowScrolling:"touch",background:"var(--bg)"}}>
-      <div style={{fontSize:64}}>🐺</div>
+      <div style={{fontSize:64,display:"flex",justifyContent:"center"}}><WolfIcon size={80}/></div>
       <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:38,letterSpacing:6,background:"linear-gradient(135deg,#fff,#9b7de0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFPACK</div>
       <div style={{color:"var(--muted)",fontSize:14,marginTop:-8}}>fitness accountability</div>
 
@@ -711,7 +723,7 @@ function Onboarding({onJoin}){
         <input className="input" type="password" inputMode="numeric" placeholder="4-digit PIN" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} autoFocus style={{letterSpacing:10,textAlign:"center",fontSize:24}}/>
         <input className="input" type="password" inputMode="numeric" placeholder="Confirm PIN" value={pin2} onChange={e=>setPin2(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} onKeyDown={e=>e.key==="Enter"&&handlePin()} style={{letterSpacing:10,textAlign:"center",fontSize:24}}/>
         {error&&<div style={{color:"var(--red)",fontSize:13}}>{error}</div>}
-        <button className="btn-primary" onClick={handlePin} disabled={loading}>{loading?"JOINING...":"JOIN THE PACK 🐺"}</button>
+        <button className="btn-primary" onClick={handlePin} disabled={loading}>{loading?"JOINING...":<span style={{display:"flex",alignItems:"center",gap:8}}><WolfIcon size={18}/>JOIN THE PACK</span>}</button>
       </div>}
     </div>
   );
@@ -732,7 +744,7 @@ function Login({members,profiles,onLogin,adminName}){
   };
   return(
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100dvh",padding:"32px 24px",gap:16,background:"var(--bg)"}}>
-      <div style={{fontSize:56}}>🐺</div>
+      <div style={{fontSize:56,display:"flex",justifyContent:"center"}}><WolfIcon size={72}/></div>
       <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:34,letterSpacing:5,background:"linear-gradient(135deg,#fff,#9b7de0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFPACK</div>
       {!sel?(
         <div style={{width:"100%",display:"flex",flexDirection:"column",gap:8,marginTop:8}}>
@@ -756,7 +768,7 @@ function Login({members,profiles,onLogin,adminName}){
           </div>
           <input className="input" type="password" inputMode="numeric" placeholder="Enter PIN..." value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))} autoFocus maxLength={4} onKeyDown={e=>e.key==="Enter"&&go()} style={{letterSpacing:10,textAlign:"center",fontSize:24}}/>
           {err&&<div style={{color:"var(--red)",fontSize:13}}>{err}</div>}
-          <button className="btn-primary" onClick={go} disabled={loading}>{loading?"...":"LET ME IN 🐺"}</button>
+          <button className="btn-primary" onClick={go} disabled={loading}>{loading?"...":<span style={{display:"flex",alignItems:"center",gap:8}}><WolfIcon size={18}/>LET ME IN</span>}</button>
           <button className="btn-ghost" style={{width:"100%"}} onClick={()=>{setSel(null);setPin("");setErr("");}}>← Back</button>
         </div>
       )}
@@ -1528,7 +1540,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
             <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)"}}>REST DAY — YOU EARNED IT</div>
           </div>
         ):!my?.done?(
-          <button className="btn-primary" onClick={onLogWorkout} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>🐺 LOG TODAY'S WORKOUT</button>
+          <button className="btn-primary" onClick={onLogWorkout} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><WolfIcon size={18}/>LOG TODAY'S WORKOUT</button>
         ):(
           <div style={{background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.25)",borderRadius:16,padding:"12px 14px"}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
@@ -1738,7 +1750,7 @@ function FeedTab({currentUser,profiles,feed,onPost,onLike,onDelete,onComment,onD
       </div>
       {feed.length===0&&(
         <div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}>
-          <div style={{fontSize:40,marginBottom:12}}>🐺</div>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><WolfIcon size={48}/></div>
           <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2}}>THE FEED IS EMPTY</div>
         </div>
       )}
@@ -5707,7 +5719,7 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
               fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,
               color:"var(--green)",
             }}>
-              ✓ CRUSHED IT TODAY 🐺
+              ✓ CRUSHED IT TODAY
             </div>
           )}
           {!isToday&&(
@@ -6529,7 +6541,7 @@ export default function App(){
       <canvas id="confetti-canvas"/>
       <Toast msg={toast}/>
       <div className="header">
-        <div><div className="header-title">WOLFPACK</div><div style={{fontSize:11,color:"var(--muted)",letterSpacing:1}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div></div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}><WolfIcon size={28}/><div><div className="header-title">WOLFPACK</div><div style={{fontSize:11,color:"var(--muted)",letterSpacing:1}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div></div></div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           {currentUser===adminName&&(
             <button onClick={()=>setAdminOpen(true)} style={{background:"none",border:"1px solid var(--border)",borderRadius:10,padding:"6px 8px",cursor:"pointer",color:"var(--muted)",fontSize:16,lineHeight:1}}>⚙️</button>
@@ -6616,7 +6628,10 @@ export default function App(){
               }}
               style={{position:"relative"}}>
               <span className="icon" style={{position:"relative",display:"inline-block"}}>
-                {n.icon}
+                {n.id==="pack"
+                  ? <WolfIcon size={22} style={{opacity:view==="pack"?1:0.5}}/>
+                  : n.icon
+                }
                 {hasDot&&view!==n.id&&(
                   <span style={{position:"absolute",top:-2,right:-4,width:8,height:8,borderRadius:"50%",background:"var(--red)",border:"2px solid var(--bg)"}}/>
                 )}
