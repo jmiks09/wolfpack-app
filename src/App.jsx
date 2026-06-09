@@ -1540,7 +1540,7 @@ function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,o
             <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)"}}>REST DAY — YOU EARNED IT</div>
           </div>
         ):!my?.done?(
-          <button className="btn-primary" onClick={onLogWorkout} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><WolfIcon size={18}/>LOG TODAY'S WORKOUT</button>
+          <button className="btn-primary" onClick={onLogWorkout} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>LOG TODAY'S WORKOUT</button>
         ):(
           <div style={{background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.25)",borderRadius:16,padding:"12px 14px"}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
