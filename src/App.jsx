@@ -6541,7 +6541,7 @@ export default function App(){
       <canvas id="confetti-canvas"/>
       <Toast msg={toast}/>
       <div className="header">
-        <div style={{display:"flex",alignItems:"center",gap:8}}><WolfIcon size={28}/><div><div className="header-title">WOLFPACK</div><div style={{fontSize:11,color:"var(--muted)",letterSpacing:1}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div></div></div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}><WolfIcon size={38}/><div><div className="header-title">WOLFPACK</div><div style={{fontSize:11,color:"var(--muted)",letterSpacing:1}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div></div></div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           {currentUser===adminName&&(
             <button onClick={()=>setAdminOpen(true)} style={{background:"none",border:"1px solid var(--border)",borderRadius:10,padding:"6px 8px",cursor:"pointer",color:"var(--muted)",fontSize:16,lineHeight:1}}>⚙️</button>
@@ -6629,7 +6629,7 @@ export default function App(){
               style={{position:"relative"}}>
               <span className="icon" style={{position:"relative",display:"inline-block"}}>
                 {n.id==="pack"
-                  ? <WolfIcon size={22} style={{opacity:view==="pack"?1:0.5}}/>
+                  ? <WolfIcon size={26} style={{opacity:view==="pack"?1:0.5}}/>
                   : n.icon
                 }
                 {hasDot&&view!==n.id&&(
