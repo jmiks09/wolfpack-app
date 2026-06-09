@@ -723,7 +723,7 @@ function Onboarding({onJoin}){
         <input className="input" type="password" inputMode="numeric" placeholder="4-digit PIN" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} autoFocus style={{letterSpacing:10,textAlign:"center",fontSize:24}}/>
         <input className="input" type="password" inputMode="numeric" placeholder="Confirm PIN" value={pin2} onChange={e=>setPin2(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} onKeyDown={e=>e.key==="Enter"&&handlePin()} style={{letterSpacing:10,textAlign:"center",fontSize:24}}/>
         {error&&<div style={{color:"var(--red)",fontSize:13}}>{error}</div>}
-        <button className="btn-primary" onClick={handlePin} disabled={loading}>{loading?"JOINING...":<span style={{display:"flex",alignItems:"center",gap:8}}><WolfIcon size={18}/>JOIN THE PACK</span>}</button>
+        <button className="btn-primary" onClick={handlePin} disabled={loading}>{loading?"JOINING...":<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><WolfIcon size={18}/>JOIN THE PACK</span>}</button>
       </div>}
     </div>
   );
@@ -768,7 +768,7 @@ function Login({members,profiles,onLogin,adminName}){
           </div>
           <input className="input" type="password" inputMode="numeric" placeholder="Enter PIN..." value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))} autoFocus maxLength={4} onKeyDown={e=>e.key==="Enter"&&go()} style={{letterSpacing:10,textAlign:"center",fontSize:24}}/>
           {err&&<div style={{color:"var(--red)",fontSize:13}}>{err}</div>}
-          <button className="btn-primary" onClick={go} disabled={loading}>{loading?"...":<span style={{display:"flex",alignItems:"center",gap:8}}><WolfIcon size={18}/>LET ME IN</span>}</button>
+          <button className="btn-primary" onClick={go} disabled={loading}>{loading?"...":<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><WolfIcon size={18}/>LET ME IN</span>}</button>
           <button className="btn-ghost" style={{width:"100%"}} onClick={()=>{setSel(null);setPin("");setErr("");}}>← Back</button>
         </div>
       )}
