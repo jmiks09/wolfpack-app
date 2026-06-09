@@ -2794,8 +2794,10 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditEx
 
   // Sessions per week (last 8 weeks)
   const weeklyData=Array.from({length:8},(_,wi)=>{
-    const weekEnd=new Date();weekEnd.setDate(weekEnd.getDate()-wi*7);
-    const weekStart=new Date(weekEnd);weekStart.setDate(weekEnd.getDate()-6);
+    const today=new Date();
+    const dayOfWeek=today.getDay();
+    const thisSunday=new Date(today);thisSunday.setDate(today.getDate()-dayOfWeek);
+    const weekStart=new Date(thisSunday);weekStart.setDate(thisSunday.getDate()-wi*7);
     const label=weekStart.toLocaleDateString("en-US",{month:"short",day:"numeric"});
     let count=0;
     for(let i=0;i<7;i++){
