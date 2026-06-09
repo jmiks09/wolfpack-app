@@ -555,34 +555,39 @@ function dismissActiveWorkout(userName, targetDate="today"){
 }
 
 // ── FAVORITES HELPERS ────────────────────────────────────────────────────────
-function getFavorites(userName){
+// ── FAVORITES HELPERS (Firestore-backed) ────────────────────────────────────
+// Stored at wolfpack/favorites → {users: {userName: [{id,workout,muscleGroup,savedAt,title}]}}
+async function getFavoritesFS(userName){
   try{
-    const raw=localStorage.getItem(`wp_favorites_${userName}`);
-    return raw?JSON.parse(raw):[];
+    const data=await fsGet("wolfpack/favorites");
+    return data?.users?.[userName]||[];
   }catch{return[];}
 }
-function saveFavorite(userName, workout, muscleGroup){
+async function saveFavoriteFS(userName, workout, muscleGroup, currentFavs){
   try{
-    const favs=getFavorites(userName);
     const id=`fav_${Date.now()}`;
     const newFav={id,workout,muscleGroup,savedAt:Date.now(),title:workout.title};
-    const updated=[newFav,...favs].slice(0,10); // keep max 10
-    localStorage.setItem(`wp_favorites_${userName}`,JSON.stringify(updated));
-    return true;
-  }catch{return false;}
+    const updated=[newFav,...(currentFavs||[])].slice(0,20);
+    await fsSet("wolfpack/favorites",{users:{[userName]:updated}},true);
+    return updated;
+  }catch{return currentFavs||[];}
 }
-function removeFavorite(userName, favId){
+async function removeFavoriteFS(userName, favId, currentFavs){
   try{
-    const favs=getFavorites(userName).filter(f=>f.id!==favId);
-    localStorage.setItem(`wp_favorites_${userName}`,JSON.stringify(favs));
-    return true;
-  }catch{return false;}
+    const updated=(currentFavs||[]).filter(f=>f.id!==favId);
+    await fsSet("wolfpack/favorites",{users:{[userName]:updated}},true);
+    return updated;
+  }catch{return currentFavs||[];}
 }
-function isWorkoutFavorited(userName, workoutTitle){
-  return getFavorites(userName).some(f=>f.workout?.title===workoutTitle);
+// Keep localStorage helpers as fallback for non-critical checks
+function getFavorites(userName){
+  try{const raw=localStorage.getItem(`wp_favorites_${userName}`);return raw?JSON.parse(raw):[];}catch{return[];}
 }
-function getFavoriteId(userName, workoutTitle){
-  return getFavorites(userName).find(f=>f.workout?.title===workoutTitle)?.id;
+function isWorkoutFavorited(userName, workoutTitle, favsList){
+  return (favsList||getFavorites(userName)).some(f=>f.workout?.title===workoutTitle);
+}
+function getFavoriteId(userName, workoutTitle, favsList){
+  return (favsList||getFavorites(userName)).find(f=>f.workout?.title===workoutTitle)?.id;
 }
 
 // ── TRAINING LOG HELPERS ────────────────────────────────────────────────────
@@ -4792,7 +4797,7 @@ function ExerciseCard({exercise, userName, experience, injuries, idx, onSwap, sw
 
 // ── AI TRAINER MODAL ────────────────────────────────────────────────────────
 
-function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, onUseWorkout, showToast}){
+function AITrainerModal({currentUser, profile, history, packHomeGym, userFavorites, onFavoritesChange, onClose, onUseWorkout, showToast}){
   const [step,setStep]=useState("home"); // home | setup | loading | result
   const [selectedPreset,setSelectedPreset]=useState(profile?.aiTrainer?.usualSetup||"home");
   const [customEquip,setCustomEquip]=useState("");
@@ -4818,9 +4823,9 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
   const secondaryLabel=secondaryGoal?AI_SECONDARY_GOALS.find(s=>s.id===secondaryGoal)?.label:null;
   const fullGoal=[goalLabel,secondaryLabel?`+ ${secondaryLabel}`:null].filter(Boolean).join(" ");
 
-  // Group favorites by muscle group
+  // Group favorites by muscle — reads from Firestore-backed userFavorites prop
   const favsByMuscle=useMemo(()=>{
-    const favs=getFavorites(currentUser);
+    const favs=userFavorites||[];
     const groups={};
     favs.forEach(fav=>{
       const mgId=fav.muscleGroup||"other";
@@ -4831,7 +4836,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
       groups[key].favs.push(fav);
     });
     return groups;
-  },[currentUser,step]);
+  },[userFavorites]);
 
   if(!goal||!experience){
     return(
@@ -4990,7 +4995,7 @@ function AITrainerModal({currentUser, profile, history, packHomeGym, onClose, on
                               <div style={{fontSize:10,color:"var(--muted)"}}>{fav.workout?.exercises?.length||0} exercises</div>
                             </div>
                             <button onClick={()=>{setWorkout(fav.workout);setMuscleGroup(fav.muscleGroup);setCustomDuration(fav.workout?.estimatedMinutes||45);setStep("result");}} style={{padding:"5px 12px",borderRadius:8,cursor:"pointer",background:"rgba(255,107,53,0.15)",border:"1px solid rgba(255,107,53,0.3)",color:"#ff6b35",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,flexShrink:0}}>USE</button>
-                            <button onClick={()=>{const favId=getFavoriteId(currentUser,fav.workout?.title);if(favId)removeFavorite(currentUser,favId);setStep(s=>s);}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:16,padding:"0 2px"}}>×</button>
+                            <button onClick={async()=>{const updated=await removeFavoriteFS(currentUser,fav.id,userFavorites);if(onFavoritesChange)onFavoritesChange(updated);}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:16,padding:"0 2px"}}>×</button>
                           </div>
                         ))}
                       </div>
@@ -5543,19 +5548,22 @@ function EditCompletedWorkoutModal({date, entry, currentUser, onSave, onClose}){
   );
 }
 
-function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, userName, experience, injuries}){
+function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, userName, experience, injuries, userFavorites, onFavoritesChange}){
   const [data,setData]=useState(()=>getActiveWorkout(currentUser, targetDate));
   const [expanded,setExpanded]=useState(false);
-  const [favorited,setFavorited]=useState(()=>data?.workout?isWorkoutFavorited(currentUser,data?.workout?.title):false);
+  const [favorited,setFavorited]=useState(()=>{
+    if(!data?.workout?.title)return false;
+    return (userFavorites||[]).some(f=>f.workout?.title===data.workout.title);
+  });
   const [editingDuration,setEditingDuration]=useState(false);
   const [localDuration,setLocalDuration]=useState(null);
 
   useEffect(()=>{
     const d=getActiveWorkout(currentUser, targetDate);
     setData(d);
-    setFavorited(d?.workout?isWorkoutFavorited(currentUser,d?.workout?.title):false);
+    setFavorited(d?.workout?(userFavorites||[]).some(f=>f.workout?.title===d.workout.title):false);
     setLocalDuration(null);
-  },[currentUser, targetDate]);
+  },[currentUser, targetDate, userFavorites]);
 
   if(!data)return null;
 
@@ -5575,14 +5583,18 @@ function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, user
     setEditingDuration(false);
   };
 
-  const toggleFavorite=(e)=>{
+  const toggleFavorite=async(e)=>{
     e.stopPropagation();
     if(favorited){
-      const favId=getFavoriteId(currentUser,workout.title);
-      if(favId)removeFavorite(currentUser,favId);
+      const favId=(userFavorites||[]).find(f=>f.workout?.title===workout.title)?.id;
+      if(favId){
+        const updated=await removeFavoriteFS(currentUser,favId,userFavorites);
+        if(onFavoritesChange)onFavoritesChange(updated);
+      }
       setFavorited(false);
     }else{
-      saveFavorite(currentUser,workout,muscleGroup);
+      const updated=await saveFavoriteFS(currentUser,workout,muscleGroup,userFavorites);
+      if(onFavoritesChange)onFavoritesChange(updated);
       setFavorited(true);
     }
   };
@@ -6029,6 +6041,7 @@ export default function App(){
   const [lastSeen,setLastSeen]=useState({feed:0,challenges:0,gym:0});
   const [packGoals,setPackGoals]=useState([]);
   const [garageEquipment,setGarageEquipment]=useState(HOME_GYM_DEFAULT);
+  const [userFavorites,setUserFavorites]=useState([]);
   const [reactions,setReactions]=useState({});
   const [editWorkout,setEditWorkout]=useState(null);
   const [editCompletedWorkout,setEditCompletedWorkout]=useState(null); // {date, entry}
@@ -6052,6 +6065,7 @@ export default function App(){
       const u5=fsListen("wolfpack/gym",d=>{if(d)setGymSlots(d.slots||[]);});
       const u6=fsListen("wolfpack/packgoals",d=>{if(d)setPackGoals(d.list||[]);});
       const u8=fsListen("wolfpack/settings",d=>{if(d?.garageEquipment)setGarageEquipment(d.garageEquipment);});
+      const u10=fsListen("wolfpack/favorites",d=>{if(d?.users?.[currentUser])setUserFavorites(d.users[currentUser]);});
       const u7=fsListen("wolfpack/reactions",d=>{if(d)setReactions(d.data||{});});
       const u9=fsListen("wolfpack/whats_new",d=>{
         if(d?.version&&d?.items){
@@ -6069,7 +6083,7 @@ export default function App(){
           }catch{}
         }
       });
-      unsubs.current=[u1,u2,u3,u4,u5,u6,u7,u8,u9];
+      unsubs.current=[u1,u2,u3,u4,u5,u6,u7,u8,u9,u10];
       const ad=await fsGet("wolfpack/admin");if(ad?.name)setAdminName(ad.name);
       setScreen(m.length>0?"login":"onboard");
     })();
@@ -6523,8 +6537,9 @@ export default function App(){
               userName={currentUser}
               experience={profiles[currentUser]?.aiTrainer?.experience}
               injuries={(profiles[currentUser]?.aiTrainer?.injuries||[]).join(", ")}
+              userFavorites={userFavorites}
+              onFavoritesChange={setUserFavorites}
               onComplete={(data)=>{
-                // Log the workout — use stored estimatedMinutes which reflects any user edit
                 const logMinutes=data.workout?.estimatedMinutes||45;
                 handleLogAIWorkout({
                   summary:data.workout.exercises.map(e=>`${e.name}: ${e.sets}×${e.reps}${e.weight&&e.weight!=="bodyweight"?` @ ${e.weight}`:""}`).join(" + "),
@@ -6533,9 +6548,7 @@ export default function App(){
                   exercises:data.workout.exercises,
                   muscleGroup:data.muscleGroup,
                 });
-                // Show effort rating checklist
                 setPendingEffortRating({exercises:data.workout.exercises,muscleGroup:data.muscleGroup});
-                // Dismiss the card so Pack tab stays clean
                 dismissActiveWorkout(currentUser,"today");
                 setActiveWorkoutRefresh(r=>r+1);
               }}
@@ -6551,6 +6564,8 @@ export default function App(){
               userName={currentUser}
               experience={profiles[currentUser]?.aiTrainer?.experience}
               injuries={(profiles[currentUser]?.aiTrainer?.injuries||[]).join(", ")}
+              userFavorites={userFavorites}
+              onFavoritesChange={setUserFavorites}
               onComplete={()=>{}}
               onDismiss={(targetDate)=>{
                 dismissActiveWorkout(currentUser,targetDate);
@@ -6600,7 +6615,7 @@ export default function App(){
         })}
       </nav>
       {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
-      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
+      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} userFavorites={userFavorites} onFavoritesChange={setUserFavorites} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onDeletePlan={async()=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:null}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});setNutritionOpen(false);}} onClose={()=>setNutritionOpen(false)} onOpenScanner={()=>{setNutritionOpen(false);setMealScannerOpen(true);}}/>}
       {mealScannerOpen&&<MealScannerModal currentUser={currentUser} onClose={()=>setMealScannerOpen(false)}/>}
       {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={async(effortId,logged)=>{
