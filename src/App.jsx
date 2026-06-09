@@ -6056,6 +6056,10 @@ export default function App(){
   const [packGoals,setPackGoals]=useState([]);
   const [garageEquipment,setGarageEquipment]=useState(HOME_GYM_DEFAULT);
   const [userFavorites,setUserFavorites]=useState([]);
+useEffect(()=>{
+  if(!currentUser)return;
+  getFavoritesFS(currentUser).then(favs=>{if(favs?.length>0)setUserFavorites(favs);});
+},[currentUser]);
   const [reactions,setReactions]=useState({});
   const [editWorkout,setEditWorkout]=useState(null);
   const [editCompletedWorkout,setEditCompletedWorkout]=useState(null); // {date, entry}
