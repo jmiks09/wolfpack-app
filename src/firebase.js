@@ -27,7 +27,13 @@ const functions = getFunctions(app);
 const storage = getStorage(app);
 
 let messaging = null;
-try { messaging = getMessaging(app); } catch(e) { /* not supported */ }
+try {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/wolfpack-app/firebase-messaging-sw.js")
+      .then(() => { messaging = getMessaging(app); })
+      .catch(e => console.warn("SW registration failed:", e));
+  }
+} catch(e) { /* not supported */ }
 export { messaging };
 
 export const fsGet = async (path) => {
