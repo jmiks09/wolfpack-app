@@ -6065,7 +6065,19 @@ export default function App(){
       const u5=fsListen("wolfpack/gym",d=>{if(d)setGymSlots(d.slots||[]);});
       const u6=fsListen("wolfpack/packgoals",d=>{if(d)setPackGoals(d.list||[]);});
       const u8=fsListen("wolfpack/settings",d=>{if(d?.garageEquipment)setGarageEquipment(d.garageEquipment);});
-      const u10=fsListen("wolfpack/favorites",d=>{if(d?.users?.[currentUser])setUserFavorites(d.users[currentUser]);});
+      const u10=fsListen("wolfpack/favorites",async d=>{
+  const firestoreFavs=d?.users?.[currentUser];
+  if(firestoreFavs&&firestoreFavs.length>0){
+    setUserFavorites(firestoreFavs);
+  } else {
+    // Migrate from localStorage if Firestore is empty
+    const localFavs=getFavorites(currentUser);
+    if(localFavs.length>0){
+      await fsSet("wolfpack/favorites",{users:{[currentUser]:localFavs}},true);
+      setUserFavorites(localFavs);
+    }
+  }
+});
       const u7=fsListen("wolfpack/reactions",d=>{if(d)setReactions(d.data||{});});
       const u9=fsListen("wolfpack/whats_new",d=>{
         if(d?.version&&d?.items){
