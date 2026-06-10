@@ -2802,7 +2802,8 @@ function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditEx
     let count=0;
     for(let i=0;i<7;i++){
       const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);
-      if(history[localDateStr(d)]?.[currentUser]?.done)count++;
+      const entry=history[localDateStr(d)]?.[currentUser];
+      if(entry?.done) count+=entry.sessionCount||1;
     }
     return{label,count,isCurrent:wi===0};
   }).reverse();
@@ -6352,10 +6353,11 @@ useEffect(()=>{
     const labels=newWorkouts.map(w=>w.label).join(" + ");
     // Build summary using MERGED details so previous workout details are preserved
     const summaryLines=newWorkouts.map(w=>{
-      const d=mergedDetails?.[w.id]||{};
+      const d=mergedDetails?.[w.id]||mergedDetails?.[w.key]||{};
       const parts=[];
       if(d.focus) parts.push(d.focus);
       if(d.distance) parts.push(`${d.distance} mi`);
+      if(d.pace) parts.push(`${d.pace}/mi`);
       if(d.rounds) parts.push(`${d.rounds} rounds`);
       if(d.sets&&d.reps) parts.push(`${d.sets} sets x ${d.reps} reps`);
       else if(d.sets) parts.push(`${d.sets} sets`);
@@ -6364,8 +6366,9 @@ useEffect(()=>{
       if(d.duration) parts.push(`${d.duration} min`);
       return parts.length>0?`${w.label}: ${parts.join(" · ")}`:w.label;
     });
-    const totalDur=newWorkouts.reduce((s,w)=>s+(Number(mergedDetails?.[w.id]?.duration)||0),0)||null;
-    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:mergedDetails,time,ts:Date.now()};
+    const totalDur=newWorkouts.reduce((s,w)=>s+(Number(mergedDetails?.[w.id]?.duration)||Number(mergedDetails?.[w.key]?.duration)||0),0)||null;
+    const sessionCount=(existing.sessionCount||1)+workouts.length-1;
+    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:mergedDetails,time,ts:Date.now(),sessionCount};
     const newData={...history,[key]:{...(history[key]||{}),[currentUser]:entry}};
     await fsSet("wolfpack/workouts",{byDate:newData});
     setLoggingWorkout(false);setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
@@ -6380,44 +6383,46 @@ useEffect(()=>{
     const existing=history[key]?.[currentUser]||{};
     const prevWorkouts=existing.workouts||[];
     const prevDetails=existing.details||{};
-    const aiLift={id:"lift",icon:"🏋️",label:"Lifting"};
+    // Use unique key so multiple WOLFMODE sessions don't overwrite each other
+    const liftKey=`lift_${Date.now()}`;
+    const aiLift={id:"lift",key:liftKey,icon:"🏋️",label:"Weight Training"};
     const newWorkouts=[...prevWorkouts,aiLift];
     const mgLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label||muscleGroup:null;
     const exCount=exercises?.filter(e=>!e.skipped||e.substitutedWith).length||exercises?.length||0;
-    // Clean one-liner: "Lifting · Glutes · 5 exercises"
     const cleanLabel=[`WOLFMODE · Weight Training`,mgLabel,exCount?`${exCount} exercises`:null,minutes?`${minutes} min`:null].filter(Boolean).join(" · ");
-    const newDetails={...prevDetails,lift:{...(prevDetails.lift||{}),duration:String(minutes||45),focus:mgLabel||"Full Body"}};
+    // Preserve ALL previous details — only add new lift, don't overwrite walk/run distance etc
+    const newDetails={...prevDetails,[liftKey]:{duration:String(minutes||45),focus:mgLabel||"Full Body"}};
     const icons=newWorkouts.map(w=>w.icon).join("");
+    // Rebuild summary preserving ALL previous workout lines with original details including distance
     const summaryLines=newWorkouts.map(w=>{
-      if(w.id==="lift"&&w===aiLift) return cleanLabel;
-      const d=newDetails?.[w.id]||{};
+      if(w.key===liftKey) return cleanLabel;
+      const d=prevDetails?.[w.id]||prevDetails?.[w.key]||{};
       const parts=[];
       if(d.focus) parts.push(d.focus);
+      if(d.distance) parts.push(`${d.distance} mi`);
+      if(d.pace) parts.push(`${d.pace}/mi`);
       if(d.duration) parts.push(`${d.duration} min`);
       return parts.length>0?`${w.label}: ${parts.join(" · ")}`:w.label;
     });
-    // Store structured wolfmode session data for AI learning
     const wolfmodeSession={
       title:note?.replace("WOLFMODE: ",""),
       muscleGroup:muscleGroup||"fullbody",
+      estimatedMinutes:minutes||45,
       generatedAt:Date.now(),
       exercises:(exercises||[]).map(e=>({
-        name:e.name,
-        sets:e.sets,
-        reps:e.reps,
-        suggestedWeight:e.weight,
-        weightUsed:null, // filled in optionally later
-        effortRating:null, // filled in by effort check-in
+        name:e.name,sets:e.sets,reps:e.reps,
+        suggestedWeight:e.weight,weightUsed:null,effortRating:null,
       })),
     };
-    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note:note||"",duration:minutes||null,details:newDetails,time,ts:Date.now(),wolfmodeSession};
+    // Track individual session count for stats (walk + WOLFMODE = 2 sessions)
+    const sessionCount=(existing.sessionCount||1)+1;
+    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note:note||"",duration:minutes||null,details:newDetails,time,ts:Date.now(),wolfmodeSession,sessionCount};
     const newData={...history,[key]:{...(history[key]||{}),[currentUser]:entry}};
     await fsSet("wolfpack/workouts",{byDate:newData});
     setLoggingWorkout(false);
     launchConfetti();
     showToast(`🔥 WOLFMODE logged! 🐺`);
     await checkMilestones(newData);
-    // Prompt for proof photo
   };
 
   const handlePost=async(t,photo)=>{
