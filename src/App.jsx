@@ -3490,32 +3490,30 @@ function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete})
   );
   const [note,setNote]=useState(entry.note||"");
   const [duration,setDuration]=useState(()=>{
-  const d={};
-  (entry.workouts||ALL_TYPES.filter(w=>entry.workoutType===w.id)||[]).forEach(w=>{
-    d[w.id]=entry.details?.[w.id]?.duration||"";
+    const d={};
+    (entry.workouts||[]).forEach(w=>{
+      d[w.id]=entry.details?.[w.id]?.duration||entry.details?.[w.key]?.duration||"";
+    });
+    return d;
   });
-  return d;
-});
   const toggle=w=>setSelected(s=>s.find(x=>x.id===w.id)?s.filter(x=>x.id!==w.id):[...s,w]);
 
   const save=()=>{
     if(selected.length===0)return;
     const icons=selected.map(w=>w.icon).join("");
-    const labels=selected.map(w=>w.label).join(" + ");
     const updatedDetails={...(entry.details||{})};
-selected.forEach(w=>{if(duration[w.id])updatedDetails[w.id]={...(updatedDetails[w.id]||{}),duration:duration[w.id]};});
-const totalDur=selected.reduce((s,w)=>s+(Number(duration[w.id])||0),0)||null;
-// Rebuild summary with updated durations
-const summaryLines=selected.map(w=>{
-  const d=updatedDetails[w.id]||{};
-  const parts=[];
-  if(d.focus)parts.push(d.focus);
-  if(d.distance)parts.push(`${d.distance} mi`);
-  if(d.pace)parts.push(`${d.pace}/mi`);
-  if(d.duration)parts.push(`${d.duration} min`);
-  return parts.length>0?`${w.label}: ${parts.join(" · ")}`:w.label;
-});
-onSave(date,{...entry,workouts:selected.map(w=>({id:w.id,icon:w.icon,label:w.label})),workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:updatedDetails});
+    selected.forEach(w=>{if(duration[w.id])updatedDetails[w.id]={...(updatedDetails[w.id]||{}),duration:duration[w.id]};});
+    const totalDur=selected.reduce((s,w)=>s+(Number(duration[w.id])||0),0)||null;
+    const summaryLines=selected.map(w=>{
+      const d=updatedDetails[w.id]||updatedDetails[w.key]||{};
+      const parts=[];
+      if(d.focus)parts.push(d.focus);
+      if(d.distance)parts.push(`${d.distance} mi`);
+      if(d.pace)parts.push(`${d.pace}/mi`);
+      if(d.duration)parts.push(`${d.duration} min`);
+      return parts.length>0?`${w.label}: ${parts.join(" · ")}`:w.label;
+    });
+    onSave(date,{...entry,workouts:selected.map(w=>({id:w.id,icon:w.icon,label:w.label})),workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:updatedDetails});
     onClose();
   };
 
@@ -3536,18 +3534,19 @@ onSave(date,{...entry,workouts:selected.map(w=>({id:w.id,icon:w.icon,label:w.lab
               </button>
             );
           })}
+        </div>
         <input className="input" placeholder="Note..." value={note} onChange={e=>setNote(e.target.value)} style={{marginBottom:8}} maxLength={80}/>
-{selected.map(w=>(
-  <div key={w.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-    <span style={{fontSize:13,color:"var(--muted)",flex:1}}>{w.icon} {w.label}</span>
-    <input className="input" type="number" placeholder="mins"
-      value={duration[w.id]||""}
-      onChange={e=>setDuration(d=>({...d,[w.id]:e.target.value.slice(0,3)}))}
-      style={{width:70,textAlign:"center"}} min={1}/>
-    <span style={{fontSize:11,color:"var(--muted)"}}>min</span>
-  </div>
-))}
-<div style={{fontSize:11,color:"var(--muted)",marginBottom:12}}>duration per workout (optional)</div>
+        {selected.map(w=>(
+          <div key={w.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <span style={{fontSize:13,color:"var(--muted)",flex:1}}>{w.icon} {w.label}</span>
+            <input className="input" type="number" placeholder="mins"
+              value={duration[w.id]||""}
+              onChange={e=>setDuration(d=>({...d,[w.id]:e.target.value.slice(0,3)}))}
+              style={{width:70,textAlign:"center"}} min={1}/>
+            <span style={{fontSize:11,color:"var(--muted)"}}>min</span>
+          </div>
+        ))}
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:12}}>duration per workout (optional)</div>
         <button className="btn-primary" onClick={save} disabled={selected.length===0}>SAVE CHANGES</button>
         <button onClick={onDelete} style={{width:"100%",marginTop:8,padding:"10px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.25)",borderRadius:10,cursor:"pointer",color:"var(--red)",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1}}>
           DELETE WORKOUT
