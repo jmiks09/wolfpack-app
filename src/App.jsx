@@ -3489,7 +3489,13 @@ function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete})
     ALL_TYPES.filter(w=>entry.workoutType===w.id)||[]
   );
   const [note,setNote]=useState(entry.note||"");
-  const [duration,setDuration]=useState(entry.duration||"");
+  const [duration,setDuration]=useState(()=>{
+  const d={};
+  (entry.workouts||ALL_TYPES.filter(w=>entry.workoutType===w.id)||[]).forEach(w=>{
+    d[w.id]=entry.details?.[w.id]?.duration||"";
+  });
+  return d;
+});
   const toggle=w=>setSelected(s=>s.find(x=>x.id===w.id)?s.filter(x=>x.id!==w.id):[...s,w]);
 
   const save=()=>{
@@ -3517,12 +3523,18 @@ function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete})
               </button>
             );
           })}
-        </div>
-        <div style={{display:"flex",gap:8,marginBottom:4}}>
-          <input className="input" placeholder="Note..." value={note} onChange={e=>setNote(e.target.value)} style={{flex:1}} maxLength={80}/>
-          <input className="input" type="number" placeholder="mins" value={duration} onChange={e=>setDuration(e.target.value.slice(0,3))} style={{width:70,textAlign:"center"}} min={1}/>
-        </div>
-        <div style={{fontSize:11,color:"var(--muted)",marginBottom:12,textAlign:"right"}}>duration (optional)</div>
+        <input className="input" placeholder="Note..." value={note} onChange={e=>setNote(e.target.value)} style={{marginBottom:8}} maxLength={80}/>
+{selected.map(w=>(
+  <div key={w.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+    <span style={{fontSize:13,color:"var(--muted)",flex:1}}>{w.icon} {w.label}</span>
+    <input className="input" type="number" placeholder="mins"
+      value={duration[w.id]||""}
+      onChange={e=>setDuration(d=>({...d,[w.id]:e.target.value.slice(0,3)}))}
+      style={{width:70,textAlign:"center"}} min={1}/>
+    <span style={{fontSize:11,color:"var(--muted)"}}>min</span>
+  </div>
+))}
+<div style={{fontSize:11,color:"var(--muted)",marginBottom:12}}>duration per workout (optional)</div>
         <button className="btn-primary" onClick={save} disabled={selected.length===0}>SAVE CHANGES</button>
         <button onClick={onDelete} style={{width:"100%",marginTop:8,padding:"10px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.25)",borderRadius:10,cursor:"pointer",color:"var(--red)",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1}}>
           DELETE WORKOUT
