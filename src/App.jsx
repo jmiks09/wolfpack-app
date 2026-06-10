@@ -3502,7 +3502,20 @@ function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete})
     if(selected.length===0)return;
     const icons=selected.map(w=>w.icon).join("");
     const labels=selected.map(w=>w.label).join(" + ");
-    onSave(date,{...entry,workouts:selected.map(w=>({id:w.id,icon:w.icon,label:w.label})),workoutIcon:icons,workoutLabel:labels,note,duration:duration?Number(duration):null});
+    const updatedDetails={...(entry.details||{})};
+selected.forEach(w=>{if(duration[w.id])updatedDetails[w.id]={...(updatedDetails[w.id]||{}),duration:duration[w.id]};});
+const totalDur=selected.reduce((s,w)=>s+(Number(duration[w.id])||0),0)||null;
+// Rebuild summary with updated durations
+const summaryLines=selected.map(w=>{
+  const d=updatedDetails[w.id]||{};
+  const parts=[];
+  if(d.focus)parts.push(d.focus);
+  if(d.distance)parts.push(`${d.distance} mi`);
+  if(d.pace)parts.push(`${d.pace}/mi`);
+  if(d.duration)parts.push(`${d.duration} min`);
+  return parts.length>0?`${w.label}: ${parts.join(" · ")}`:w.label;
+});
+onSave(date,{...entry,workouts:selected.map(w=>({id:w.id,icon:w.icon,label:w.label})),workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:updatedDetails});
     onClose();
   };
 
