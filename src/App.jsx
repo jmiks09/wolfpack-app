@@ -5556,9 +5556,8 @@ function EditCompletedWorkoutModal({date, entry, currentUser, onSave, onClose}){
               <div key={idx} style={{padding:"10px 12px",background:isSkipped?"rgba(255,255,255,0.02)":"var(--bg3)",border:`1px solid ${isSkipped?"rgba(255,255,255,0.05)":"var(--border)"}`,borderRadius:12,opacity:isSkipped?0.4:1}}>
                 <input type="text" value={displayName} onChange={e=>updateField(idx,"name",e.target.value)}
                     placeholder="Exercise name..." style={{width:"100%",padding:"5px 8px",background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:7,color:"#fff",fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1,marginBottom:6}}/>
-                  {ex.substitutedWith&&<span style={{fontSize:9,color:"rgba(255,107,53,0.6)",marginLeft:6,fontFamily:"sans-serif",letterSpacing:0}}>(subbed)</span>}
-                  {isSkipped&&<span style={{fontSize:9,color:"var(--muted)",marginLeft:6,fontFamily:"sans-serif"}}>skipped</span>}
-                </div>
+                {ex.substitutedWith&&<span style={{fontSize:9,color:"rgba(255,107,53,0.6)",marginLeft:6,fontFamily:"sans-serif",letterSpacing:0}}>(subbed)</span>}
+                {isSkipped&&<span style={{fontSize:9,color:"var(--muted)",marginLeft:6,fontFamily:"sans-serif"}}>skipped</span>}
                 {!isSkipped&&(
                   <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                     <div style={{display:"flex",alignItems:"center",gap:3}}>
