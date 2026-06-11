@@ -3505,7 +3505,16 @@ function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete})
     selected.forEach(w=>{if(duration[w.id])updatedDetails[w.id]={...(updatedDetails[w.id]||{}),duration:duration[w.id]};});
     const totalDur=selected.reduce((s,w)=>s+(Number(duration[w.id])||0),0)||null;
     const summaryLines=selected.map(w=>{
-      const d=updatedDetails[w.id]||updatedDetails[w.key]||{};
+      // If this is a WOLFMODE lift, preserve the full WOLFMODE label
+      if(w.id==="lift"&&entry.wolfmodeSession){
+        const ms=entry.wolfmodeSession;
+        const mgLabel=AI_MUSCLE_GROUPS.find(m=>m.id===ms.muscleGroup)?.label||ms.muscleGroup||"";
+        const exCount=ms.exercises?.filter(e=>!e.skipped||e.substitutedWith).length||ms.exercises?.length||0;
+        const mins=duration[w.id]||ms.estimatedMinutes||"";
+        return [`WOLFMODE · Weight Training`,mgLabel,exCount?`${exCount} exercises`:null,mins?`${mins} min`:null].filter(Boolean).join(" · ");
+      }
+      // Find details by id or any lift_ key
+      const d=updatedDetails[w.id]||Object.entries(updatedDetails).find(([k,v])=>k.startsWith("lift_")&&w.id==="lift")?.[1]||{};
       const parts=[];
       if(d.focus)parts.push(d.focus);
       if(d.distance)parts.push(`${d.distance} mi`);
