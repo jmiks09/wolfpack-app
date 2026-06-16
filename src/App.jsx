@@ -8,6 +8,7 @@ const WORKOUT_TYPES = [
   {id:"cardio",icon:"❤️‍🔥",label:"Mixed Cardio"},{id:"walk",icon:"🚶",label:"Walking"},
   {id:"other",icon:"💪",label:"Other"},
 ];
+const ALL_TYPES = WORKOUT_TYPES;
 const QUOTES = [
   "Your only competition is who you were yesterday.",
   "The pain you feel today is the strength you feel tomorrow.",
