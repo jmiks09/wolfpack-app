@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AvatarDisplay } from "../../../components/AvatarDisplay";
-import { challengeWeeks, scoreChallenge } from "../../../lib/habits";
+import { challengeWeeks, countsForPenalty, penaltyMode, scoreChallenge, scoreHabitWeek } from "../../../lib/habits";
 import { chipColor, chipText } from "./habitUi";
 
 const bebas = {fontFamily:"'Bebas Neue',cursive",letterSpacing:2};
@@ -26,6 +26,13 @@ export function HabitChallengeCard({challenge:ch,log,history,profiles,currentUse
   const weekRows=s.scores.filter(m=>!m.left).map(m=>({m,row:m.rows[wi]})).filter(x=>x.row)
     .sort((a,b)=>(a.m.user===currentUser?-1:b.m.user===currentUser?1:0)||(a.row.missed-b.row.missed)||a.m.user.localeCompare(b.m.user));
 
+  const flat=penaltyMode(ch)==="flat";
+  const flatLabel=ch.money?.flatLabel||"Penalty";
+  const penaltyHabits=ch.habits.filter(countsForPenalty);
+  const penaltyLine=flat?`${flatLabel} ($${ch.money?.flatAmount||0}) if you miss a penalty habit`:`$${ch.money?.missFee||0} per missed penalty habit`;
+  const feeText=fee=>flat?flatLabel:money(fee);
+  const visiblePersonal=user=>Object.values(log?.byUser?.[user]?.personal||{})
+    .filter(g=>user===currentUser||g.shared).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
   const status=s.finished?"Finished":!started?`Starts ${md(ch.start)}`:s.inTrial?`Trial: no penalties until ${md(ch.penaltyStart)}`:"Penalties active";
 
   return(
@@ -63,7 +70,7 @@ export function HabitChallengeCard({challenge:ch,log,history,profiles,currentUse
           <button aria-label="Previous week" disabled={wi<=0} onClick={()=>setWi(wi-1)} style={{background:"none",border:"none",color:wi<=0?"var(--border)":"var(--text)",fontSize:20,cursor:"pointer"}}>‹</button>
           <div style={{textAlign:"center"}}>
             <div style={{...bebas,fontSize:15}}>Week {wi+1} · {md(week.from)}–{md(week.to)}</div>
-            <div style={{fontSize:11,color:"var(--muted)"}}>{week.from<ch.penaltyStart?"Trial week, no charges":`$${ch.money?.missFee||0} per missed habit`}{wi===current?" · in progress":""}</div>
+            <div style={{fontSize:11,color:"var(--muted)"}}>{week.from<ch.penaltyStart?"Trial week, no charges":penaltyLine}{wi===current?" · in progress":""}</div>
           </div>
           <button aria-label="Next week" disabled={wi>=lastIdx} onClick={()=>setWi(wi+1)} style={{background:"none",border:"none",color:wi>=lastIdx?"var(--border)":"var(--text)",fontSize:20,cursor:"pointer"}}>›</button>
         </div>
@@ -76,7 +83,7 @@ export function HabitChallengeCard({challenge:ch,log,history,profiles,currentUse
                 <div style={{flex:1,...bebas,fontSize:16}}>{m.user}</div>
                 {!row.counted?<span style={{fontSize:11,color:"var(--muted)"}}>Joined mid-week</span>
                   :row.finished?(row.missed===0?<span style={{...bebas,fontSize:14,color:"var(--green)"}}>PERFECT WEEK</span>
-                    :<span style={{...bebas,fontSize:14,color:row.fee?"var(--red)":"var(--muted)"}}>{row.missed} missed{row.fee?` · ${money(row.fee)}`:""}</span>)
+                    :<span style={{...bebas,fontSize:14,color:row.fee?"var(--red)":"var(--muted)"}}>{row.missed} missed{row.fee?` · ${feeText(row.fee)}`:""}</span>)
                   :null}
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -84,12 +91,18 @@ export function HabitChallengeCard({challenge:ch,log,history,profiles,currentUse
                   <span key={h.id} title={h.label} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:20,fontSize:12,background:c.bg,border:`1px solid ${c.bd}`,color:c.fg}}>
                     <span aria-hidden="true">{h.icon}</span><span>{chipText(h,hs)}</span><span style={{position:"absolute",left:-9999}}>{h.label}</span>
                   </span>);})}
+                {visiblePersonal(m.user).map(g=>{const gs=scoreHabitWeek(ch,g,week,log?.byUser?.[m.user],history,m.user,today);const c=chipColor(gs);return(
+                  <span key={g.id} title={`${g.label} (personal${g.shared?"":", only you see this"})`} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:20,fontSize:12,background:"transparent",border:`1px dashed ${c.bd}`,color:c.fg}}>
+                    <span aria-hidden="true">{g.icon}</span><span>{chipText(g,gs)}</span>{!g.shared&&<span aria-label="private" style={{fontSize:10}}>🔒</span>}
+                  </span>);})}
               </div>
             </div>
           ))}
         </div>}
         <div style={{fontSize:11,color:"var(--muted)",marginTop:8,lineHeight:1.5}}>
           {ch.habits.map(h=>`${h.icon} ${h.label}`).join("  ·  ")}. Daily habits allow {ch.graceDays??1} miss{(ch.graceDays??1)===1?"":"es"} a week.
+          {penaltyHabits.length<ch.habits.length&&<> Penalty applies to {penaltyHabits.map(h=>`${h.icon} ${h.label}`).join(", ")}; the rest count toward completion only.</>}
+          {" "}Dashed chips are personal goals and don't affect money.
         </div>
       </div>}
 
@@ -127,7 +140,7 @@ export function HabitChallengeCard({challenge:ch,log,history,profiles,currentUse
               :<button onClick={()=>{setPayFor(m.user);setAmount(m.balance>0?String(m.balance):"");}} style={{marginTop:4,background:"none",border:"none",color:"var(--accent2)",fontSize:12,cursor:"pointer",padding:0}}>Record a payment</button>)}
           </div>
         ))}
-        <div style={{fontSize:11,color:"var(--muted)",lineHeight:1.5}}>Owes = ${ch.money?.buyIn||0} buy-in + missed-habit fees. Pay through Venmo or Cash App; {canManage?"you record":"the challenge creator records"} payments here.</div>
+        <div style={{fontSize:11,color:"var(--muted)",lineHeight:1.5}}>Owes = ${ch.money?.buyIn||0} buy-in + {flat?`one ${flatLabel} ($${ch.money?.flatAmount||0}) per week with a missed penalty habit`:"missed-habit fees"}. Pay through Venmo or Cash App; {canManage?"you record":"the challenge creator records"} payments here.</div>
       </div>}
 
       {inIt&&!s.finished&&(confirmLeave

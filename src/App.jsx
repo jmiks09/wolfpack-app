@@ -599,6 +599,8 @@ useEffect(()=>{
     showToast("Challenge deleted.");
   };
   const handleHabitLog=(cid,date,patch)=>fsSet(gp(`hlog_${cid}`),{byUser:{[currentUser]:{days:{[date]:patch}}}});
+  const handleSavePersonal=(cid,goal)=>fsSet(gp(`hlog_${cid}`),{byUser:{[currentUser]:{personal:{[goal.id]:goal}}}});
+  const handleDeletePersonal=(cid,id)=>fsDeleteFields(gp(`hlog_${cid}`),[["byUser",currentUser,"personal",id]]);
   const handleGoalWeight=(cid,w)=>fsSet(gp(`hlog_${cid}`),{byUser:{[currentUser]:{goalWeight:w}}});
   const handleJoinHabit=async cid=>{
     await fsSet(gp("habits"),{list:{[cid]:{participants:{[currentUser]:{joinedAt:todayStr(),leftAt:null}}}}});
@@ -705,7 +707,7 @@ useEffect(()=>{
             />
             {view==="pack"&&<NotifBanner currentUser={currentUser}/>}
             {habitList.filter(c=>c.participants?.[currentUser]&&!c.participants[currentUser].leftAt&&c.start<=todayStr()&&todayStr()<=c.end).map(c=>(
-              <HabitTodayCard key={c.id} challenge={c} log={habitLogs[c.id]} history={history} currentUser={currentUser} today={todayStr()} onLog={handleHabitLog} onSetGoalWeight={handleGoalWeight} onLogWorkout={()=>setWorkoutOpen(true)}/>
+              <HabitTodayCard key={c.id} challenge={c} log={habitLogs[c.id]} history={history} currentUser={currentUser} today={todayStr()} onLog={handleHabitLog} onSetGoalWeight={handleGoalWeight} onLogWorkout={()=>setWorkoutOpen(true)} onSavePersonal={handleSavePersonal} onDeletePersonal={handleDeletePersonal}/>
             ))}
             <PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onOpenMealScanner={()=>setMealScannerOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
           </>

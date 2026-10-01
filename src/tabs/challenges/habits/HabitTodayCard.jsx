@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { addDays, challengeWeeks, dailyHit, editableFrom, proteinTarget, scoreHabitWeek, workoutKinds } from "../../../lib/habits";
+import { addDays, challengeWeeks, dailyHit, editableFrom, fmtAmount, proteinTarget, scoreHabitWeek, scoreTotal, workoutKinds } from "../../../lib/habits";
+import { PersonalGoalForm } from "./PersonalGoalForm";
 
 const bebas = {fontFamily:"'Bebas Neue',cursive",letterSpacing:2};
 const dayLabel = (d,today) => d===today?"Today":d===addDays(today,-1)?"Yesterday":new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
@@ -20,7 +21,8 @@ function NumberField({value,onSave,placeholder,unit,label}){
 }
 
 // ── HABIT TODAY CARD ──────────────────────────────────────────────────────────
-export function HabitTodayCard({challenge:ch,log,history,currentUser,today,onLog,onSetGoalWeight,onLogWorkout}){
+export function HabitTodayCard({challenge:ch,log,history,currentUser,today,onLog,onSetGoalWeight,onLogWorkout,onSavePersonal,onDeletePersonal}){
+  const [goalForm,setGoalForm]=useState(null); // "new" or a goal
   const [day,setDay]=useState(today);
   const [gw,setGw]=useState("");
   const myLog=log?.byUser?.[currentUser]||{};
@@ -31,32 +33,25 @@ export function HabitTodayCard({challenge:ch,log,history,currentUser,today,onLog
   const canPass=entry.pass||passesUsed<(ch.passesPerWeek??1);
   const inTrial=today<ch.penaltyStart;
   const set=patch=>onLog(ch.id,day,patch);
+  const personal=Object.values(myLog.personal||{}).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
 
-  return(
-    <div style={{marginBottom:14,padding:14,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:16}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-        <div style={{...bebas,fontSize:18}}>{ch.emoji} {ch.name}</div>
-        <div style={{display:"flex",alignItems:"center",gap:4}}>
-          <button aria-label="Previous day" disabled={day<=earliest} onClick={()=>setDay(addDays(day,-1))} style={{background:"none",border:"none",color:day<=earliest?"var(--border)":"var(--text)",fontSize:18,cursor:"pointer",padding:"0 6px"}}>‹</button>
-          <div style={{fontSize:12,color:day===today?"var(--accent2)":"var(--text)",minWidth:84,textAlign:"center"}}>{dayLabel(day,today)}</div>
-          <button aria-label="Next day" disabled={day>=today} onClick={()=>setDay(addDays(day,1))} style={{background:"none",border:"none",color:day>=today?"var(--border)":"var(--text)",fontSize:18,cursor:"pointer",padding:"0 6px"}}>›</button>
-        </div>
-      </div>
-      {inTrial&&day===today&&<div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>Trial week: no penalties until {new Date(ch.penaltyStart+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}. You can fill in any day since the start.</div>}
-      {entry.pass&&<div style={{fontSize:12,color:"var(--accent2)",marginBottom:8}}>Pass used: this day counts as a workout day and covers your daily limits.</div>}
-
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {ch.habits.map(h=>{
+  const renderHabit=(h,isPersonal)=>{
           const row=(right,hint)=>(
             <div key={h.id} style={{display:"flex",alignItems:"center",gap:10,minHeight:40}}>
               <div style={{fontSize:20,width:26,textAlign:"center"}}>{h.icon}</div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14}}>{h.label}</div>
+                <div style={{fontSize:14}}>{h.label}{isPersonal&&<span style={{fontSize:11,marginLeft:6}} title={h.shared?"Shared with the pack":"Private"}>{h.shared?"👀":"🔒"}</span>}</div>
                 {hint&&<div style={{fontSize:11,color:"var(--muted)"}}>{hint}</div>}
               </div>
               {right}
+              {isPersonal&&<button onClick={()=>setGoalForm(h)} aria-label={`Edit ${h.label}`} style={{background:"none",border:"none",color:"var(--muted)",cursor:"pointer",fontSize:13,padding:"0 2px"}}>✏️</button>}
             </div>
           );
+          if(h.type==="total"){
+            const t=scoreTotal(ch,h,myLog,today);
+            return row(<NumberField value={entry[h.id]} onSave={n=>set({[h.id]:n})} placeholder="+0" unit={h.unit} label={`${h.label} added`}/>,
+              `${fmtAmount(t.total,h.unit)} of ${fmtAmount(t.target,h.unit)}${t.passed?" · goal reached! 🎉":t.onPace?" · on pace":` · pace is ${fmtAmount(Math.ceil(t.pace),h.unit)}`}`);
+          }
           if(h.type==="check"){
             const on=!!entry[h.id];
             const s=week&&scoreHabitWeek(ch,h,week,myLog,history,currentUser,today);
@@ -90,7 +85,29 @@ export function HabitTodayCard({challenge:ch,log,history,currentUser,today,onLog
               <span style={{width:14,fontSize:13,color:hit?"var(--green)":hit===false?"var(--red)":"transparent"}}>{hit?"✓":"✗"}</span>
             </div>,
             <>Goal: {tgt}{h.type==="protein"&&<button onClick={()=>{setGw(String(myLog.goalWeight));onSetGoalWeight(ch.id,null);}} style={{background:"none",border:"none",color:"var(--accent2)",fontSize:11,cursor:"pointer",padding:"0 0 0 6px"}}>change</button>}</>);
-        })}
+  };
+
+  return(
+    <div style={{marginBottom:14,padding:14,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:16}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <div style={{...bebas,fontSize:18}}>{ch.emoji} {ch.name}</div>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <button aria-label="Previous day" disabled={day<=earliest} onClick={()=>setDay(addDays(day,-1))} style={{background:"none",border:"none",color:day<=earliest?"var(--border)":"var(--text)",fontSize:18,cursor:"pointer",padding:"0 6px"}}>‹</button>
+          <div style={{fontSize:12,color:day===today?"var(--accent2)":"var(--text)",minWidth:84,textAlign:"center"}}>{dayLabel(day,today)}</div>
+          <button aria-label="Next day" disabled={day>=today} onClick={()=>setDay(addDays(day,1))} style={{background:"none",border:"none",color:day>=today?"var(--border)":"var(--text)",fontSize:18,cursor:"pointer",padding:"0 6px"}}>›</button>
+        </div>
+      </div>
+      {inTrial&&day===today&&<div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>Trial week: no penalties until {new Date(ch.penaltyStart+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}. You can fill in any day since the start.</div>}
+      {entry.pass&&<div style={{fontSize:12,color:"var(--accent2)",marginBottom:8}}>Pass used: this day counts as a workout day and covers your daily limits.</div>}
+
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {ch.habits.map(h=>renderHabit(h,false))}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6,paddingTop:10,borderTop:"1px dashed var(--border)"}}>
+          <div style={{...bebas,fontSize:13,color:"var(--muted)"}}>MY GOALS</div>
+          <button onClick={()=>setGoalForm("new")} style={{background:"none",border:"none",color:"var(--accent2)",fontSize:12,cursor:"pointer",padding:0}}>+ Add personal goal</button>
+        </div>
+        {personal.length===0&&<div style={{fontSize:11,color:"var(--muted)"}}>Add your own goals, like prayer or savings. Private unless you share them; they never affect money.</div>}
+        {personal.map(h=>renderHabit(h,true))}
       </div>
 
       <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
@@ -98,6 +115,8 @@ export function HabitTodayCard({challenge:ch,log,history,currentUser,today,onLog
           {entry.pass?"Remove pass for this day":canPass?`Use a pass for this day (${(ch.passesPerWeek??1)-passesUsed} left this week)`:"No passes left this week"}
         </button>
       </div>
+      {goalForm&&<PersonalGoalForm challenge={ch} existing={goalForm==="new"?null:goalForm} today={today}
+        onSave={g=>onSavePersonal(ch.id,g)} onDelete={id=>onDeletePersonal(ch.id,id)} onClose={()=>setGoalForm(null)}/>}
     </div>
   );
 }

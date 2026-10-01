@@ -18,6 +18,15 @@ export const HABIT_TYPES = {
   max:     { label: "Daily limit",         daily: true,  icon: "⏱️" },
   min:     { label: "Daily minimum",       daily: true,  icon: "🎯" },
   protein: { label: "Protein",             daily: true,  icon: "🥩" },
+  total:   { label: "Running total",       daily: false, icon: "💰", personalOnly: true },
+};
+// total — personal only: amounts add up toward a goal by a deadline (savings, miles).
+
+export const countsForPenalty = h => h.penalty !== false;
+export const penaltyMode = ch => (ch.money?.mode === "flat" ? "flat" : "perHabit");
+export const fmtAmount = (n, unit) => {
+  const v = Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
+  return unit === "$" ? `$${v}` : unit ? `${v} ${unit}` : v;
 };
 
 const STRENGTH_IDS = ["lift"];
@@ -51,6 +60,7 @@ export function blankHabit(type) {
   if (type === "workout") return { id, type, label: "Workout", icon: "💪", target: 3, filter: "any", minMinutes: 20 };
   if (type === "max") return { id, type, label: "", icon: "⏱️", target: 60, unit: "min" };
   if (type === "min") return { id, type, label: "", icon: "🎯", target: 8, unit: "" };
+  if (type === "total") return { id, type, label: "", icon: "💰", target: 1000, unit: "$" };
   return { id, type: "protein", label: "Protein", icon: "🥩", perLb: 0.7 };
 }
 
@@ -109,6 +119,7 @@ export function dailyHit(habit, dayLog, goalWeight) {
 // asOf: today's date; days after it are not judged yet.
 export function scoreHabitWeek(ch, habit, week, userLog, history, user, asOf) {
   const days = userLog?.days || {};
+  if (habit.type === "total") return scoreTotal(ch, habit, userLog, asOf);
   const judged = dateRange(week.from, minDate(week.to, asOf));
   const finished = asOf > week.to;
   const passDays = judged.filter(d => days[d]?.pass).length;
@@ -144,6 +155,18 @@ export function scoreHabitWeek(ch, habit, week, userLog, history, user, asOf) {
     failing: !finished && count + daysLeft < target };
 }
 
+// Running total toward a goal, with an even pace from start to deadline.
+export function scoreTotal(ch, goal, userLog, asOf) {
+  const days = userLog?.days || {};
+  const total = Object.entries(days).reduce((s, [d, v]) => (d <= asOf ? s + (Number(v?.[goal.id]) || 0) : s), 0);
+  const start = goal.start || ch.start, end = goal.deadline || ch.end;
+  const span = Math.max(1, daysBetween(start, end) + 1);
+  const elapsed = Math.min(span, Math.max(0, daysBetween(start, asOf) + 1));
+  const pace = Math.round((goal.target * elapsed) / span * 100) / 100;
+  return { kind: "total", total, target: goal.target, pace, onPace: total >= pace,
+    passed: total >= goal.target ? true : null, failing: false };
+}
+
 // Full picture for one person: every week, totals, fees.
 export function scoreMember(ch, user, logs, history, asOf) {
   const userLog = logs?.byUser?.[user];
@@ -155,9 +178,13 @@ export function scoreMember(ch, user, logs, history, asOf) {
     const habits = Object.fromEntries(ch.habits.map(h => [h.id, scoreHabitWeek(ch, h, week, userLog, history, user, asOf)]));
     const finished = asOf > week.to;
     const missed = finished ? ch.habits.filter(h => habits[h.id].passed === false).length : 0;
+    const missedPenalty = finished ? ch.habits.filter(h => countsForPenalty(h) && habits[h.id].passed === false).length : 0;
     const penalized = finished && counted && week.from >= ch.penaltyStart;
+    const fee = !penalized ? 0 : penaltyMode(ch) === "flat"
+      ? (missedPenalty > 0 ? Number(ch.money?.flatAmount) || 0 : 0)
+      : missedPenalty * (Number(ch.money?.missFee) || 0);
     const passesUsed = dateRange(week.from, minDate(week.to, asOf)).filter(d => userLog?.days?.[d]?.pass).length;
-    return { week, habits, finished, counted, missed, penalized, fee: penalized ? missed * (ch.money?.missFee || 0) : 0, passesUsed };
+    return { week, habits, finished, counted, missed, missedPenalty, penalized, fee, passesUsed };
   });
   const done = rows.filter(r => r.finished && r.counted);
   const habitWeeks = done.length * ch.habits.length;

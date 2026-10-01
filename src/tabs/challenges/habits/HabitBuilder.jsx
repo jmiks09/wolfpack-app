@@ -41,6 +41,7 @@ export function HabitBuilder({existing,members,profiles,currentUser,today,onSave
     if(c.penaltyStart<c.start||c.penaltyStart>c.end)return setError("Penalties must start between the start and end dates.");
     if(!c.habits.length)return setError("Add at least one habit.");
     if(c.habits.some(h=>!h.label.trim()))return setError("Every habit needs a name.");
+    if(!c.habits.some(h=>h.penalty!==false)&&((c.money.mode==="flat"&&c.money.flatAmount)||(c.money.mode!=="flat"&&c.money.missFee)))return setError("Turn on Penalty for at least one habit, or set the penalty to $0.");
     if(!who.length)return setError("Pick who's in.");
     setBusy(true);
     const prev=existing?.participants||{};
@@ -105,11 +106,19 @@ export function HabitBuilder({existing,members,profiles,currentUser,today,onSave
                   </>}
                   {h.type==="protein"&&<Field label="Grams per lb of goal weight" hint="Each person enters their own goal weight."><input className="input" type="number" step="0.1" value={h.perLb} onChange={e=>upHabit(i,{perLb:num(e.target.value)})} style={{padding:8}}/></Field>}
                 </div>
-                <div style={{...small,fontSize:11}}>{HABIT_TYPES[h.type].label}{h.type==="workout"?": filled in from logged workouts":""}</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                  <div style={{...small,fontSize:11}}>{HABIT_TYPES[h.type].label}{h.type==="workout"?": filled in from logged workouts":""}</div>
+                  <button onClick={()=>upHabit(i,{penalty:h.penalty===false})} role="switch" aria-checked={h.penalty!==false} aria-label={`${h.label||"Habit"} counts toward penalty`} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:h.penalty!==false?"var(--accent2)":"var(--muted)",fontSize:12,padding:0,flexShrink:0}}>
+                    <span style={{width:34,height:20,borderRadius:10,background:h.penalty!==false?"var(--accent)":"var(--bg2)",border:"1px solid var(--border)",position:"relative",display:"inline-block"}}>
+                      <span style={{position:"absolute",top:2,left:h.penalty!==false?16:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .15s"}}/>
+                    </span>
+                    Penalty
+                  </button>
+                </div>
               </div>
             ))}
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {Object.entries(HABIT_TYPES).map(([t,v])=>(
+              {Object.entries(HABIT_TYPES).filter(([,v])=>!v.personalOnly).map(([t,v])=>(
                 <button key={t} className="btn-ghost" style={{fontSize:12,padding:"8px 10px"}} onClick={()=>setC(x=>({...x,habits:[...x.habits,blankHabit(t)]}))}>+ {v.label}</button>
               ))}
             </div>
@@ -121,14 +130,26 @@ export function HabitBuilder({existing,members,profiles,currentUser,today,onSave
 
           <div style={section}>
             <div style={{...bebas,fontSize:15,color:"var(--accent2)"}}>MONEY</div>
-            <div style={{display:"flex",gap:8}}>
-              <Field label="Buy-in ($)"><input className="input" type="number" min={0} value={c.money.buyIn} onChange={e=>upMoney({buyIn:num(e.target.value)})}/></Field>
-              <Field label="Per missed habit ($)"><input className="input" type="number" min={0} value={c.money.missFee} onChange={e=>upMoney({missFee:num(e.target.value)})}/></Field>
+            <Field label="Buy-in ($)"><input className="input" type="number" min={0} value={c.money.buyIn} onChange={e=>upMoney({buyIn:num(e.target.value)})}/></Field>
+            <div style={small}>Penalty style</div>
+            <div style={{display:"flex",gap:6}}>
+              {[["flat","Flat per week"],["perHabit","Per missed habit"]].map(([m,l])=>{const on=(c.money.mode||"perHabit")===m;return(
+                <button key={m} onClick={()=>upMoney(m==="flat"?{mode:m,flatAmount:c.money.flatAmount??6,flatLabel:c.money.flatLabel||"☕ 1 coffee"}:{mode:m})} aria-pressed={on} style={{flex:1,padding:"10px 6px",borderRadius:10,cursor:"pointer",...bebas,fontSize:14,background:on?"rgba(124,92,191,0.2)":"var(--bg3)",border:on?"1px solid var(--accent)":"1px solid var(--border)",color:on?"var(--accent2)":"var(--muted)"}}>{l}</button>);})}
             </div>
-            <Field label="Finishers split the pot at (%)" hint="Everyone who completes at least this share of their weekly habits splits the pot.">
+            {(c.money.mode||"perHabit")==="flat"?<>
+              <div style={{display:"flex",gap:8}}>
+                <div style={{flex:2}}><Field label="Penalty name"><input className="input" value={c.money.flatLabel||""} onChange={e=>upMoney({flatLabel:e.target.value.slice(0,24)})} placeholder="☕ 1 coffee"/></Field></div>
+                <Field label="Worth ($)"><input className="input" type="number" min={0} value={c.money.flatAmount??""} onChange={e=>upMoney({flatAmount:num(e.target.value)})}/></Field>
+              </div>
+              <div style={small}>Miss any habit marked Penalty in a week and you owe {c.money.flatLabel||"the penalty"} (${c.money.flatAmount||0}) to the pot, whether you missed one or five.</div>
+            </>:<>
+              <Field label="Per missed habit ($)"><input className="input" type="number" min={0} value={c.money.missFee} onChange={e=>upMoney({missFee:num(e.target.value)})}/></Field>
+              <div style={small}>Each habit marked Penalty that's missed in a week adds ${c.money.missFee||0} to the pot.</div>
+            </>}
+            <Field label="Finishers split the pot at (%)" hint="Everyone who completes at least this share of their weekly habits splits the pot. All habits count here, penalty or not.">
               <input className="input" type="number" min={0} max={100} value={c.money.payoutPct} onChange={e=>upMoney({payoutPct:num(e.target.value)})}/>
             </Field>
-            <div style={small}>Each habit missed in a week adds ${c.money.missFee||0} to the pot. The app keeps the ledger; pay each other through Venmo or Cash App.</div>
+            <div style={small}>The app keeps the ledger; pay each other through Venmo or Cash App.</div>
           </div>
 
           <div style={section}>
