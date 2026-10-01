@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import {
   getFirestore, doc, getDoc, setDoc, onSnapshot, deleteDoc,
+  updateDoc, deleteField, arrayUnion, arrayRemove, FieldPath,
 } from "firebase/firestore";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 import { getFunctions, httpsCallable } from "firebase/functions";
@@ -45,6 +46,21 @@ export const fsSet = async (path, data) => {
 };
 export const fsDelete = async (path) => {
   await deleteDoc(doc(db, ...path.split("/")));
+};
+// Atomically add/remove one name in an array field, e.g. a group's member list.
+// fieldParts is the path inside the document: ["list", groupId, "members"].
+export const fsArrayAdd = async (path, fieldParts, value) => {
+  await updateDoc(doc(db, ...path.split("/")), new FieldPath(...fieldParts), arrayUnion(value));
+};
+export const fsArrayRemove = async (path, fieldParts, value) => {
+  await updateDoc(doc(db, ...path.split("/")), new FieldPath(...fieldParts), arrayRemove(value));
+};
+// fsSet merges, so it can never remove a key from a map. Use this to really
+// delete fields, e.g. [["byDate", "2026-10-01", "Jake"]].
+export const fsDeleteFields = async (path, fieldPartsList) => {
+  if (!fieldPartsList.length) return;
+  const args = fieldPartsList.flatMap(parts => [new FieldPath(...parts), deleteField()]);
+  await updateDoc(doc(db, ...path.split("/")), ...args);
 };
 export const fsListen = (path, cb) => {
   return onSnapshot(doc(db, ...path.split("/")), (snap) => {

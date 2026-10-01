@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { AvatarDisplay } from "../components/AvatarDisplay";
-import { fsSet } from "../firebase";
+import { fsDeleteFields, fsSet } from "../firebase";
 import { HOME_GYM_DEFAULT } from "../lib/aiConfig";
 import { ALL_TYPES } from "../lib/constants";
 import { fmtDate } from "../lib/dates";
 
 // ── ADMIN PANEL ───────────────────────────────────────────────────────────────
 // Reset PIN = clears their PIN from Firestore. They can log in freely until they set a new one.
-export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteAccount,onAdminBackfill,onClose,garageEquipment,onSaveGarageEquipment,showToast}){
+export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteAccount,onAdminBackfill,onClose,garageEquipment,onSaveGarageEquipment,showToast,history,group,isOwner,onUpdateGroup,onNewInviteCode}){
+  const [groupName,setGroupName]=useState(group?.name||"");
   const [confirmDel,setConfirmDel]=useState(null);
   const [busy,setBusy]=useState(null);
   const [resetDone,setResetDone]=useState([]);
@@ -60,9 +61,28 @@ export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,on
         <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,marginBottom:4}}>ADMIN PANEL</div>
         <div style={{fontSize:12,color:"var(--muted)",marginBottom:16,lineHeight:1.6}}>
           <b>Reset PIN</b> — clears their PIN so they can log straight in.<br/>
-          <b>Delete</b> — permanently removes them from the pack.<br/>
+          <b>Remove</b> — takes them out of this group. Their account and workouts are kept.<br/>
           <b>Backfill</b> — log past workouts on behalf of a member.
         </div>
+
+        {/* ── GROUP SETTINGS ── */}
+        {group&&<div style={{marginBottom:16,padding:14,background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--accent2)"}}>{group.emoji} GROUP SETTINGS</div>
+          <div style={{display:"flex",gap:8}}>
+            <input className="input" value={groupName} onChange={e=>setGroupName(e.target.value)} maxLength={24} aria-label="Group name" style={{flex:1}}/>
+            <button className="btn-primary" style={{width:"auto",padding:"0 14px"}} disabled={!groupName.trim()||groupName.trim()===group.name} onClick={async()=>{await onUpdateGroup({name:groupName.trim()});showToast("Group renamed.");}}>SAVE</button>
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <div><div style={{fontSize:13}}>Gym booking tab</div><div style={{fontSize:11,color:"var(--muted)"}}>Turn on if this group shares a gym space.</div></div>
+            <button onClick={()=>onUpdateGroup({gym:!group.gym})} role="switch" aria-checked={!!group.gym} style={{width:48,height:28,borderRadius:14,border:"none",cursor:"pointer",background:group.gym?"var(--accent)":"var(--bg2)",position:"relative",flexShrink:0}}>
+              <span style={{position:"absolute",top:3,left:group.gym?23:3,width:22,height:22,borderRadius:"50%",background:"#fff",transition:"left .15s"}}/>
+            </button>
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <div><div style={{fontSize:13}}>Invite code: <b style={{letterSpacing:2}}>{group.code}</b></div><div style={{fontSize:11,color:"var(--muted)"}}>A new code stops the old one from working.</div></div>
+            <button className="btn-ghost" style={{fontSize:12,padding:"8px 10px",flexShrink:0}} onClick={onNewInviteCode}>New code</button>
+          </div>
+        </div>}
 
         {/* Member management */}
         {members.filter(m=>m!==currentUser).map(m=>(
@@ -137,9 +157,7 @@ export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,on
                           <div style={{fontSize:10,color:"var(--muted)"}}>{Array.isArray(history[d][m].summary)?history[d][m].summary.join(", "):history[d][m].workoutLabel||"Workout"}</div>
                         </div>
                         <button onClick={async()=>{
-                          const newDay={...(history[d]||{})};delete newDay[m];
-                          const newHistory={...history,[d]:newDay};
-                          await fsSet("wolfpack/workouts",{byDate:newHistory});
+                          await fsDeleteFields("wolfpack/workouts",[["byDate",d,m]]);
                                                     showToast(`Deleted workout for ${m} on ${fmtDate(d)}`);
                         }} style={{padding:"4px 10px",background:"rgba(231,76,60,0.15)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,cursor:"pointer",color:"var(--red)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
                           DELETE
@@ -155,7 +173,7 @@ export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,on
             {/* Delete confirm */}
             {confirmDel===m&&(
               <div style={{padding:"12px 14px",background:"rgba(231,76,60,0.07)",borderTop:"1px solid rgba(231,76,60,0.15)"}}>
-                <div style={{fontSize:13,marginBottom:10}}>Remove <b>{m}</b> from the pack permanently?</div>
+                <div style={{fontSize:13,marginBottom:10}}>Remove <b>{m}</b> from {group?.name||"this group"}?</div>
                 <div style={{display:"flex",gap:8}}>
                   <button onClick={()=>doDelete(m)} disabled={!!busy} style={{flex:1,padding:10,background:"var(--red)",border:"none",borderRadius:8,cursor:"pointer",color:"#fff",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1}}>{busy===`d${m}`?"...":"YES, REMOVE"}</button>
                   <button onClick={()=>setConfirmDel(null)} style={{flex:1,padding:10,background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--muted)",fontSize:13}}>Cancel</button>
@@ -165,7 +183,7 @@ export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,on
           </div>
         ))}
         {/* ── GARAGE GYM EQUIPMENT ── */}
-        <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid var(--border)"}}>
+        {group?.gym&&<div style={{marginTop:20,paddingTop:16,borderTop:"1px solid var(--border)"}}>
           <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--accent2)",marginBottom:4}}>🏠 GARAGE GYM EQUIPMENT</div>
           <div style={{fontSize:11,color:"var(--muted)",marginBottom:10,lineHeight:1.5}}>
             This list is what WOLFMODE uses when members pick "Garage Gym". Add or remove items as your setup changes.
@@ -200,10 +218,10 @@ export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,on
           }} style={{width:"100%",marginBottom:8}}>
             {equipSaved?"✓ SAVED":"SAVE EQUIPMENT LIST"}
           </button>
-        </div>
+        </div>}
 
-        {/* ── WHAT'S NEW EDITOR ── */}
-        <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid var(--border)"}}>
+        {/* ── WHAT'S NEW EDITOR (app owner only — it shows to every group) ── */}
+        {isOwner&&<div style={{marginTop:16,paddingTop:16,borderTop:"1px solid var(--border)"}}>
           <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--accent2)",marginBottom:4}}>📢 WHAT'S NEW EDITOR</div>
           <div style={{fontSize:11,color:"var(--muted)",marginBottom:12,lineHeight:1.5}}>Edit this and save — users will see a popup the next time they open the app. Use a new Update ID each time to trigger it.</div>
 
@@ -259,7 +277,7 @@ export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,on
               <button onClick={()=>setWnPreview(false)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:11,marginTop:4}}>Close preview</button>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* ── ADMIN TOOLS ── */}
         <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid var(--border)"}}>

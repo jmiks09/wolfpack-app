@@ -7,7 +7,8 @@ import { NotifBanner } from "./components/NotifBanner";
 import { Toast } from "./components/Toast";
 import { WhatsNewModal } from "./components/WhatsNewModal";
 import { WolfIcon } from "./components/WolfIcon";
-import { fsDelete, fsGet, fsListen, fsSet, onForegroundMessage } from "./firebase";
+import { fsArrayAdd, fsArrayRemove, fsDelete, fsDeleteFields, fsGet, fsListen, fsSet, onForegroundMessage } from "./firebase";
+import { LEGACY_GROUP_ID, REGISTRY_PATH, clearSession, ensureLegacyGroup, findGroupByCode, gpath, groupsForUser, loadSession, makeGroupId, makeInviteCode, renameInGroup, saveSession } from "./lib/groups";
 import { dismissActiveWorkout } from "./lib/activeWorkout";
 import { AI_MUSCLE_GROUPS, EFFORT_RATINGS, HOME_GYM_DEFAULT } from "./lib/aiConfig";
 import { MILESTONES, NAV, SESSION_MILESTONES, WHATS_NEW_FALLBACK } from "./lib/constants";
@@ -18,8 +19,9 @@ import { getStreak, getTotalWorkouts } from "./lib/stats";
 import { launchConfetti } from "./lib/utils";
 import { ProfileModal } from "./profile/ProfileModal";
 import { AdminPanel } from "./screens/AdminPanel";
-import { Login } from "./screens/Login";
-import { Onboarding } from "./screens/Onboarding";
+import { Entry } from "./screens/Entry";
+import { GroupGate } from "./screens/GroupGate";
+import { GroupSheet } from "./components/GroupSheet";
 import { ChallengesTab } from "./tabs/challenges/ChallengesTab";
 import { FeedTab } from "./tabs/feed/FeedTab";
 import { GymTab } from "./tabs/gym/GymTab";
@@ -31,9 +33,15 @@ import { EditWorkoutModal } from "./workouts/EditWorkoutModal";
 import { EffortRatingModal } from "./workouts/EffortRatingModal";
 import { WorkoutModal } from "./workouts/WorkoutModal";
 
+const NO_MEMBERS=[];
+
 export default function App(){
   const [screen,setScreen]=useState("loading");
-  const [members,setMembers]=useState([]);
+  const [groups,setGroups]=useState({});
+  const [groupId,setGroupId]=useState(null);
+  const [boot,setBoot]=useState({profiles:false,groups:false,legacy:false});
+  const [groupSheetOpen,setGroupSheetOpen]=useState(false);
+  const [groupGateMode,setGroupGateMode]=useState(null);
   const [profiles,setProfiles]=useState({});
   const [currentUser,setCurrentUser]=useState(null);
   const [sharedData,setSharedData]=useState({});
@@ -41,7 +49,6 @@ export default function App(){
   const [feed,setFeed]=useState([]);
   const [challenges,setChallenges]=useState([]);
   const [gymSlots,setGymSlots]=useState([]);
-  const [adminName,setAdminName]=useState(null);
   const [view,setView]=useState("pack");
   const [whatsNewData,setWhatsNewData]=useState(null);
   const [whatsNewOpen,setWhatsNewOpen]=useState(false);
@@ -54,6 +61,13 @@ export default function App(){
   const [profileOpen,setProfileOpen]=useState(false);
   const [lastSeen,setLastSeen]=useState({feed:0,challenges:0,gym:0});
   const [packGoals,setPackGoals]=useState([]);
+  // Current group. Members, admin, feed, challenges, gym, goals and reactions are per group;
+  // profiles and workouts are per person and shared across all of their groups.
+  const group=groupId?groups[groupId]:null;
+  const members=group?.members||NO_MEMBERS;
+  const adminName=group?.admin||null;
+  const myGroups=currentUser?groupsForUser(groups,currentUser):[];
+  const gp=base=>gpath(groupId,base);
   const [garageEquipment,setGarageEquipment]=useState(HOME_GYM_DEFAULT);
   const [userFavorites,setUserFavorites]=useState([]);
 useEffect(()=>{
@@ -75,14 +89,8 @@ useEffect(()=>{
 
   useEffect(()=>{
     (async()=>{
-      const md=await fsGet("wolfpack/members");const m=md?.list||[];setMembers(m);
       const u1=fsListen("wolfpack/workouts",d=>{if(d){setSharedData(d.byDate||{});setHistory(d.byDate||{});}});
-      const u2=fsListen("wolfpack/profiles",d=>{if(d)setProfiles(d.users||{});});
-      const u3=fsListen("wolfpack/feed",d=>{if(d)setFeed((d.posts||[]).sort((a,b)=>b.ts-a.ts));});
-      const u4=fsListen("wolfpack/challenges",d=>{if(d)setChallenges(d.list||[]);});
-      const u5=fsListen("wolfpack/gym",d=>{if(d)setGymSlots(d.slots||[]);});
-      const u6=fsListen("wolfpack/packgoals",d=>{if(d)setPackGoals(d.list||[]);});
-      const u8=fsListen("wolfpack/settings",d=>{if(d?.garageEquipment)setGarageEquipment(d.garageEquipment);});
+      const u2=fsListen("wolfpack/profiles",d=>{if(d)setProfiles(d.users||{});setBoot(b=>b.profiles?b:{...b,profiles:true});});
       const u10=fsListen("wolfpack/favorites",async d=>{
   const firestoreFavs=d?.users?.[currentUser];
   if(firestoreFavs&&firestoreFavs.length>0){
@@ -96,7 +104,6 @@ useEffect(()=>{
     }
   }
 });
-      const u7=fsListen("wolfpack/reactions",d=>{if(d)setReactions(d.data||{});});
       const u9=fsListen("wolfpack/whats_new",d=>{
         if(d?.version&&d?.items){
           setWhatsNewData(d);
@@ -113,35 +120,96 @@ useEffect(()=>{
           }catch{}
         }
       });
-      unsubs.current=[u1,u2,u3,u4,u5,u6,u7,u8,u9,u10];
-      const ad=await fsGet("wolfpack/admin");if(ad?.name)setAdminName(ad.name);
-      setScreen(m.length>0?"login":"onboard");
+      const u11=fsListen(REGISTRY_PATH,d=>{setGroups(d?.list||{});setBoot(b=>b.groups?b:{...b,groups:true});});
+      unsubs.current=[u1,u2,u9,u10,u11];
+      try{await ensureLegacyGroup((await fsGet(REGISTRY_PATH))?.list);}catch(e){console.warn("Group setup failed:",e);}
+      setBoot(b=>({...b,legacy:true}));
     })();
     return()=>unsubs.current.forEach(u=>u?.());
   },[]);
 
+  // Per-group listeners — re-subscribe whenever the group changes.
+  useEffect(()=>{
+    if(!groupId)return;
+    const p=base=>gpath(groupId,base);
+    const us=[
+      fsListen(p("feed"),d=>setFeed((d?.posts||[]).sort((a,b)=>b.ts-a.ts))),
+      fsListen(p("challenges"),d=>setChallenges(d?.list||[])),
+      fsListen(p("gym"),d=>setGymSlots(d?.slots||[])),
+      fsListen(p("packgoals"),d=>setPackGoals(d?.list||[])),
+      fsListen(p("reactions"),d=>setReactions(d?.data||{})),
+      fsListen(p("settings"),d=>setGarageEquipment(d?.garageEquipment||HOME_GYM_DEFAULT)),
+    ];
+    return()=>us.forEach(u=>u?.());
+  },[groupId]);
+
+
   useEffect(()=>{const u=onForegroundMessage(p=>{const{title,body}=p.notification||{};showToast(`${title||"WOLFPACK"}: ${body||""}`);});return()=>u?.();},[showToast]);
 
-  const handleJoin=async(name,avatar,pin,avatarImg)=>{
-    if(members.map(m=>m.toLowerCase()).includes(name.toLowerCase())){setCurrentUser(name);setScreen("main");return;}
-    await fsSet(`wolfpack/pin_${name}`,{pin});
-    const nm=[...members,name],profile={avatar:avatar||"🐺",...(avatarImg?{avatarImg}:{})};
-    const np={...profiles,[name]:profile};
-    if(members.length===0){await fsSet("wolfpack/admin",{name});setAdminName(name);}
-    await fsSet("wolfpack/members",{list:nm});await fsSet("wolfpack/profiles",{users:np});
-    setMembers(nm);setProfiles(np);setCurrentUser(name);setScreen("main");
-    showToast(`Welcome to the pack, ${name}! 🐺`);
-  };
-
-  const handleLogin=(name,action)=>{
-    if(action==="join"){setScreen("onboard");return;}
-    setCurrentUser(name);
+  // ── ACCOUNTS & GROUPS ──────────────────────────────────────────────────────
+  const openGroup=(gid,user)=>{
+    const u=user||currentUser;
+    setGroupId(gid);
+    setFeed([]);setChallenges([]);setGymSlots([]);setPackGoals([]);setReactions({});setGarageEquipment(HOME_GYM_DEFAULT);
+    setView("pack");setGroupGateMode(null);setGroupSheetOpen(false);setAdminOpen(false);
+    const prof=profiles[u];
+    setLastSeen(prof?.lastSeenByGroup?.[gid]||(gid===LEGACY_GROUP_ID?prof?.lastSeen:null)||{feed:0,challenges:0,gym:0});
+    saveSession({user:u,group:gid});
     setScreen("main");
-    // Load lastSeen from profile
-    fsGet("wolfpack/profiles").then(d=>{
-      const seen=d?.users?.[name]?.lastSeen;
-      if(seen) setLastSeen(seen);
-    });
+  };
+  // Signed in: go to the remembered group, the only group, or the group list.
+  const enterAs=(user,preferredGroup)=>{
+    setCurrentUser(user);
+    const mine=groupsForUser(groups,user);
+    const pick=mine.find(g=>g.id===preferredGroup)?.id||(mine.length===1?mine[0].id:null);
+    if(pick){openGroup(pick,user);return;}
+    saveSession({user,group:null});
+    setGroupId(null);setScreen("groups");
+  };
+  const handleCreateAccount=async(name,avatar,pin,avatarImg)=>{
+    await fsSet(`wolfpack/pin_${name}`,{pin});
+    const profile={avatar:avatar||"🐺",...(avatarImg?{avatarImg}:{})};
+    await fsSet("wolfpack/profiles",{users:{[name]:profile}});
+    setProfiles(p=>({...p,[name]:profile}));
+    enterAs(name);
+  };
+  const handleSetPin=async(user,pin)=>{await fsSet(`wolfpack/pin_${user}`,{pin});};
+  const handleJoinGroup=async code=>{
+    const g=findGroupByCode(groups,code);
+    if(!g)return "That code doesn't match any group. Double-check it with your friend.";
+    if(!(g.members||[]).includes(currentUser)){
+      try{await fsArrayAdd(REGISTRY_PATH,["list",g.id,"members"],currentUser);}
+      catch(e){console.warn(e);return "Couldn't join right now. Check your connection and try again.";}
+      if(g.id===LEGACY_GROUP_ID){
+        const l=(await fsGet("wolfpack/members"))?.list||[];
+        if(!l.includes(currentUser))await fsSet("wolfpack/members",{list:[...l,currentUser]});
+      }
+      setGroups(p=>({...p,[g.id]:{...g,members:[...(g.members||[]),currentUser]}}));
+      showToast(`Welcome to ${g.name}! 🐺`);
+    }
+    openGroup(g.id);
+    return null;
+  };
+  const handleCreateGroup=async(name,emoji)=>{
+    const id=makeGroupId();
+    const g={id,name,emoji,code:makeInviteCode(Object.values(groups).map(x=>x.code)),admin:currentUser,members:[currentUser],gym:false,createdAt:Date.now()};
+    await fsSet(REGISTRY_PATH,{list:{[id]:g}});
+    setGroups(p=>({...p,[id]:g}));
+    return g;
+  };
+  const handleUpdateGroup=async patch=>{
+    await fsSet(REGISTRY_PATH,{list:{[groupId]:patch}});
+    setGroups(p=>({...p,[groupId]:{...p[groupId],...patch}}));
+  };
+  const handleNewInviteCode=async()=>{
+    const code=makeInviteCode(Object.values(groups).map(x=>x.code));
+    await handleUpdateGroup({code});
+    showToast(`New invite code: ${code}`);
+  };
+  const handleSignOut=()=>{
+    clearSession();
+    setGroupSheetOpen(false);setGroupGateMode(null);setAdminOpen(false);setProfileOpen(false);
+    setGroupId(null);setCurrentUser(null);setScreen("entry");
   };
 
   const handleResetPin=async m=>{await fsDelete(`wolfpack/pin_${m}`);showToast(`${m}'s PIN cleared. They can log in freely now.`);};
@@ -171,29 +239,44 @@ useEffect(()=>{
       return c;
     });
     if(JSON.stringify(newChallenges)!==JSON.stringify(challenges)){
-      await fsSet("wolfpack/challenges",{list:newChallenges});
+      await fsSet(gp("challenges"),{list:newChallenges});
     }
     showToast(`✓ Logged ${icons} for ${member} on ${date}`);
   };
 
+  // Once profiles and groups have loaded, resume a remembered session or show the entry screen.
+  useEffect(()=>{
+    if(screen!=="loading"||!boot.profiles||!boot.groups||!boot.legacy)return;
+    const s=loadSession();
+    if(s?.user&&profiles[s.user])enterAs(s.user,s.group);
+    else setScreen("entry");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[boot,screen,profiles,groups]);
+
+  // Admin: remove someone from this group. Their account and workouts are kept.
   const handleDeleteAccount=async m=>{
-    const nm=members.filter(x=>x!==m),np={...profiles};delete np[m];
     const nc=challenges.map(c=>{const p={...c.participants};delete p[m];return{...c,participants:p};});
     const ns=gymSlots.filter(s=>s.bookedBy!==m);
-    await Promise.all([fsSet("wolfpack/members",{list:nm}),fsSet("wolfpack/profiles",{users:np}),fsSet("wolfpack/challenges",{list:nc}),fsSet("wolfpack/gym",{slots:ns}),fsDelete(`wolfpack/pin_${m}`)]);
-    setMembers(nm);setProfiles(np);showToast(`${m} removed from the pack.`);
+    await Promise.all([
+      fsArrayRemove(REGISTRY_PATH,["list",groupId,"members"],m),
+      fsSet(gp("challenges"),{list:nc}),
+      fsSet(gp("gym"),{slots:ns}),
+      ...(groupId===LEGACY_GROUP_ID?[fsSet("wolfpack/members",{list:members.filter(x=>x!==m)})]:[]),
+    ]);
+    setGroups(p=>({...p,[groupId]:{...p[groupId],members:(p[groupId]?.members||[]).filter(x=>x!==m)}}));
+    showToast(`${m} removed from ${group?.name||"the group"}.`);
   };
 
   const handleAddPackGoal=async t=>{
     const goal={id:Date.now().toString(),author:currentUser,text:t,cheers:[],ts:Date.now(),date:todayStr()};
-    await fsSet("wolfpack/packgoals",{list:[goal,...packGoals]});
+    await fsSet(gp("packgoals"),{list:[goal,...packGoals]});
   };
   const handleCheerGoal=async(id,user)=>{
     const nl=packGoals.map(g=>{if(g.id!==id)return g;const c=g.cheers||[];return{...g,cheers:c.includes(user)?c.filter(x=>x!==user):[...c,user]};});
-    await fsSet("wolfpack/packgoals",{list:nl});
+    await fsSet(gp("packgoals"),{list:nl});
   };
   const handleDeletePackGoal=async id=>{
-    await fsSet("wolfpack/packgoals",{list:packGoals.filter(g=>g.id!==id)});
+    await fsSet(gp("packgoals"),{list:packGoals.filter(g=>g.id!==id)});
   };
   const handleSaveBackfill=async updatedHistory=>{
     await fsSet("wolfpack/workouts",{byDate:updatedHistory});
@@ -204,7 +287,7 @@ useEffect(()=>{
     const memberReactions=reactions[member]||{};
     const emojiList=memberReactions[emoji]||[];
     const updated={...reactions,[member]:{...memberReactions,[emoji]:emojiList.includes(currentUser)?emojiList.filter(x=>x!==currentUser):[...emojiList,currentUser]}};
-    await fsSet("wolfpack/reactions",{data:updated});
+    await fsSet(gp("reactions"),{data:updated});
   };
 
   // Edit workout
@@ -235,7 +318,7 @@ useEffect(()=>{
     const newDay={...(history[date]||{})};
     delete newDay[currentUser];
     const newHistory={...history,[date]:newDay};
-    await fsSet("wolfpack/workouts",{byDate:newHistory});
+    await fsDeleteFields("wolfpack/workouts",[["byDate",date,currentUser]]);
     // Force local state update immediately
     setHistory(newHistory);
     setSharedData(newHistory);
@@ -264,7 +347,7 @@ useEffect(()=>{
     const posts=[];
     if(streakMilestone) posts.push({id:Date.now().toString(),author:currentUser,text:`🔥 ${currentUser} just hit a ${streakMilestone}-day streak! The wolf is on fire! 🐺`,ts:Date.now(),likes:[],isAuto:true});
     if(sessionMilestone) posts.push({id:(Date.now()+1).toString(),author:currentUser,text:`💪 ${currentUser} just logged their ${sessionMilestone}th workout session! Beast mode! 🏋️`,ts:Date.now()+1,likes:[],isAuto:true});
-    if(posts.length>0) await fsSet("wolfpack/feed",{posts:[...posts,...feed]});
+    if(posts.length>0) await fsSet(gp("feed"),{posts:[...posts,...feed]});
   };
   const handleSaveWeight=async wl=>{
     const np={...profiles,[currentUser]:{...profiles[currentUser],weightLog:wl}};
@@ -278,50 +361,31 @@ useEffect(()=>{
     await fsSet(`wolfpack/pin_${currentUser}`,{pin:newPin});
   };
   const handleChangeName=async(newName,setErr,setDone)=>{
-    if(!newName.trim()){setErr("Name can't be empty");return;}
-    if(newName.trim()===currentUser){return;}
-    // Check name not taken
-    if(members.map(m=>m.toLowerCase()).includes(newName.trim().toLowerCase())&&newName.trim().toLowerCase()!==currentUser.toLowerCase()){
-      setErr("That name is already taken");return;
-    }
+    const nn=newName.trim();
+    if(!nn){setErr("Name can't be empty");return;}
+    if(nn===currentUser)return;
+    if(Object.keys(profiles).some(k=>k.toLowerCase()===nn.toLowerCase()&&k!==currentUser)){setErr("That name is already taken");return;}
     const oldName=currentUser;
-    const nm=members.map(m=>m===oldName?newName.trim():m);
-    // Update profile
-    const np={...profiles,[newName.trim()]:{...profiles[oldName]}};
-    delete np[oldName];
-    // Update workout history keys
-    const newHistory={};
-    Object.entries(history).forEach(([date,dayData])=>{
-      const newDay={...dayData};
-      if(newDay[oldName]){newDay[newName.trim()]=newDay[oldName];delete newDay[oldName];}
-      newHistory[date]=newDay;
-    });
-    // Update challenges
-    const newChallenges=challenges.map(c=>{
-      const newParts={};
-      Object.entries(c.participants||{}).forEach(([m,v])=>{newParts[m===oldName?newName.trim():m]=v;});
-      return{...c,participants:newParts,createdBy:c.createdBy===oldName?newName.trim():c.createdBy};
-    });
-    // Update feed
-    const newFeed=feed.map(p=>({...p,author:p.author===oldName?newName.trim():p.author,comments:(p.comments||[]).map(c=>({...c,author:c.author===oldName?newName.trim():c.author}))}));
-    // Update gym slots
-    const newSlots=gymSlots.map(s=>({...s,bookedBy:s.bookedBy===oldName?newName.trim():s.bookedBy}));
-    // Update PIN
+    const swap=x=>x===oldName?nn:x;
+    // Profile: copy to the new name, then really delete the old key
+    await fsSet("wolfpack/profiles",{users:{[nn]:profiles[oldName]||{}}});
+    await fsDeleteFields("wolfpack/profiles",[["users",oldName]]);
+    // Workout history
+    const moved={},dels=[];
+    Object.entries(history).forEach(([date,day])=>{if(day?.[oldName]){moved[date]={[nn]:day[oldName]};dels.push(["byDate",date,oldName]);}});
+    if(dels.length){await fsSet("wolfpack/workouts",{byDate:moved});await fsDeleteFields("wolfpack/workouts",dels);}
+    // PIN
     const pinData=await fsGet(`wolfpack/pin_${oldName}`);
-    await Promise.all([
-      fsSet("wolfpack/members",{list:nm}),
-      fsSet("wolfpack/profiles",{users:np}),
-      fsSet("wolfpack/workouts",{byDate:newHistory}),
-      fsSet("wolfpack/challenges",{list:newChallenges}),
-      fsSet("wolfpack/feed",{posts:newFeed}),
-      fsSet("wolfpack/gym",{slots:newSlots}),
-      ...(pinData?[fsSet(`wolfpack/pin_${newName.trim()}`,pinData),fsDelete(`wolfpack/pin_${oldName}`)]:[]),
-    ]);
-    // Update admin if needed
-    if(adminName===oldName){await fsSet("wolfpack/admin",{name:newName.trim()});setAdminName(newName.trim());}
-    setMembers(nm);setProfiles(np);setCurrentUser(newName.trim());
+    if(pinData){await fsSet(`wolfpack/pin_${nn}`,pinData);await fsDelete(`wolfpack/pin_${oldName}`);}
+    // Every group they belong to
+    for(const g of groupsForUser(groups,oldName)){
+      await fsSet(REGISTRY_PATH,{list:{[g.id]:{members:(g.members||[]).map(swap),admin:swap(g.admin)}}});
+      await renameInGroup(g.id,oldName,nn);
+    }
+    setProfiles(p=>{const np={...p,[nn]:p[oldName]};delete np[oldName];return np;});
+    setCurrentUser(nn);saveSession({user:nn,group:groupId});
     setDone(true);
-    showToast(`Name updated to ${newName.trim()}!`);
+    showToast(`Name updated to ${nn}!`);
   };
 
   const [loggingWorkout,setLoggingWorkout]=useState(false);
@@ -414,17 +478,17 @@ useEffect(()=>{
 
   const handlePost=async(t,photo)=>{
     const post={id:Date.now().toString(),author:currentUser,text:t,ts:Date.now(),likes:[],...(photo?{photo}:{})};
-    await fsSet("wolfpack/feed",{posts:[post,...feed]});showToast("Posted! 🐺");
+    await fsSet(gp("feed"),{posts:[post,...feed]});showToast("Posted! 🐺");
   };
-  const handleLike=async id=>{await fsSet("wolfpack/feed",{posts:feed.map(p=>{if(p.id!==id)return p;const l=p.likes||[];return{...p,likes:l.includes(currentUser)?l.filter(x=>x!==currentUser):[...l,currentUser]};})});};
-  const handleDelPost=async id=>{await fsSet("wolfpack/feed",{posts:feed.filter(p=>p.id!==id)});};
+  const handleLike=async id=>{await fsSet(gp("feed"),{posts:feed.map(p=>{if(p.id!==id)return p;const l=p.likes||[];return{...p,likes:l.includes(currentUser)?l.filter(x=>x!==currentUser):[...l,currentUser]};})});};
+  const handleDelPost=async id=>{await fsSet(gp("feed"),{posts:feed.filter(p=>p.id!==id)});};
   const handleComment=async(postId,text)=>{
     const comment={author:currentUser,text,ts:Date.now()};
     const newFeed=feed.map(p=>{
       if(p.id!==postId)return p;
       return{...p,comments:[...(p.comments||[]),comment]};
     });
-    await fsSet("wolfpack/feed",{posts:newFeed});
+    await fsSet(gp("feed"),{posts:newFeed});
   };
   const handleDeleteComment=async(postId,idx)=>{
     const newFeed=feed.map(p=>{
@@ -433,7 +497,7 @@ useEffect(()=>{
       comments.splice(idx,1);
       return{...p,comments};
     });
-    await fsSet("wolfpack/feed",{posts:newFeed});
+    await fsSet(gp("feed"),{posts:newFeed});
   };
   const handleBookGym=async(date,slot,durationMins,displayTime)=>{
     // Check for conflicts
@@ -443,11 +507,11 @@ useEffect(()=>{
     const myConflict=daySlots.find(s=>s.bookedBy===currentUser&&slotOverlaps(slot.h,slot.m,s));
     if(myConflict){showToast("You already have a booking that overlaps!");return;}
     const booking={id:Date.now().toString(),date,time:slot.label,displayTime,startH:slot.h,startM:slot.m,durationMins,bookedBy:currentUser,createdAt:Date.now()};
-    await fsSet("wolfpack/gym",{slots:[...gymSlots,booking]});
+    await fsSet(gp("gym"),{slots:[...gymSlots,booking]});
     showToast(`Gym booked: ${displayTime}! 💪`);
   };
-  const handleCancelGym=async id=>{await fsSet("wolfpack/gym",{slots:gymSlots.filter(s=>s.id!==id)});showToast("Cancelled.");};
-  const handleAddChallenge=async c=>{await fsSet("wolfpack/challenges",{list:[c,...challenges]});showToast("Challenge created! ⚔️");};
+  const handleCancelGym=async id=>{await fsSet(gp("gym"),{slots:gymSlots.filter(s=>s.id!==id)});showToast("Cancelled.");};
+  const handleAddChallenge=async c=>{await fsSet(gp("challenges"),{list:[c,...challenges]});showToast("Challenge created! ⚔️");};
   const handleLogProgress=async(cid,member,progress,done)=>{
     const nl=challenges.map(c=>{
       if(c.id!==cid)return c;
@@ -455,11 +519,11 @@ useEffect(()=>{
       if(Object.values(u.participants).every(p=>p.done)){u.status="completed";launchConfetti();showToast("🏆 Challenge complete!");}
       return u;
     });
-    await fsSet("wolfpack/challenges",{list:nl});
+    await fsSet(gp("challenges"),{list:nl});
     if(done)showToast("✓ You completed your part! 🎉");else showToast("Progress logged!");
   };
-  const handleDelChallenge=async id=>{await fsSet("wolfpack/challenges",{list:challenges.filter(c=>c.id!==id)});showToast("Challenge removed.");};
-  const handleEditChallenge=async u=>{await fsSet("wolfpack/challenges",{list:challenges.map(c=>c.id===u.id?u:c)});showToast("Challenge updated!");};
+  const handleDelChallenge=async id=>{await fsSet(gp("challenges"),{list:challenges.filter(c=>c.id!==id)});showToast("Challenge removed.");};
+  const handleEditChallenge=async u=>{await fsSet(gp("challenges"),{list:challenges.map(c=>c.id===u.id?u:c)});showToast("Challenge updated!");};
   const handleAcceptChallenge=async(challengeId,member)=>{
     const newList=challenges.map(c=>{
       if(c.id!==challengeId)return c;
@@ -469,7 +533,7 @@ useEffect(()=>{
         acceptedAt:todayStr(), // track when they joined for penalty purposes
       }}};
     });
-    await fsSet("wolfpack/challenges",{list:newList});
+    await fsSet(gp("challenges"),{list:newList});
     showToast("Challenge accepted! Rest days are now locked. ⚔️");
   };
   const handleDeclineChallenge=async(challengeId,member)=>{
@@ -479,7 +543,7 @@ useEffect(()=>{
       delete np[member];
       return{...c,participants:np};
     });
-    await fsSet("wolfpack/challenges",{list:newList});
+    await fsSet(gp("challenges"),{list:newList});
     showToast("Challenge declined.");
   };
   const handleMarkPaid=async(challengeId,member,amount,method)=>{
@@ -489,7 +553,7 @@ useEffect(()=>{
       const existingPayments=c.payments?.[member]||[];
       return{...c,payments:{...c.payments,[member]:[...existingPayments,payment]}};
     });
-    await fsSet("wolfpack/challenges",{list:newList});
+    await fsSet(gp("challenges"),{list:newList});
     showToast(`✓ $${amount} ${method} payment recorded for ${member}`);
   };
   const handleLogPayment=async(challengeId,member,amount,method)=>{
@@ -501,7 +565,7 @@ useEffect(()=>{
       if(c.id!==challengeId)return c;
       return{...c,participants:{...c.participants,[member]:{...c.participants[member],forfeited:true,forfeitedAt:Date.now()}}};
     });
-    await fsSet("wolfpack/challenges",{list:newList});
+    await fsSet(gp("challenges"),{list:newList});
     showToast(`🏳️ Forfeited. You owe $${challenges.find(c=>c.id===challengeId)?.forfeitCap||0}.`);
   };
 
@@ -530,16 +594,16 @@ useEffect(()=>{
     );
   })();
 
-  if(screen==="loading")return<div className="loading-screen"><div className="loading-wolf"><img src="/wolfpack-app/wolf-icon.png" alt="wolf" style={{width:80,height:80,objectFit:"contain"}}/></div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:32,letterSpacing:6,background:"linear-gradient(135deg,#fff,#9b7de0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFPACK</div><div style={{color:"var(--muted)",fontSize:13}}>Loading the pack...</div></div>;
-  if(screen==="onboard")return<Onboarding onJoin={handleJoin}/>;
-  if(screen==="login")return<Login members={members} profiles={profiles} onLogin={handleLogin} adminName={adminName}/>;
+  if(screen==="loading"||(screen==="main"&&!group))return<div className="loading-screen"><div className="loading-wolf"><img src="/wolfpack-app/wolf-icon.png" alt="wolf" style={{width:80,height:80,objectFit:"contain"}}/></div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:32,letterSpacing:6,background:"linear-gradient(135deg,#fff,#9b7de0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFPACK</div><div style={{color:"var(--muted)",fontSize:13}}>Loading the pack...</div></div>;
+  if(screen==="entry")return<Entry profiles={profiles} onSignIn={name=>enterAs(name)} onCreateAccount={handleCreateAccount} onSetPin={handleSetPin}/>;
+  if(screen==="groups")return<GroupGate key={currentUser} user={currentUser} myGroups={myGroups} onPick={gid=>openGroup(gid)} onJoin={handleJoinGroup} onCreate={handleCreateGroup} onSignOut={handleSignOut}/>;
 
   return(
     <div className="app">
       <canvas id="confetti-canvas"/>
       <Toast msg={toast}/>
       <div className="header">
-        <div style={{display:"flex",alignItems:"center",gap:8}}><WolfIcon size={38}/><div><div className="header-title">WOLFPACK</div><div style={{fontSize:11,color:"var(--muted)",letterSpacing:1}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div></div></div>
+        <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}><WolfIcon size={38}/><div style={{minWidth:0}}><button onClick={()=>setGroupSheetOpen(true)} aria-label="Switch group" style={{background:"none",border:"none",padding:0,cursor:"pointer",color:"inherit",display:"flex",alignItems:"center",gap:6,maxWidth:"100%"}}><span className="header-title" style={{display:"inline-block",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{group.name}</span><span style={{fontSize:12,color:"var(--muted)"}}>▾</span></button><div style={{fontSize:11,color:"var(--muted)",letterSpacing:1}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div></div></div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           {currentUser===adminName&&(
             <button onClick={()=>setAdminOpen(true)} style={{background:"none",border:"1px solid var(--border)",borderRadius:10,padding:"6px 8px",cursor:"pointer",color:"var(--muted)",fontSize:16,lineHeight:1}}>⚙️</button>
@@ -604,7 +668,7 @@ useEffect(()=>{
         {view==="stats"&&<StatsTab currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed} onEditExercises={(date,entry)=>setEditCompletedWorkout({date,entry})}/>}
       </div>
       <nav className="nav">
-        {NAV.map(n=>{
+        {NAV.filter(n=>n.id!=="gym"||group.gym).map(n=>{
           const hasDot=n.id==="feed"?hasFeedDot:n.id==="challenges"?hasChallengeDot:n.id==="gym"?hasGymDot:false;
           return(
             <button key={n.id} className={`nav-btn ${view===n.id?"active":""}`}
@@ -614,12 +678,8 @@ useEffect(()=>{
                 setLastSeen(p=>{
                   const updated={...p,[n.id]:now};
                   // Persist to Firebase
-                  if(currentUser){
-                    fsGet("wolfpack/profiles").then(d=>{
-                      if(d?.users?.[currentUser]){
-                        fsSet("wolfpack/profiles",{users:{...d.users,[currentUser]:{...d.users[currentUser],lastSeen:updated}}});
-                      }
-                    });
+                  if(currentUser&&groupId){
+                    fsSet("wolfpack/profiles",{users:{[currentUser]:{lastSeenByGroup:{[groupId]:updated},...(groupId===LEGACY_GROUP_ID?{lastSeen:updated}:{})}}});
                   }
                   return updated;
                 });
@@ -660,7 +720,9 @@ useEffect(()=>{
       {editCompletedWorkout&&<EditCompletedWorkoutModal date={editCompletedWorkout.date} entry={editCompletedWorkout.entry} currentUser={currentUser} onSave={handleSaveEditedExercises} onClose={()=>setEditCompletedWorkout(null)}/>}
       {whatsNewOpen&&<WhatsNewModal onClose={dismissWhatsNew} whatsNewData={whatsNewData||WHATS_NEW_FALLBACK}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
-      {adminOpen&&<AdminPanel showToast={showToast} members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet("wolfpack/settings",{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
+      {groupSheetOpen&&<GroupSheet currentUser={currentUser} group={group} myGroups={myGroups} onSwitch={gid=>openGroup(gid)} onJoinOrCreate={()=>{setGroupSheetOpen(false);setGroupGateMode("choose");}} onSignOut={handleSignOut} onClose={()=>setGroupSheetOpen(false)}/>}
+      {groupGateMode&&<GroupGate user={currentUser} myGroups={myGroups} startMode={groupGateMode} onPick={gid=>openGroup(gid)} onJoin={handleJoinGroup} onCreate={handleCreateGroup} onSignOut={handleSignOut} onCancel={()=>setGroupGateMode(null)}/>}
+      {adminOpen&&<AdminPanel showToast={showToast} history={history} group={group} isOwner={groups[LEGACY_GROUP_ID]?.admin===currentUser} onUpdateGroup={handleUpdateGroup} onNewInviteCode={handleNewInviteCode} members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet(gp("settings"),{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
     </div>
   );
 }
