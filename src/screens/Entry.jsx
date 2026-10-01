@@ -3,6 +3,7 @@ import { WolfIcon } from "../components/WolfIcon";
 import { AvatarDisplay } from "../components/AvatarDisplay";
 import { fsGet } from "../firebase";
 import { WOLF_AVATARS } from "../lib/constants";
+import { findGroupByCode } from "../lib/groups";
 import { compressImage, readFileAsDataURL } from "../lib/utils";
 
 const title = {fontFamily:"'Bebas Neue',cursive",fontSize:38,letterSpacing:6,background:"linear-gradient(135deg,#fff,#9b7de0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"};
@@ -24,7 +25,7 @@ const Err = ({msg}) => msg ? <div style={{color:"var(--red)",fontSize:13}}>{msg}
 
 // ── ENTRY ─────────────────────────────────────────────────────────────────────
 // splash → sign in (name + PIN) or create account (name → look → PIN)
-export function Entry({profiles,onSignIn,onCreateAccount,onSetPin}){
+export function Entry({profiles,groups,onSignIn,onCreateAccount,onSetPin}){
   const [step,setStep]=useState("splash");
   const [name,setName]=useState("");
   const [pin,setPin]=useState("");
@@ -34,20 +35,41 @@ export function Entry({profiles,onSignIn,onCreateAccount,onSetPin}){
   const [matched,setMatched]=useState(null); // existing account name, exact casing
   const [error,setError]=useState("");
   const [busy,setBusy]=useState(false);
+  const [code,setCode]=useState("");
+  const [codeGroup,setCodeGroup]=useState(null);
   const fileRef=useRef();
 
   const go=s=>{setError("");setPin("");setPin2("");setStep(s);};
   const findAccount=n=>Object.keys(profiles||{}).find(k=>k.toLowerCase()===n.trim().toLowerCase())||null;
 
-  // Sign in
-  const submitSignInName=async()=>{
-    const acct=findAccount(name);
-    if(!acct)return setError("No account with that name. Check the spelling or create one.");
+  // Sign in: pick yourself from name suggestions or from a group's member list
+  const chooseAccount=async acct=>{
     setMatched(acct);setBusy(true);
     const stored=await fsGet(`wolfpack/pin_${acct}`);
     setBusy(false);
     go(stored?.pin?"pin":"newpin");
   };
+  const q=name.trim().toLowerCase();
+  const suggestions=q?Object.keys(profiles||{})
+    .filter(n=>n.toLowerCase().includes(q))
+    .sort((a,b)=>(b.toLowerCase().startsWith(q)-a.toLowerCase().startsWith(q))||a.localeCompare(b))
+    .slice(0,5):[];
+  const submitSignInName=()=>{
+    const acct=findAccount(name)||(suggestions.length===1?suggestions[0]:null);
+    if(acct)return chooseAccount(acct);
+    setError(suggestions.length?"Tap your name below.":"No names match. Try fewer letters, or use your group's invite code.");
+  };
+  const submitCode=()=>{
+    const g=findGroupByCode(groups,code);
+    if(!g)return setError("That code doesn't match any group.");
+    setError("");setCodeGroup(g);
+  };
+  const personRow=n=>(
+    <button key={n} onClick={()=>chooseAccount(n)} disabled={busy} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12,cursor:"pointer",width:"100%",color:"var(--text)"}}>
+      <AvatarDisplay profile={profiles[n]} size={36}/>
+      <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:2}}>{n}</div>
+    </button>
+  );
   const submitPin=async()=>{
     if(pin.length!==4)return setError("Enter your 4-digit PIN");
     setBusy(true);
@@ -92,11 +114,25 @@ export function Entry({profiles,onSignIn,onCreateAccount,onSetPin}){
   return(
     <Shell>
       {step==="signin"&&<div style={wrap}>
-        <div style={lbl}>SIGN IN</div>
-        <input className="input" placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSignInName()} autoFocus autoCapitalize="words" autoComplete="username"/>
+        <div style={lbl}>WHO ARE YOU?</div>
+        <input className="input" placeholder="Start typing your name" value={name} onChange={e=>{setName(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&submitSignInName()} autoFocus autoCapitalize="words" autoComplete="off"/>
+        {suggestions.map(personRow)}
         <Err msg={error}/>
-        <button className="btn-primary" onClick={submitSignInName} disabled={busy||!name.trim()}>{busy?"...":"CONTINUE"}</button>
+        <button className="btn-ghost" style={{width:"100%"}} onClick={()=>{setCode("");setCodeGroup(null);go("bycode");}}>Find me with my group's invite code</button>
         <button className="btn-ghost" style={{width:"100%"}} onClick={()=>go("splash")}>← Back</button>
+      </div>}
+
+      {step==="bycode"&&<div style={wrap}>
+        {!codeGroup?<>
+          <div style={lbl}>ENTER YOUR GROUP'S CODE</div>
+          <input className="input" placeholder="Invite code" value={code} onChange={e=>{setCode(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&submitCode()} autoFocus autoCapitalize="characters" style={{textTransform:"uppercase",letterSpacing:4,textAlign:"center",fontSize:20}}/>
+          <Err msg={error}/>
+          <button className="btn-primary" onClick={submitCode}>SHOW MEMBERS</button>
+        </>:<>
+          <div style={lbl}>{codeGroup.emoji} {codeGroup.name.toUpperCase()}: TAP YOUR NAME</div>
+          {[...(codeGroup.members||[])].sort((a,b)=>a.localeCompare(b)).map(personRow)}
+        </>}
+        <button className="btn-ghost" style={{width:"100%"}} onClick={()=>go("signin")}>← Back</button>
       </div>}
 
       {step==="pin"&&<div style={wrap}>
@@ -107,7 +143,7 @@ export function Entry({profiles,onSignIn,onCreateAccount,onSetPin}){
         <input className="input" type="password" inputMode="numeric" placeholder="Enter PIN" value={pin} onChange={e=>setPin(digits(e.target.value))} onKeyDown={e=>e.key==="Enter"&&submitPin()} autoFocus maxLength={4} style={pinStyle} autoComplete="current-password"/>
         <Err msg={error}/>
         <button className="btn-primary" onClick={submitPin} disabled={busy}>{busy?"...":<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><WolfIcon size={18}/>LET ME IN</span>}</button>
-        <button className="btn-ghost" style={{width:"100%"}} onClick={()=>go("signin")}>← Not you?</button>
+        <button className="btn-ghost" style={{width:"100%"}} onClick={()=>{setName("");go("signin");}}>← Not you?</button>
       </div>}
 
       {step==="newpin"&&<div style={wrap}>

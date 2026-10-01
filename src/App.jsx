@@ -595,7 +595,7 @@ useEffect(()=>{
   })();
 
   if(screen==="loading"||(screen==="main"&&!group))return<div className="loading-screen"><div className="loading-wolf"><img src="/wolfpack-app/wolf-icon.png" alt="wolf" style={{width:80,height:80,objectFit:"contain"}}/></div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:32,letterSpacing:6,background:"linear-gradient(135deg,#fff,#9b7de0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WOLFPACK</div><div style={{color:"var(--muted)",fontSize:13}}>Loading the pack...</div></div>;
-  if(screen==="entry")return<Entry profiles={profiles} onSignIn={name=>enterAs(name)} onCreateAccount={handleCreateAccount} onSetPin={handleSetPin}/>;
+  if(screen==="entry")return<Entry profiles={profiles} groups={groups} onSignIn={name=>enterAs(name)} onCreateAccount={handleCreateAccount} onSetPin={handleSetPin}/>;
   if(screen==="groups")return<GroupGate key={currentUser} user={currentUser} myGroups={myGroups} onPick={gid=>openGroup(gid)} onJoin={handleJoinGroup} onCreate={handleCreateGroup} onSignOut={handleSignOut}/>;
 
   return(
