@@ -22,6 +22,9 @@ import { AdminPanel } from "./screens/AdminPanel";
 import { Entry } from "./screens/Entry";
 import { GroupGate } from "./screens/GroupGate";
 import { GroupSheet } from "./components/GroupSheet";
+import { HabitBuilder } from "./tabs/challenges/habits/HabitBuilder";
+import { HabitChallengeCard } from "./tabs/challenges/habits/HabitChallengeCard";
+import { HabitTodayCard } from "./tabs/challenges/habits/HabitTodayCard";
 import { ChallengesTab } from "./tabs/challenges/ChallengesTab";
 import { FeedTab } from "./tabs/feed/FeedTab";
 import { GymTab } from "./tabs/gym/GymTab";
@@ -61,6 +64,9 @@ export default function App(){
   const [profileOpen,setProfileOpen]=useState(false);
   const [lastSeen,setLastSeen]=useState({feed:0,challenges:0,gym:0});
   const [packGoals,setPackGoals]=useState([]);
+  const [habitChallenges,setHabitChallenges]=useState({});
+  const [habitLogs,setHabitLogs]=useState({});
+  const [habitBuilder,setHabitBuilder]=useState(null); // "new" or a challenge id
   // Current group. Members, admin, feed, challenges, gym, goals and reactions are per group;
   // profiles and workouts are per person and shared across all of their groups.
   const group=groupId?groups[groupId]:null;
@@ -139,9 +145,18 @@ useEffect(()=>{
       fsListen(p("packgoals"),d=>setPackGoals(d?.list||[])),
       fsListen(p("reactions"),d=>setReactions(d?.data||{})),
       fsListen(p("settings"),d=>setGarageEquipment(d?.garageEquipment||HOME_GYM_DEFAULT)),
+      fsListen(p("habits"),d=>setHabitChallenges(d?.list||{})),
     ];
     return()=>us.forEach(u=>u?.());
   },[groupId]);
+
+  // Check-in logs: one document per habit challenge.
+  const habitIds=Object.keys(habitChallenges).sort().join(",");
+  useEffect(()=>{
+    if(!groupId||!habitIds)return;
+    const us=habitIds.split(",").map(cid=>fsListen(gpath(groupId,`hlog_${cid}`),d=>setHabitLogs(l=>({...l,[cid]:d||{}}))));
+    return()=>us.forEach(u=>u?.());
+  },[groupId,habitIds]);
 
 
   useEffect(()=>{const u=onForegroundMessage(p=>{const{title,body}=p.notification||{};showToast(`${title||"WOLFPACK"}: ${body||""}`);});return()=>u?.();},[showToast]);
@@ -150,7 +165,7 @@ useEffect(()=>{
   const openGroup=(gid,user)=>{
     const u=user||currentUser;
     setGroupId(gid);
-    setFeed([]);setChallenges([]);setGymSlots([]);setPackGoals([]);setReactions({});setGarageEquipment(HOME_GYM_DEFAULT);
+    setFeed([]);setChallenges([]);setGymSlots([]);setPackGoals([]);setReactions({});setHabitChallenges({});setHabitLogs({});setHabitBuilder(null);setGarageEquipment(HOME_GYM_DEFAULT);
     setView("pack");setGroupGateMode(null);setGroupSheetOpen(false);setAdminOpen(false);
     const prof=profiles[u];
     setLastSeen(prof?.lastSeenByGroup?.[gid]||(gid===LEGACY_GROUP_ID?prof?.lastSeen:null)||{feed:0,challenges:0,gym:0});
@@ -569,6 +584,36 @@ useEffect(()=>{
     showToast(`🏳️ Forfeited. You owe $${challenges.find(c=>c.id===challengeId)?.forfeitCap||0}.`);
   };
 
+  // ── HABIT CHALLENGES ───────────────────────────────────────────────────────
+  const habitList=Object.values(habitChallenges).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const handleSaveHabitChallenge=async(def,removed)=>{
+    const id=def.id||`hc${Date.now().toString(36)}`;
+    const full={...def,id,createdBy:def.createdBy||currentUser,createdAt:def.createdAt||Date.now()};
+    await fsSet(gp("habits"),{list:{[id]:full}});
+    if(removed?.length)await fsDeleteFields(gp("habits"),removed.map(u=>["list",id,"participants",u]));
+    showToast(def.id?"Challenge updated.":`${full.emoji} ${full.name} is on!`);
+  };
+  const handleDeleteHabitChallenge=async id=>{
+    await fsDeleteFields(gp("habits"),[["list",id]]);
+    await fsDelete(gp(`hlog_${id}`));
+    showToast("Challenge deleted.");
+  };
+  const handleHabitLog=(cid,date,patch)=>fsSet(gp(`hlog_${cid}`),{byUser:{[currentUser]:{days:{[date]:patch}}}});
+  const handleGoalWeight=(cid,w)=>fsSet(gp(`hlog_${cid}`),{byUser:{[currentUser]:{goalWeight:w}}});
+  const handleJoinHabit=async cid=>{
+    await fsSet(gp("habits"),{list:{[cid]:{participants:{[currentUser]:{joinedAt:todayStr(),leftAt:null}}}}});
+    showToast("You're in! 💪");
+  };
+  const handleLeaveHabit=async cid=>{
+    await fsSet(gp("habits"),{list:{[cid]:{participants:{[currentUser]:{leftAt:todayStr()}}}}});
+    showToast("You left the challenge.");
+  };
+  const handleHabitPayment=async(cid,member,amount)=>{
+    const pid=`p${Date.now().toString(36)}`;
+    await fsSet(gp("habits"),{list:{[cid]:{payments:{[member]:{[pid]:{amount,ts:Date.now(),by:currentUser,date:todayStr()}}}}}});
+    showToast(`$${amount} recorded for ${member}.`);
+  };
+
   // ── DOT CONDITIONS ────────────────────────────────────────────────────────
   // Feed dot: any post newer than lastSeen.feed not by currentUser
   const hasFeedDot = feed.some(p => {
@@ -659,11 +704,21 @@ useEffect(()=>{
               }}
             />
             {view==="pack"&&<NotifBanner currentUser={currentUser}/>}
+            {habitList.filter(c=>c.participants?.[currentUser]&&!c.participants[currentUser].leftAt&&c.start<=todayStr()&&todayStr()<=c.end).map(c=>(
+              <HabitTodayCard key={c.id} challenge={c} log={habitLogs[c.id]} history={history} currentUser={currentUser} today={todayStr()} onLog={handleHabitLog} onSetGoalWeight={handleGoalWeight} onLogWorkout={()=>setWorkoutOpen(true)}/>
+            ))}
             <PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onOpenMealScanner={()=>setMealScannerOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
           </>
         )}
         {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost} onComment={handleComment} onDeleteComment={handleDeleteComment}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
+        {view==="challenges"&&<div style={{marginBottom:8}}>
+          {habitList.map(c=>(
+            <HabitChallengeCard key={c.id} challenge={c} log={habitLogs[c.id]} history={history} profiles={profiles} currentUser={currentUser} isAdmin={currentUser===adminName} today={todayStr()}
+              onEdit={()=>setHabitBuilder(c.id)} onJoin={()=>handleJoinHabit(c.id)} onLeave={()=>handleLeaveHabit(c.id)} onRecordPayment={(m,a)=>handleHabitPayment(c.id,m,a)}/>
+          ))}
+          <button className="btn-ghost" style={{width:"100%",padding:12}} onClick={()=>setHabitBuilder("new")}>+ New habit challenge (like Winter Arc)</button>
+        </div>}
         {view==="challenges"&&<ChallengesTab currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)} onMarkPaid={handleMarkPaid} onLogPayment={handleLogPayment}/>}
         {view==="stats"&&<StatsTab currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed} onEditExercises={(date,entry)=>setEditCompletedWorkout({date,entry})}/>}
       </div>
@@ -720,6 +775,7 @@ useEffect(()=>{
       {editCompletedWorkout&&<EditCompletedWorkoutModal date={editCompletedWorkout.date} entry={editCompletedWorkout.entry} currentUser={currentUser} onSave={handleSaveEditedExercises} onClose={()=>setEditCompletedWorkout(null)}/>}
       {whatsNewOpen&&<WhatsNewModal onClose={dismissWhatsNew} whatsNewData={whatsNewData||WHATS_NEW_FALLBACK}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
+      {habitBuilder&&<HabitBuilder existing={habitBuilder==="new"?null:habitChallenges[habitBuilder]} members={members} profiles={profiles} currentUser={currentUser} today={todayStr()} onSave={handleSaveHabitChallenge} onDelete={handleDeleteHabitChallenge} onClose={()=>setHabitBuilder(null)}/>}
       {groupSheetOpen&&<GroupSheet currentUser={currentUser} group={group} myGroups={myGroups} onSwitch={gid=>openGroup(gid)} onJoinOrCreate={()=>{setGroupSheetOpen(false);setGroupGateMode("choose");}} onSignOut={handleSignOut} onClose={()=>setGroupSheetOpen(false)}/>}
       {groupGateMode&&<GroupGate user={currentUser} myGroups={myGroups} startMode={groupGateMode} onPick={gid=>openGroup(gid)} onJoin={handleJoinGroup} onCreate={handleCreateGroup} onSignOut={handleSignOut} onCancel={()=>setGroupGateMode(null)}/>}
       {adminOpen&&<AdminPanel showToast={showToast} history={history} group={group} isOwner={groups[LEGACY_GROUP_ID]?.admin===currentUser} onUpdateGroup={handleUpdateGroup} onNewInviteCode={handleNewInviteCode} members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet(gp("settings"),{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
