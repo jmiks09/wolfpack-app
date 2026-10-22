@@ -73,6 +73,7 @@ export default function App(){
     setWhatsNewOpen(false);
   };
   const [workoutOpen,setWorkoutOpen]=useState(false);
+  const [workoutDate,setWorkoutDate]=useState(null); // null = today
   const [adminOpen,setAdminOpen]=useState(false);
   const [profileOpen,setProfileOpen]=useState(false);
   const [lastSeen,setLastSeen]=useState({feed:0,challenges:0,gym:0});
@@ -351,9 +352,6 @@ useEffect(()=>{
   const handleDeletePackGoal=async id=>{
     await fsSet(gp("packgoals"),{list:packGoals.filter(g=>g.id!==id)});
   };
-  const handleSaveBackfill=async updatedHistory=>{
-    await fsSet("wolfpack/workouts",{byDate:updatedHistory});
-  };
 
   // Reactions
   const handleReact=async(member,emoji)=>{
@@ -470,10 +468,13 @@ useEffect(()=>{
   };
 
   const [loggingWorkout,setLoggingWorkout]=useState(false);
-  const handleLogWorkout=async(workouts,note,duration,details,summary)=>{
+  const closeWorkout=()=>{setWorkoutOpen(false);setWorkoutDate(null);};
+  const handleLogWorkout=async(workouts,note,duration,details,summary,opts)=>{
     if(loggingWorkout)return; // prevent double-tap
     setLoggingWorkout(true);
-    const key=todayStr(),time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+    try{
+    const today=todayStr(),key=opts?.date||today,late=key!==today;
+    const time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
     // Support multiple workout types - merge with existing entries for today
     const existing=history[key]?.[currentUser]||{};
     const prevWorkouts=existing.workouts||[];
@@ -500,11 +501,34 @@ useEffect(()=>{
     });
     const totalDur=newWorkouts.reduce((s,w)=>s+(Number(mergedDetails?.[w.id]?.duration)||Number(mergedDetails?.[w.key]?.duration)||0),0)||null;
     const sessionCount=(existing.sessionCount||1)+workouts.length-1;
-    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:mergedDetails,time,ts:Date.now(),sessionCount};
+    const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:mergedDetails,time,
+      ts:late?(existing.ts||new Date(key+"T12:00:00").getTime()):Date.now(),sessionCount,
+      ...(late?{late:{addedOn:today,addedAt:Date.now(),...(existing.late?{count:(existing.late.count||1)+1}:{})}}:{})};
     const newData={...history,[key]:{...(history[key]||{}),[currentUser]:entry}};
-    await fsSet("wolfpack/workouts",{byDate:newData});
-    setLoggingWorkout(false);setWorkoutOpen(false);launchConfetti();showToast(`${icons} Logged! Keep grinding! 🐺`);
-    await checkMilestones(newData);
+    await fsSet("wolfpack/workouts",{byDate:{[key]:{[currentUser]:entry}}});
+    setHistory(newData);setSharedData(newData);
+    closeWorkout();launchConfetti();
+    if(late){
+      const dayName=new Date(key+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+      showToast(`${icons} Added to ${dayName} ✓`);
+      await postLateCard(key,dayName,workouts,summaryLines,opts?.proof);
+    }else{
+      showToast(`${icons} Logged! Keep grinding! 🐺`);
+      await checkMilestones(newData);
+    }
+    }catch(e){console.warn(e);showToast("Couldn't save. Check your connection and try again.");}
+    finally{setLoggingWorkout(false);}
+  };
+  // Workouts added for a past day get their own chat card, marked late, with any proof photo.
+  const postLateCard=async(day,dayName,added,summaryLines,proof)=>{
+    const safe=currentUser.replace(/[^\w]/g,"_");
+    const ids=new Set(added.map(w=>w.label));
+    const card={id:`late_${safe}_${day}_${Date.now().toString(36)}`,kind:"activity",author:currentUser,late:true,forDay:day,
+      text:`added ${added.map(w=>`${w.icon} ${w.label}`).join(" + ")} for ${dayName}`,
+      detail:["Logged late",...summaryLines.filter(x=>x.includes(":")&&ids.has(x.split(":")[0]))].join(" · ").slice(0,120),
+      ...(proof?{photo:proof}:{})};
+    const targets=myGroups.filter(g=>g.chatSystem!==false);
+    await Promise.all(targets.map(g=>postMessage(g.id,card).catch(e=>console.warn("chat post failed",e))));
   };
 
   // ── AI Trainer: log the AI-generated workout as a lift entry ──────────────
@@ -824,7 +848,7 @@ useEffect(()=>{
             />
             {view==="pack"&&<NotifBanner currentUser={currentUser}/>}
             {habitList.filter(c=>c.participants?.[currentUser]&&!c.participants[currentUser].leftAt&&c.start<=todayStr()&&todayStr()<=c.end).map(c=>(
-              <HabitTodayCard key={c.id} challenge={c} log={habitLogs[c.id]} history={history} currentUser={currentUser} today={todayStr()} onLog={handleHabitLog} onSetGoalWeight={handleGoalWeight} onLogWorkout={()=>setWorkoutOpen(true)} onSavePersonal={handleSavePersonal} onDeletePersonal={handleDeletePersonal}/>
+              <HabitTodayCard key={c.id} challenge={c} log={habitLogs[c.id]} history={history} currentUser={currentUser} today={todayStr()} onLog={handleHabitLog} onSetGoalWeight={handleGoalWeight} onLogWorkout={d=>{setWorkoutDate(d&&d!==todayStr()?d:null);setWorkoutOpen(true);}} onSavePersonal={handleSavePersonal} onDeletePersonal={handleDeletePersonal}/>
             ))}
             <PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onOpenMealScanner={()=>setMealScannerOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
           </>
@@ -877,7 +901,7 @@ useEffect(()=>{
           );
         })}
       </nav>
-      {workoutOpen&&<WorkoutModal onClose={()=>setWorkoutOpen(false)} onSubmit={handleLogWorkout} loading={loggingWorkout}/>}
+      {workoutOpen&&<WorkoutModal onClose={closeWorkout} onSubmit={handleLogWorkout} loading={loggingWorkout} today={todayStr()} initialDate={workoutDate}/>}
       {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} userFavorites={userFavorites} onFavoritesChange={setUserFavorites} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onDeletePlan={async()=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:null}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});setNutritionOpen(false);}} onClose={()=>setNutritionOpen(false)} onOpenScanner={()=>{setNutritionOpen(false);setMealScannerOpen(true);}}/>}
       {mealScannerOpen&&<MealScannerModal currentUser={currentUser} onClose={()=>setMealScannerOpen(false)}/>}
@@ -897,7 +921,7 @@ useEffect(()=>{
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {editCompletedWorkout&&<EditCompletedWorkoutModal date={editCompletedWorkout.date} entry={editCompletedWorkout.entry} currentUser={currentUser} onSave={handleSaveEditedExercises} onClose={()=>setEditCompletedWorkout(null)}/>}
       {whatsNewOpen&&<WhatsNewModal onClose={dismissWhatsNew} whatsNewData={whatsNewData||WHATS_NEW_FALLBACK}/>}
-      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
+      {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)}/>}
       {legacyFeedOpen&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setLegacyFeedOpen(false)}>
         <div className="modal" style={{maxHeight:"88dvh",overflowY:"auto"}}>
           <div className="modal-handle"/>

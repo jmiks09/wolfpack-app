@@ -208,9 +208,12 @@ export function scoreChallenge(ch, logs, history, asOf) {
     finished: asOf > ch.end, inTrial: asOf < ch.penaltyStart };
 }
 
-// Which days can a person still edit? Today and the 2 days before;
+// How many days back people can add a forgotten workout or check-in.
+export const LATE_DAYS = 7;
+
+// Which days can a person still edit? Today and the LATE_DAYS before it;
 // during the no-penalty trial, any day back to the start.
 export function editableFrom(ch, asOf) {
   if (asOf < ch.penaltyStart) return ch.start;
-  return maxDate(ch.start, addDays(asOf, -2));
+  return maxDate(ch.start, addDays(asOf, -LATE_DAYS));
 }

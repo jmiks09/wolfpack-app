@@ -8,7 +8,7 @@ import { getStreak, getTotalWorkouts } from "../lib/stats";
 import { compressImage, readFileAsDataURL } from "../lib/utils";
 
 // ── PROFILE MODAL ────────────────────────────────────────────────────────────
-export function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,onSaveWeight,onSaveGoal,onChangePin,onChangeName,onSaveProfile,onSaveBackfill}){
+export function ProfileModal({currentUser,profile,profiles,history,challenges,onClose,onSaveWeight,onSaveGoal,onChangePin,onChangeName,onSaveProfile}){
   const [tab,setTab]=useState("stats");
   const [weight,setWeight]=useState("");
   const [weightUnit,setWeightUnit]=useState("lbs");
@@ -104,34 +104,6 @@ export function ProfileModal({currentUser,profile,profiles,history,challenges,on
     setEditingAvatar(false);
   };
 
-  // Backfill state
-  const [backfillDate,setBackfillDate]=useState("");
-  const [backfillWorkouts,setBackfillWorkouts]=useState([]);
-  const [backfillDone,setBackfillDone]=useState(false);
-  const [backfillSaving,setBackfillSaving]=useState(false);
-
-  // Last 7 days excluding today
-  const backfillDates=Array.from({length:7},(_,i)=>{
-    const d=new Date();
-    d.setDate(d.getDate()-(i+1));
-    return localDateStr(d);
-  });
-
-  const toggleBackfillWorkout=w=>setBackfillWorkouts(s=>s.find(x=>x.id===w.id)?s.filter(x=>x.id!==w.id):[...s,w]);
-
-  const saveBackfill=async()=>{
-    if(!backfillDate||backfillWorkouts.length===0)return;
-    setBackfillSaving(true);
-    const time="12:00 PM";
-    const icons=backfillWorkouts.map(w=>w.icon).join("");
-    const labels=backfillWorkouts.map(w=>w.label).join(" + ");
-    const entry={done:true,workouts:backfillWorkouts.map(w=>({id:w.id,icon:w.icon,label:w.label})),workoutIcon:icons,workoutLabel:labels,note:"(backfilled)",time,ts:new Date(backfillDate+"T12:00:00").getTime()};
-    const updated={...history,[backfillDate]:{...(history[backfillDate]||{}),[currentUser]:entry}};
-    await onSaveBackfill(updated);
-    setBackfillDate("");setBackfillWorkouts([]);setBackfillDone(true);
-    setTimeout(()=>setBackfillDone(false),2500);
-    setBackfillSaving(false);
-  };
 
   // Longest streak ever
   const longestStreak=(()=>{

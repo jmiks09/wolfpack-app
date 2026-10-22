@@ -65,8 +65,7 @@ export function HabitTodayCard({challenge:ch,log,history,currentUser,today,onLog
             const s=week&&scoreHabitWeek(ch,h,week,myLog,history,currentUser,today);
             return row(
               hit?<span style={{color:"var(--green)",...bebas,fontSize:14}}>✓ LOGGED</span>
-                 :day===today?<button onClick={onLogWorkout} className="btn-ghost" style={{fontSize:12,padding:"8px 10px"}}>Log workout</button>
-                 :<span style={{color:"var(--muted)",fontSize:12}}>None logged</span>,
+                 :<button onClick={()=>onLogWorkout(day)} className="btn-ghost" style={{fontSize:12,padding:"8px 10px"}}>{day===today?"Log workout":"Add workout"}</button>,
               `${s?`${s.count} of ${s.target} this week · `:""}from your workout log`);
           }
           if(h.type==="protein"&&!myLog.goalWeight){

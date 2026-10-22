@@ -1,7 +1,17 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { LATE_DAYS, addDays } from "../lib/habits";
+import { compressImage, readFileAsDataURL } from "../lib/utils";
+
+const shortDay=(d,today)=>d===today?"Today":d===addDays(today,-1)?"Yesterday":new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
 
 // ── WORKOUT PROOF PHOTO MODAL ─────────────────────────────────────────────────
-export function WorkoutModal({onClose,onSubmit,loading}){
+export function WorkoutModal({onClose,onSubmit,loading,today,initialDate}){
+  const [date,setDate]=useState(initialDate||today);
+  const [proof,setProof]=useState(null);
+  const proofRef=useRef();
+  const late=date!==today;
+  const dateChoices=Array.from({length:LATE_DAYS+1},(_,i)=>addDays(today,-i));
+  const pickProof=async e=>{const f=e.target.files?.[0];e.target.value="";if(!f)return;setProof(await compressImage(await readFileAsDataURL(f),600,0.7));};
   const [selected,setSelected]=useState([]); // workout types selected
   const [muscles,setMuscles]=useState([]); // muscles worked (for weight training)
   const [exercises,setExercises]=useState([]); // [{name,sets,reps,weight}]
@@ -57,7 +67,7 @@ export function WorkoutModal({onClose,onSubmit,loading}){
     });
     const summary=buildManualSummary(finalSelected,muscles,exercises,duration);
     const totalDuration=Number(duration)||selected.filter(s=>s.id!=="lift").reduce((sum,w)=>sum+(Number(cardioDetails[w.id]?.duration)||0),0)||null;
-    onSubmit(finalSelected,note,totalDuration,details,summary);
+    onSubmit(finalSelected,note,totalDuration,details,summary,{date,proof:late?proof:null});
   };
 
   const buildManualSummary=(types,msc,exs,dur)=>{
@@ -87,8 +97,24 @@ export function WorkoutModal({onClose,onSubmit,loading}){
         {/* ── STEP 1: Pick workout types ── */}
         {step==="pick"&&(
           <>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:4}}>LOG WORKOUT</div>
-            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14}}>What did you do today? Select all that apply.</div>
+            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:8}}>LOG WORKOUT</div>
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>When?</div>
+            <div role="radiogroup" aria-label="Workout date" style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:10,WebkitOverflowScrolling:"touch"}}>
+              {dateChoices.map(d=>{const on=d===date;return(
+                <button key={d} role="radio" aria-checked={on} onClick={()=>setDate(d)} style={{flexShrink:0,padding:"8px 12px",borderRadius:20,cursor:"pointer",fontSize:13,whiteSpace:"nowrap",
+                  background:on?"rgba(124,92,191,0.25)":"var(--bg3)",border:on?"1px solid var(--accent)":"1px solid var(--border)",color:on?"var(--accent2)":"var(--muted)"}}>{shortDay(d,today)}</button>);})}
+            </div>
+            {late&&<div style={{padding:12,marginBottom:12,background:"rgba(255,107,53,0.08)",border:"1px solid rgba(255,107,53,0.3)",borderRadius:12,display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{fontSize:12,lineHeight:1.5}}>Adding a workout for <b>{shortDay(date,today)}</b>. Your pack will see it was added late, and it counts toward that day's streak and challenges.</div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                {proof
+                  ?<><img src={proof} alt="Proof" style={{height:56,borderRadius:8}}/><button onClick={()=>setProof(null)} style={{background:"none",border:"none",color:"var(--muted)",fontSize:12,cursor:"pointer"}}>Remove</button></>
+                  :<button className="btn-ghost" onClick={()=>proofRef.current.click()} style={{fontSize:12,padding:"8px 12px"}}>📷 Add proof (optional)</button>}
+                <input ref={proofRef} type="file" accept="image/*" style={{display:"none"}} onChange={pickProof} aria-label="Proof photo"/>
+              </div>
+              <div style={{fontSize:11,color:"var(--muted)"}}>A screenshot from your watch, Health app, or a gym photo works.</div>
+            </div>}
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:14}}>What did you do{late?"":" today"}? Select all that apply.</div>
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
               {[

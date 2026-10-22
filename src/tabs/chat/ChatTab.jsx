@@ -45,10 +45,11 @@ function Bubble({row,currentUser,profiles,onAction,onReply,onReact,onPhoto}){
         <AvatarDisplay profile={profiles[m.author]} size={28}/>
         <div style={{minWidth:0}}>
           <div style={{fontSize:13}}><b>{m.author}</b> {m.text}</div>
-          {m.detail&&<div style={{fontSize:11,color:"var(--muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.detail}</div>}
+          {m.detail&&<div style={{fontSize:11,color:m.late?"var(--orange)":"var(--muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.detail}</div>}
         </div>
         <div style={{fontSize:10,color:"var(--muted)",flexShrink:0}}>{timeOf(m.ts)}</div>
       </div>
+      {m.photo&&<img src={m.photo} alt={`Proof from ${m.author}`} onClick={()=>onPhoto(m.photo)} style={{marginTop:6,maxWidth:"70%",maxHeight:220,borderRadius:12,cursor:"zoom-in"}}/>}
       <Reactions msg={m} currentUser={currentUser} onReact={onReact} align="center"/>
     </div>
   );
