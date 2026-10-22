@@ -23,10 +23,13 @@ import { Entry } from "./screens/Entry";
 import { GroupGate } from "./screens/GroupGate";
 import { GroupSheet } from "./components/GroupSheet";
 import { HabitBuilder } from "./tabs/challenges/habits/HabitBuilder";
+import { ChatTab } from "./tabs/chat/ChatTab";
+import { FeedPost } from "./tabs/feed/FeedPost";
+import { chatDayPath, chatIndexPath, deleteMessage, newMsgId, postMessage, removeMessage, renameInChat, setReaction, updateMessage, workoutCardId } from "./lib/chat";
+import { addDays, challengeWeeks, daysBetween, penaltyMode, scoreChallenge } from "./lib/habits";
 import { HabitChallengeCard } from "./tabs/challenges/habits/HabitChallengeCard";
 import { HabitTodayCard } from "./tabs/challenges/habits/HabitTodayCard";
 import { ChallengesTab } from "./tabs/challenges/ChallengesTab";
-import { FeedTab } from "./tabs/feed/FeedTab";
 import { GymTab } from "./tabs/gym/GymTab";
 import { PackTab } from "./tabs/pack/PackTab";
 import { StatsTab } from "./tabs/stats/StatsTab";
@@ -37,6 +40,16 @@ import { EffortRatingModal } from "./workouts/EffortRatingModal";
 import { WorkoutModal } from "./workouts/WorkoutModal";
 
 const NO_MEMBERS=[];
+const restRuleKey=(gid,cid)=>`${gid}_${cid}`;
+// The rest-day cap a habit challenge puts on one participant, or null.
+function restRuleFor(gid,c,user){
+  const p=c?.participants?.[user];
+  if(!p||c.restDays==null||!c.start||!c.end)return null;
+  const start=p.joinedAt&&p.joinedAt>c.start?p.joinedAt:c.start;
+  const end=p.leftAt?addDays(p.leftAt,-1):c.end;
+  if(end<start)return null;
+  return {limit:c.restDays,start,end,name:c.name||"Challenge",emoji:c.emoji||"🔥"};
+}
 
 export default function App(){
   const [screen,setScreen]=useState("loading");
@@ -67,6 +80,11 @@ export default function App(){
   const [habitChallenges,setHabitChallenges]=useState({});
   const [habitLogs,setHabitLogs]=useState({});
   const [habitBuilder,setHabitBuilder]=useState(null); // "new" or a challenge id
+  const [chatIndex,setChatIndex]=useState({});      // days that have messages
+  const [chatDocs,setChatDocs]=useState({});        // day -> {msgId: message}
+  const [chatWindow,setChatWindow]=useState(7);     // how many recent message-days to load
+  const [chatDivider,setChatDivider]=useState(0);   // "new messages" line position
+  const [legacyFeedOpen,setLegacyFeedOpen]=useState(false);
   // Current group. Members, admin, feed, challenges, gym, goals and reactions are per group;
   // profiles and workouts are per person and shared across all of their groups.
   const group=groupId?groups[groupId]:null;
@@ -150,6 +168,45 @@ useEffect(()=>{
     return()=>us.forEach(u=>u?.());
   },[groupId]);
 
+  // Chat: the day index, then the most recent days that have messages.
+  useEffect(()=>{
+    if(!groupId)return;
+    return fsListen(chatIndexPath(groupId),d=>setChatIndex(d?.days||{}));
+  },[groupId]);
+  const chatDays=[...new Set([todayStr(),...Object.keys(chatIndex)])].sort().reverse().slice(0,chatWindow);
+  const chatDaysKey=chatDays.join(",");
+  useEffect(()=>{
+    if(!groupId)return;
+    const us=chatDaysKey.split(",").map(day=>fsListen(chatDayPath(groupId,day),d=>setChatDocs(c=>({...c,[day]:d?.msgs||{}}))));
+    return()=>us.forEach(u=>u?.());
+  },[groupId,chatDaysKey]);
+
+  // Rest-day caps: read habit challenges from every group I'm in and record the
+  // limits on my profile (dated), so streaks follow the strictest active challenge.
+  const myGroupIds=myGroups.map(g=>g.id).sort().join(",");
+  const [allHabits,setAllHabits]=useState({});
+  useEffect(()=>{
+    if(!myGroupIds)return;
+    const us=myGroupIds.split(",").map(gid=>fsListen(gpath(gid,"habits"),d=>setAllHabits(a=>({...a,[gid]:d?.list||{}}))));
+    return()=>us.forEach(u=>u?.());
+  },[myGroupIds]);
+  const myRestRulesKey=JSON.stringify(profiles[currentUser]?.restRules||{});
+  useEffect(()=>{
+    if(!currentUser||!myGroupIds||!profiles[currentUser])return;
+    const ids=myGroupIds.split(",");
+    if(ids.some(gid=>!(gid in allHabits)))return; // wait until every group has loaded
+    const want={};
+    for(const gid of ids)for(const c of Object.values(allHabits[gid]||{})){
+      const rule=restRuleFor(gid,c,currentUser);
+      if(rule)want[restRuleKey(gid,c.id)]=rule;
+    }
+    const have=JSON.parse(myRestRulesKey);
+    const changed=Object.fromEntries(Object.entries(want).filter(([k,v])=>JSON.stringify(have[k])!==JSON.stringify(v)));
+    const stale=Object.keys(have).filter(k=>!(k in want));
+    if(Object.keys(changed).length)fsSet("wolfpack/profiles",{users:{[currentUser]:{restRules:changed}}}).catch(()=>{});
+    if(stale.length)fsDeleteFields("wolfpack/profiles",stale.map(k=>["users",currentUser,"restRules",k])).catch(()=>{});
+  },[currentUser,myGroupIds,allHabits,myRestRulesKey,profiles]);
+
   // Check-in logs: one document per habit challenge.
   const habitIds=Object.keys(habitChallenges).sort().join(",");
   useEffect(()=>{
@@ -165,7 +222,7 @@ useEffect(()=>{
   const openGroup=(gid,user)=>{
     const u=user||currentUser;
     setGroupId(gid);
-    setFeed([]);setChallenges([]);setGymSlots([]);setPackGoals([]);setReactions({});setHabitChallenges({});setHabitLogs({});setHabitBuilder(null);setGarageEquipment(HOME_GYM_DEFAULT);
+    setFeed([]);setChallenges([]);setGymSlots([]);setPackGoals([]);setReactions({});setHabitChallenges({});setHabitLogs({});setHabitBuilder(null);setChatIndex({});setChatDocs({});setChatWindow(7);setLegacyFeedOpen(false);setGarageEquipment(HOME_GYM_DEFAULT);
     setView("pack");setGroupGateMode(null);setGroupSheetOpen(false);setAdminOpen(false);
     const prof=profiles[u];
     setLastSeen(prof?.lastSeenByGroup?.[gid]||(gid===LEGACY_GROUP_ID?prof?.lastSeen:null)||{feed:0,challenges:0,gym:0});
@@ -200,6 +257,7 @@ useEffect(()=>{
         if(!l.includes(currentUser))await fsSet("wolfpack/members",{list:[...l,currentUser]});
       }
       setGroups(p=>({...p,[g.id]:{...g,members:[...(g.members||[]),currentUser]}}));
+      if(g.chatSystem!==false)postMessage(g.id,{id:`sys_join_${currentUser.replace(/[^\w]/g,"_")}`,kind:"system",text:`👋 ${currentUser} joined the group`}).catch(()=>{});
       showToast(`Welcome to ${g.name}! 🐺`);
     }
     openGroup(g.id);
@@ -334,6 +392,7 @@ useEffect(()=>{
     delete newDay[currentUser];
     const newHistory={...history,[date]:newDay};
     await fsDeleteFields("wolfpack/workouts",[["byDate",date,currentUser]]);
+    myGroups.forEach(g=>removeMessage(g.id,date,workoutCardId(currentUser,date)));
     // Force local state update immediately
     setHistory(newHistory);
     setSharedData(newHistory);
@@ -353,16 +412,22 @@ useEffect(()=>{
     setWeeklyRecap({stats,week:localDateStr(lastWeekStart),dismissed:false});
   },[currentUser,members,history]);
 
-  // Milestone auto-posts — check after logging
+  // After logging: a workout card (plus any milestone) in the chat of every group you're in.
   const checkMilestones=async(newHistory)=>{
+    const day=todayStr(),entry=newHistory[day]?.[currentUser];
     const streak=getStreak(newHistory,currentUser,profiles[currentUser]);
     const sessions=getTotalWorkouts(newHistory,currentUser);
     const streakMilestone=MILESTONES.find(m=>streak===m);
     const sessionMilestone=SESSION_MILESTONES.find(m=>sessions===m);
-    const posts=[];
-    if(streakMilestone) posts.push({id:Date.now().toString(),author:currentUser,text:`🔥 ${currentUser} just hit a ${streakMilestone}-day streak! The wolf is on fire! 🐺`,ts:Date.now(),likes:[],isAuto:true});
-    if(sessionMilestone) posts.push({id:(Date.now()+1).toString(),author:currentUser,text:`💪 ${currentUser} just logged their ${sessionMilestone}th workout session! Beast mode! 🏋️`,ts:Date.now()+1,likes:[],isAuto:true});
-    if(posts.length>0) await fsSet(gp("feed"),{posts:[...posts,...feed]});
+    const safe=currentUser.replace(/[^\w]/g,"_");
+    const cards=[];
+    if(entry)cards.push({id:workoutCardId(currentUser,day),kind:"activity",author:currentUser,
+      text:`logged ${(entry.workouts||[]).map(w=>`${w.icon} ${w.label}`).join(" + ")||"a workout"}`,
+      detail:[...(entry.summary||[]).filter(x=>x.includes(":")),entry.duration?`${entry.duration} min`:null].filter(Boolean).join(" · ").slice(0,120),ts:Date.now()});
+    if(streakMilestone)cards.push({id:`ms_${safe}_streak${streakMilestone}_${day}`,kind:"activity",author:currentUser,text:`hit a ${streakMilestone}-day streak! 🔥🐺`,ts:Date.now()+1});
+    if(sessionMilestone)cards.push({id:`ms_${safe}_sess${sessionMilestone}`,kind:"activity",author:currentUser,text:`logged workout #${sessionMilestone}! 💪`,ts:Date.now()+2});
+    const targets=myGroups.filter(g=>g.chatSystem!==false);
+    await Promise.all(targets.flatMap(g=>cards.map(c=>postMessage(g.id,c).catch(e=>console.warn("chat post failed",e)))));
   };
   const handleSaveWeight=async wl=>{
     const np={...profiles,[currentUser]:{...profiles[currentUser],weightLog:wl}};
@@ -396,6 +461,7 @@ useEffect(()=>{
     for(const g of groupsForUser(groups,oldName)){
       await fsSet(REGISTRY_PATH,{list:{[g.id]:{members:(g.members||[]).map(swap),admin:swap(g.admin)}}});
       await renameInGroup(g.id,oldName,nn);
+      await renameInChat(g.id,oldName,nn);
     }
     setProfiles(p=>{const np={...p,[nn]:p[oldName]};delete np[oldName];return np;});
     setCurrentUser(nn);saveSession({user:nn,group:groupId});
@@ -591,6 +657,12 @@ useEffect(()=>{
     const full={...def,id,createdBy:def.createdBy||currentUser,createdAt:def.createdAt||Date.now()};
     await fsSet(gp("habits"),{list:{[id]:full}});
     if(removed?.length)await fsDeleteFields(gp("habits"),removed.map(u=>["list",id,"participants",u]));
+    const key=restRuleKey(groupId,id);
+    const users=Object.keys(full.participants||{}).filter(u=>profiles[u]);
+    const setRules=Object.fromEntries(users.map(u=>[u,restRuleFor(groupId,full,u)]).filter(([,v])=>v).map(([u,v])=>[u,{restRules:{[key]:v}}]));
+    if(Object.keys(setRules).length)await fsSet("wolfpack/profiles",{users:setRules}).catch(()=>{});
+    const clear=[...removed||[],...users.filter(u=>!restRuleFor(groupId,full,u))].filter(u=>profiles[u]?.restRules?.[key]);
+    if(clear.length)await fsDeleteFields("wolfpack/profiles",clear.map(u=>["users",u,"restRules",key])).catch(()=>{});
     showToast(def.id?"Challenge updated.":`${full.emoji} ${full.name} is on!`);
   };
   const handleDeleteHabitChallenge=async id=>{
@@ -616,15 +688,60 @@ useEffect(()=>{
     showToast(`$${amount} recorded for ${member}.`);
   };
 
+  // ── CHAT ───────────────────────────────────────────────────────────────────
+  const chatMessages=Object.entries(chatDocs).filter(([day])=>chatDays.includes(day))
+    .flatMap(([,msgs])=>Object.values(msgs||{})).filter(m=>m&&m.ts).sort((a,b)=>a.ts-b.ts);
+  const canLoadMoreChat=Object.keys(chatIndex).some(d=>!chatDays.includes(d));
+  const chatUnread=chatMessages.filter(m=>m.kind!=="system"&&m.author!==currentUser&&m.ts>(lastSeen.feed||0)).length;
+  const handleChatSend=async({text,photo,replyTo})=>{
+    try{await postMessage(groupId,{id:newMsgId(),kind:"msg",author:currentUser,text,photo:photo||null,replyTo:replyTo||null});}
+    catch(e){console.warn(e);showToast("Couldn't send. Check your connection and try again.");throw e;}
+  };
+  const handleChatEdit=(m,text)=>updateMessage(groupId,m.day,m.id,{text,edited:true});
+  const handleChatDelete=m=>deleteMessage(groupId,m.day,m.id);
+  const handleChatReact=(m,emoji,on)=>setReaction(groupId,m.day,m.id,emoji,currentUser,on).catch(()=>{});
+  const handleChatSeen=useCallback(ts=>{
+    setLastSeen(p=>{
+      if((p.feed||0)>=ts)return p;
+      const updated={...p,feed:ts};
+      if(currentUser&&groupId)fsSet("wolfpack/profiles",{users:{[currentUser]:{lastSeenByGroup:{[groupId]:updated},...(groupId===LEGACY_GROUP_ID?{lastSeen:updated}:{})}}});
+      return updated;
+    });
+  },[currentUser,groupId]);
+
+  // When a challenge week closes, post a summary line in the chat (once per week).
+  const announcedRef=useRef(new Set());
+  useEffect(()=>{
+    if(!groupId||!group||group.chatSystem===false)return;
+    const today=todayStr();
+    for(const c of Object.values(habitChallenges)){
+      const log=habitLogs[c.id];if(!log)continue;
+      for(const w of challengeWeeks(c).filter(w=>w.to<today&&daysBetween(w.to,today)<=7)){
+        const key=`${groupId}:${c.id}:${w.index}`;
+        if(c.announced?.[w.index]||announcedRef.current.has(key))continue;
+        announcedRef.current.add(key);
+        const s=scoreChallenge(c,log,history,today);
+        const rows=s.scores.filter(m=>!m.left&&m.rows[w.index]?.counted);
+        const perfect=rows.filter(m=>m.rows[w.index].missed===0).map(m=>m.user);
+        const owing=rows.filter(m=>m.rows[w.index].fee>0);
+        const trial=w.from<c.penaltyStart;
+        const flat=penaltyMode(c)==="flat";
+        const parts=[`${c.emoji} ${c.name} · Week ${w.index+1} closed.`,
+          perfect.length?`Perfect week: ${perfect.join(", ")}.`:"No perfect weeks this time.",
+          trial?"Trial week, no charges."
+            :owing.length?(flat?`${c.money?.flatLabel||"Penalty"} owed: ${owing.map(m=>m.user).join(", ")}.`:`Owing: ${owing.map(m=>`${m.user} $${m.rows[w.index].fee}`).join(", ")}.`)
+            :"Nobody owes anything!",
+          trial?"":`Pot: $${s.pot}.`].filter(Boolean);
+        postMessage(groupId,{id:`sys_${c.id}_w${w.index}`,kind:"system",text:parts.join(" ")})
+          .then(()=>fsSet(gp("habits"),{list:{[c.id]:{announced:{[w.index]:true}}}}))
+          .catch(e=>console.warn("week summary failed",e));
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[groupId,group?.chatSystem,habitChallenges,habitLogs,history]);
+
   // ── DOT CONDITIONS ────────────────────────────────────────────────────────
-  // Feed dot: any post newer than lastSeen.feed not by currentUser
-  const hasFeedDot = feed.some(p => {
-    // New post by someone else
-    if(p.author !== currentUser && p.ts > lastSeen.feed) return true;
-    // New comment on any post by someone else
-    if((p.comments||[]).some(c => c.author !== currentUser && c.ts > lastSeen.feed)) return true;
-    return false;
-  });
+  const hasFeedDot=chatUnread>0;
 
   // Challenges dot: any pending invite
   const hasChallengeDot = challenges.some(c =>
@@ -712,7 +829,9 @@ useEffect(()=>{
             <PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onOpenMealScanner={()=>setMealScannerOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
           </>
         )}
-        {view==="feed"&&<FeedTab currentUser={currentUser} profiles={profiles} feed={feed} onPost={handlePost} onLike={handleLike} onDelete={handleDelPost} onComment={handleComment} onDeleteComment={handleDeleteComment}/>}
+        {view==="feed"&&<ChatTab groupName={group.name} messages={chatMessages} currentUser={currentUser} profiles={profiles} today={todayStr()} dividerTs={chatDivider}
+          canLoadMore={canLoadMoreChat} onLoadMore={()=>setChatWindow(w=>w+7)} legacyCount={feed.length} onOpenLegacy={()=>setLegacyFeedOpen(true)}
+          onSend={handleChatSend} onEdit={handleChatEdit} onDelete={handleChatDelete} onReact={handleChatReact} onSeen={handleChatSeen}/>}
         {view==="gym"&&<GymTab currentUser={currentUser} gymSlots={gymSlots} onBook={handleBookGym} onCancel={handleCancelGym}/>}
         {view==="challenges"&&<div style={{marginBottom:8}}>
           {habitList.map(c=>(
@@ -731,6 +850,7 @@ useEffect(()=>{
             <button key={n.id} className={`nav-btn ${view===n.id?"active":""}`}
               onClick={()=>{
                 const now=Date.now();
+                if(n.id==="feed"&&view!=="feed")setChatDivider(lastSeen.feed||0);
                 setView(n.id);
                 setLastSeen(p=>{
                   const updated={...p,[n.id]:now};
@@ -747,8 +867,9 @@ useEffect(()=>{
                   ? <WolfIcon size={26} style={{opacity:view==="pack"?1:0.5}}/>
                   : n.icon
                 }
-                {hasDot&&view!==n.id&&(
-                  <span style={{position:"absolute",top:-2,right:-4,width:8,height:8,borderRadius:"50%",background:"var(--red)",border:"2px solid var(--bg)"}}/>
+                {hasDot&&view!==n.id&&(n.id==="feed"
+                  ?<span aria-label={`${chatUnread} unread`} style={{position:"absolute",top:-6,right:-12,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"var(--red)",border:"2px solid var(--bg)",color:"#fff",fontSize:10,fontWeight:700,lineHeight:"14px",textAlign:"center",boxSizing:"border-box"}}>{chatUnread>99?"99+":chatUnread}</span>
+                  :<span style={{position:"absolute",top:-2,right:-4,width:8,height:8,borderRadius:"50%",background:"var(--red)",border:"2px solid var(--bg)"}}/>
                 )}
               </span>
               <span>{n.label}</span>
@@ -777,6 +898,15 @@ useEffect(()=>{
       {editCompletedWorkout&&<EditCompletedWorkoutModal date={editCompletedWorkout.date} entry={editCompletedWorkout.entry} currentUser={currentUser} onSave={handleSaveEditedExercises} onClose={()=>setEditCompletedWorkout(null)}/>}
       {whatsNewOpen&&<WhatsNewModal onClose={dismissWhatsNew} whatsNewData={whatsNewData||WHATS_NEW_FALLBACK}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)} onSaveBackfill={handleSaveBackfill}/>}
+      {legacyFeedOpen&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setLegacyFeedOpen(false)}>
+        <div className="modal" style={{maxHeight:"88dvh",overflowY:"auto"}}>
+          <div className="modal-handle"/>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:3,marginBottom:4}}>📜 OLD FEED POSTS</div>
+          <div style={{fontSize:12,color:"var(--muted)",marginBottom:12}}>Posts from before the group chat.</div>
+          {feed.map(p=><FeedPost key={p.id} post={p} currentUser={currentUser} profiles={profiles} onLike={handleLike} onDelete={handleDelPost} onComment={handleComment} onDeleteComment={handleDeleteComment}/>)}
+          <button className="btn-ghost" style={{width:"100%",marginTop:8}} onClick={()=>setLegacyFeedOpen(false)}>Close</button>
+        </div>
+      </div>}
       {habitBuilder&&<HabitBuilder existing={habitBuilder==="new"?null:habitChallenges[habitBuilder]} members={members} profiles={profiles} currentUser={currentUser} today={todayStr()} onSave={handleSaveHabitChallenge} onDelete={handleDeleteHabitChallenge} onClose={()=>setHabitBuilder(null)}/>}
       {groupSheetOpen&&<GroupSheet currentUser={currentUser} group={group} myGroups={myGroups} onSwitch={gid=>openGroup(gid)} onJoinOrCreate={()=>{setGroupSheetOpen(false);setGroupGateMode("choose");}} onSignOut={handleSignOut} onClose={()=>setGroupSheetOpen(false)}/>}
       {groupGateMode&&<GroupGate user={currentUser} myGroups={myGroups} startMode={groupGateMode} onPick={gid=>openGroup(gid)} onJoin={handleJoinGroup} onCreate={handleCreateGroup} onSignOut={handleSignOut} onCancel={()=>setGroupGateMode(null)}/>}

@@ -42,6 +42,7 @@ export function winterArcTemplate(startDate) {
     penaltyStart: startDate,
     graceDays: 1,
     passesPerWeek: 1,
+    restDays: 0, // rest days allowed per week while in the challenge; null = no limit
     money: { buyIn: 25, missFee: 5, payoutPct: 90 },
     habits: [
       { id: "read",     type: "check",   label: "Read",                    icon: "📖", target: 3 },

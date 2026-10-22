@@ -3,7 +3,7 @@ import { AITrainerProfileTab } from "../ai/AITrainerProfileTab";
 import { AvatarDisplay } from "../components/AvatarDisplay";
 import { fsSet } from "../firebase";
 import { WOLF_AVATARS } from "../lib/constants";
-import { DAY_NAMES, fmtDate, isRestDay, localDateStr, todayStr } from "../lib/dates";
+import { DAY_NAMES, activeRestRules, fmtDate, isRestDay, localDateStr, todayStr } from "../lib/dates";
 import { getStreak, getTotalWorkouts } from "../lib/stats";
 import { compressImage, readFileAsDataURL } from "../lib/utils";
 
@@ -44,12 +44,12 @@ export function ProfileModal({currentUser,profile,profiles,history,challenges,on
 
   const [restDays,setRestDays]=useState(profile?.restDays||[0,6]);
   const toggleRestDay=d=>{
-    if(restDays.includes(d)){if(restDays.length<=2)return;setRestDays(r=>r.filter(x=>x!==d));}
-    else setRestDays(r=>[...r,d]);
+    if(restDays.includes(d))setRestDays(r=>r.filter(x=>x!==d));
+    else setRestDays(r=>[...r,d].sort((a,b)=>a-b));
   };
   const saveRestDays=async()=>{
     const np={...profiles,[currentUser]:{...profiles[currentUser],restDays}};
-    await fsSet("wolfpack/profiles",{users:np});if(onSaveProfile)onSaveProfile(np);
+    await fsSet("wolfpack/profiles",{users:{[currentUser]:{restDays}}});if(onSaveProfile)onSaveProfile(np);
     showRestSaved(true);setTimeout(()=>showRestSaved(false),2000);
   };
   const [restSaved,showRestSaved]=useState(false);
@@ -140,7 +140,7 @@ export function ProfileModal({currentUser,profile,profiles,history,challenges,on
     for(let i=365;i>=0;i--){
       const d=new Date(base);d.setDate(base.getDate()-i);
       const k=localDateStr(d);
-      if(isRestDay(k,profile))continue;
+      if(isRestDay(k,profile)){if(history[k]?.[currentUser]?.done){cur++;best=Math.max(best,cur);}continue;}
       if(history[k]?.[currentUser]?.done){cur++;best=Math.max(best,cur);}
       else cur=0;
     }
@@ -346,9 +346,21 @@ export function ProfileModal({currentUser,profile,profiles,history,challenges,on
                   <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.5}}>You can't change rest days while in an active challenge. Finish or forfeit all active challenges first.</div>
                 </div>
               ):(
-                <>
+                (()=>{
+                  const rules=activeRestRules(profile,todayStr());
+                  const limit=rules.length?Math.min(...rules.map(r=>r.limit)):null;
+                  const strict=rules.find(r=>r.limit===limit);
+                  const until=strict?new Date(strict.end+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}):"";
+                  const tooMany=limit!=null&&limit>0&&restDays.length>limit;
+                  return<>
+                  {strict&&<div style={{padding:12,background:"rgba(124,92,191,0.12)",border:"1px solid var(--accent)",borderRadius:12,fontSize:12,lineHeight:1.6}}>
+                    <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:2,color:"var(--accent2)"}}>{strict.emoji} {strict.name}: {limit===0?"NO REST DAYS":`${limit} REST DAY${limit===1?"":"S"} A WEEK`}</div>
+                    {limit===0
+                      ?<>Every day counts toward your streak until {until}. The days you pick below are saved for after the challenge.</>
+                      :<>Until {until}, up to {limit} of your rest days count. {tooMany?<b style={{color:"var(--orange)"}}>Pick {limit} or fewer to save.</b>:null}</>}
+                  </div>}
                   <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6}}>
-                    Pick your personal rest days. Minimum 2 required.<br/>
+                    Pick as many rest days as you like, or none. Working out on a rest day still adds to your streak.<br/>
                     <span style={{color:"var(--orange)"}}>Note: the gym is always closed on weekends.</span>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
@@ -362,7 +374,7 @@ export function ProfileModal({currentUser,profile,profiles,history,challenges,on
                           border:sel?"1px solid var(--accent)":"1px solid var(--border)",
                           color:sel?"var(--accent2)":isWE?"var(--muted)":"var(--text)",
                           fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1,
-                          opacity:!sel&&restDays.length>=2?0.6:1,
+                          opacity:1,
                         }}>
                           <div>{name}</div>
                           {sel&&<div style={{fontSize:9,marginTop:2}}>REST</div>}
@@ -370,9 +382,9 @@ export function ProfileModal({currentUser,profile,profiles,history,challenges,on
                       );
                     })}
                   </div>
-                  <div style={{fontSize:12,color:"var(--muted)"}}>Selected: {restDays.map(d=>DAY_NAMES[d]).join(", ")} ({restDays.length} days)</div>
-                  <button className="btn-primary" onClick={saveRestDays}>{restSaved?"✓ SAVED!":"SAVE REST DAYS"}</button>
-                </>
+                  <div style={{fontSize:12,color:"var(--muted)"}}>Selected: {restDays.length?`${restDays.map(d=>DAY_NAMES[d]).join(", ")} (${restDays.length} day${restDays.length===1?"":"s"})`:"None: every day is a workout day"}</div>
+                  <button className="btn-primary" onClick={saveRestDays} disabled={tooMany}>{restSaved?"✓ SAVED!":"SAVE REST DAYS"}</button>
+                </>;})()
               )}
             </div>
           )}

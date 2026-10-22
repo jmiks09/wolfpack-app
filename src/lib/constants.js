@@ -162,4 +162,4 @@ export const WHATS_NEW_FALLBACK = {
   ],
 };
 
-export const NAV=[{id:"pack",icon:null,label:"PACK"},{id:"feed",icon:"💬",label:"FEED"},{id:"gym",icon:"🏋️",label:"GYM"},{id:"challenges",icon:"⚔️",label:"CHALLENGES"},{id:"stats",icon:"📊",label:"STATS"}];
+export const NAV=[{id:"pack",icon:null,label:"PACK"},{id:"feed",icon:"💬",label:"CHAT"},{id:"gym",icon:"🏋️",label:"GYM"},{id:"challenges",icon:"⚔️",label:"CHALLENGES"},{id:"stats",icon:"📊",label:"STATS"}];

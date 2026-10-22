@@ -6,8 +6,8 @@ export function getStreak(h,n,profile){
   for(let i=0;i<365;i++){
     const d=new Date(b);d.setDate(b.getDate()-i);
     const k=localDateStr(d);
-    // Always skip rest days
-    if(isRestDay(k,profile))continue;
+    // Rest days: a workout still adds to the streak; skipping it never breaks it
+    if(isRestDay(k,profile)){if(h[k]?.[n]?.done)s++;continue;}
     // Skip today if not yet logged — don't penalize for current day
     if(k===today&&!h[k]?.[n]?.done)continue;
     // Count logged days

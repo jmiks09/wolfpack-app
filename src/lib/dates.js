@@ -13,9 +13,24 @@ export const isWeekend=d=>{const x=new Date(d+"T00:00:00");return x.getDay()===0
 
 export const DAY_NAMES=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
-export const getRestDays=profile=>profile?.restDays||[0,6]; // default Sat/Sun
+// A person's chosen rest days (default Sat/Sun), capped by any challenge they were in on date d.
+// profile.restRules = { key: { limit, start, end, name, emoji } } — written by App from habit challenges.
+export const restLimitOn=(profile,d)=>{
+  let limit=null;
+  for(const r of Object.values(profile?.restRules||{})){
+    if(!r||r.limit==null||!(r.start<=d&&d<=r.end))continue;
+    limit=limit==null?r.limit:Math.min(limit,r.limit);
+  }
+  return limit;
+};
+export const activeRestRules=(profile,d)=>Object.values(profile?.restRules||{}).filter(r=>r&&r.limit!=null&&r.start<=d&&d<=r.end);
+export const getRestDays=(profile,d)=>{
+  const chosen=[...(profile?.restDays||[0,6])].sort((a,b)=>a-b);
+  const limit=d?restLimitOn(profile,d):null;
+  return limit==null?chosen:chosen.slice(0,limit);
+};
 
-export const isRestDay=(d,profile)=>{const x=new Date(d+"T00:00:00");return getRestDays(profile).includes(x.getDay());};
+export const isRestDay=(d,profile)=>{const x=new Date(d+"T00:00:00");return getRestDays(profile,d).includes(x.getDay());};
 
 export const next7Days=()=>Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return localDateStr(d);});
 

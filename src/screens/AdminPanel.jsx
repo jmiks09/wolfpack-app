@@ -74,8 +74,14 @@ export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,on
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
             <div><div style={{fontSize:13}}>Gym booking tab</div><div style={{fontSize:11,color:"var(--muted)"}}>Turn on if this group shares a gym space.</div></div>
-            <button onClick={()=>onUpdateGroup({gym:!group.gym})} role="switch" aria-checked={!!group.gym} style={{width:48,height:28,borderRadius:14,border:"none",cursor:"pointer",background:group.gym?"var(--accent)":"var(--bg2)",position:"relative",flexShrink:0}}>
+            <button onClick={()=>onUpdateGroup({gym:!group.gym})} role="switch" aria-checked={!!group.gym} aria-label="Gym booking tab" style={{width:48,height:28,borderRadius:14,border:"none",cursor:"pointer",background:group.gym?"var(--accent)":"var(--bg2)",position:"relative",flexShrink:0}}>
               <span style={{position:"absolute",top:3,left:group.gym?23:3,width:22,height:22,borderRadius:"50%",background:"#fff",transition:"left .15s"}}/>
+            </button>
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <div><div style={{fontSize:13}}>Activity in chat</div><div style={{fontSize:11,color:"var(--muted)"}}>Workout cards, milestones, new members, and weekly challenge results.</div></div>
+            <button onClick={()=>onUpdateGroup({chatSystem:group.chatSystem===false})} role="switch" aria-checked={group.chatSystem!==false} aria-label="Activity in chat" style={{width:48,height:28,borderRadius:14,border:"none",cursor:"pointer",background:group.chatSystem!==false?"var(--accent)":"var(--bg2)",position:"relative",flexShrink:0}}>
+              <span style={{position:"absolute",top:3,left:group.chatSystem!==false?23:3,width:22,height:22,borderRadius:"50%",background:"#fff",transition:"left .15s"}}/>
             </button>
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>

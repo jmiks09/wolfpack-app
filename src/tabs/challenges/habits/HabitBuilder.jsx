@@ -28,7 +28,7 @@ export function HabitBuilder({existing,members,profiles,currentUser,today,onSave
   const [confirmDelete,setConfirmDelete]=useState(false);
 
   const start=tpl=>{
-    setC(tpl==="winter"?winterArcTemplate(today):{name:"",emoji:"🔥",start:today,end:"",penaltyStart:today,graceDays:1,passesPerWeek:1,money:{buyIn:0,missFee:5,payoutPct:90},habits:[]});
+    setC(tpl==="winter"?winterArcTemplate(today):{name:"",emoji:"🔥",start:today,end:"",penaltyStart:today,graceDays:1,passesPerWeek:1,restDays:null,money:{buyIn:0,missFee:5,payoutPct:90},habits:[]});
     setStep("edit");
   };
   const up=patch=>setC(x=>({...x,...patch}));
@@ -126,6 +126,13 @@ export function HabitBuilder({existing,members,profiles,currentUser,today,onSave
               <Field label="Grace days per week" hint="Misses allowed on daily habits."><input className="input" type="number" min={0} max={6} value={c.graceDays} onChange={e=>up({graceDays:num(e.target.value)})}/></Field>
               <Field label="Passes per week" hint="Sick or traveling days."><input className="input" type="number" min={0} max={7} value={c.passesPerWeek} onChange={e=>up({passesPerWeek:num(e.target.value)})}/></Field>
             </div>
+            <Field label="Rest days allowed per week" hint="Caps how many of each person's rest days count toward their streak during this challenge.">
+              <select className="input" aria-label="Rest days allowed per week" value={c.restDays==null?"":String(c.restDays)} onChange={e=>up({restDays:e.target.value===""?null:Number(e.target.value)})}>
+                <option value="">No limit (everyone keeps their own)</option>
+                <option value="0">0: no rest days</option>
+                {[1,2,3].map(n=><option key={n} value={String(n)}>{n}</option>)}
+              </select>
+            </Field>
           </div>
 
           <div style={section}>
