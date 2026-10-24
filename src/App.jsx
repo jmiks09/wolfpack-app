@@ -8,7 +8,7 @@ import { Toast } from "./components/Toast";
 import { WhatsNewModal } from "./components/WhatsNewModal";
 import { WolfIcon } from "./components/WolfIcon";
 import { fsArrayAdd, fsArrayRemove, fsDelete, fsDeleteFields, fsGet, fsListen, fsSet, onForegroundMessage } from "./firebase";
-import { LEGACY_GROUP_ID, REGISTRY_PATH, clearSession, ensureLegacyGroup, findGroupByCode, gpath, groupsForUser, loadSession, makeGroupId, makeInviteCode, renameInGroup, saveSession } from "./lib/groups";
+import { LEGACY_GROUP_ID, REGISTRY_PATH, clearSession, ensureLegacyGroup, findGroupByCode, gpath, groupsForUser, loadSession, makeGroupId, makeInviteCode, memberSince, renameInGroup, saveSession } from "./lib/groups";
 import { dismissActiveWorkout } from "./lib/activeWorkout";
 import { AI_MUSCLE_GROUPS, EFFORT_RATINGS, HOME_GYM_DEFAULT } from "./lib/aiConfig";
 import { MILESTONES, NAV, SESSION_MILESTONES, WHATS_NEW_FALLBACK } from "./lib/constants";
@@ -93,6 +93,7 @@ export default function App(){
   const adminName=group?.admin||null;
   const myGroups=currentUser?groupsForUser(groups,currentUser):[];
   const gp=base=>gpath(groupId,base);
+  const sinceFor=u=>memberSince(group,u);
   const [garageEquipment,setGarageEquipment]=useState(HOME_GYM_DEFAULT);
   const [userFavorites,setUserFavorites]=useState([]);
 useEffect(()=>{
@@ -251,7 +252,7 @@ useEffect(()=>{
     const g=findGroupByCode(groups,code);
     if(!g)return "That code doesn't match any group. Double-check it with your friend.";
     if(!(g.members||[]).includes(currentUser)){
-      try{await fsArrayAdd(REGISTRY_PATH,["list",g.id,"members"],currentUser);}
+      try{await fsArrayAdd(REGISTRY_PATH,["list",g.id,"members"],currentUser);await fsSet(REGISTRY_PATH,{list:{[g.id]:{joined:{[currentUser]:todayStr()}}}});}
       catch(e){console.warn(e);return "Couldn't join right now. Check your connection and try again.";}
       if(g.id===LEGACY_GROUP_ID){
         const l=(await fsGet("wolfpack/members"))?.list||[];
@@ -266,7 +267,7 @@ useEffect(()=>{
   };
   const handleCreateGroup=async(name,emoji)=>{
     const id=makeGroupId();
-    const g={id,name,emoji,code:makeInviteCode(Object.values(groups).map(x=>x.code)),admin:currentUser,members:[currentUser],gym:false,createdAt:Date.now()};
+    const g={id,name,emoji,code:makeInviteCode(Object.values(groups).map(x=>x.code)),admin:currentUser,members:[currentUser],joined:{[currentUser]:todayStr()},gym:false,createdAt:Date.now()};
     await fsSet(REGISTRY_PATH,{list:{[id]:g}});
     setGroups(p=>({...p,[id]:g}));
     return g;
@@ -333,6 +334,7 @@ useEffect(()=>{
     const ns=gymSlots.filter(s=>s.bookedBy!==m);
     await Promise.all([
       fsArrayRemove(REGISTRY_PATH,["list",groupId,"members"],m),
+      ...(group?.joined?.[m]?[fsDeleteFields(REGISTRY_PATH,[["list",groupId,"joined",m]])]:[]),
       fsSet(gp("challenges"),{list:nc}),
       fsSet(gp("gym"),{slots:ns}),
       ...(groupId===LEGACY_GROUP_ID?[fsSet("wolfpack/members",{list:members.filter(x=>x!==m)})]:[]),
@@ -411,16 +413,16 @@ useEffect(()=>{
   },[currentUser,members,history]);
 
   // After logging: a workout card (plus any milestone) in the chat of every group you're in.
-  const checkMilestones=async(newHistory)=>{
+  const checkMilestones=async(newHistory,{stepsOnly=false}={})=>{
     const day=todayStr(),entry=newHistory[day]?.[currentUser];
     const streak=getStreak(newHistory,currentUser,profiles[currentUser]);
     const sessions=getTotalWorkouts(newHistory,currentUser);
-    const streakMilestone=MILESTONES.find(m=>streak===m);
-    const sessionMilestone=SESSION_MILESTONES.find(m=>sessions===m);
+    const streakMilestone=stepsOnly?null:MILESTONES.find(m=>streak===m);
+    const sessionMilestone=stepsOnly?null:SESSION_MILESTONES.find(m=>sessions===m);
     const safe=currentUser.replace(/[^\w]/g,"_");
     const cards=[];
     if(entry)cards.push({id:workoutCardId(currentUser,day),kind:"activity",author:currentUser,
-      text:`logged ${(entry.workouts||[]).map(w=>`${w.icon} ${w.label}`).join(" + ")||"a workout"}`,
+      text:`logged ${[...(entry.workouts||[]).map(w=>`${w.icon} ${w.label}`),...(entry.steps?[`👟 ${Number(entry.steps).toLocaleString("en-US")} steps`]:[])].join(" + ")||"a workout"}`,
       detail:[...(entry.summary||[]).filter(x=>x.includes(":")),entry.duration?`${entry.duration} min`:null].filter(Boolean).join(" · ").slice(0,120),ts:Date.now()});
     if(streakMilestone)cards.push({id:`ms_${safe}_streak${streakMilestone}_${day}`,kind:"activity",author:currentUser,text:`hit a ${streakMilestone}-day streak! 🔥🐺`,ts:Date.now()+1});
     if(sessionMilestone)cards.push({id:`ms_${safe}_sess${sessionMilestone}`,kind:"activity",author:currentUser,text:`logged workout #${sessionMilestone}! 💪`,ts:Date.now()+2});
@@ -457,7 +459,8 @@ useEffect(()=>{
     if(pinData){await fsSet(`wolfpack/pin_${nn}`,pinData);await fsDelete(`wolfpack/pin_${oldName}`);}
     // Every group they belong to
     for(const g of groupsForUser(groups,oldName)){
-      await fsSet(REGISTRY_PATH,{list:{[g.id]:{members:(g.members||[]).map(swap),admin:swap(g.admin)}}});
+      await fsSet(REGISTRY_PATH,{list:{[g.id]:{members:(g.members||[]).map(swap),admin:swap(g.admin),...(g.joined?.[oldName]?{joined:{[nn]:g.joined[oldName]}}:{})}}});
+      if(g.joined?.[oldName])await fsDeleteFields(REGISTRY_PATH,[["list",g.id,"joined",oldName]]);
       await renameInGroup(g.id,oldName,nn);
       await renameInChat(g.id,oldName,nn);
     }
@@ -475,6 +478,20 @@ useEffect(()=>{
     try{
     const today=todayStr(),key=opts?.date||today,late=key!==today;
     const time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+    const steps=opts?.steps||null;
+    if(!workouts.length){
+      // Steps only: saved on the day without making it a workout day.
+      if(!steps)return;
+      const prev=history[key]?.[currentUser]||{};
+      const newData={...history,[key]:{...(history[key]||{}),[currentUser]:{...prev,steps}}};
+      await fsSet("wolfpack/workouts",{byDate:{[key]:{[currentUser]:{steps}}}});
+      setHistory(newData);setSharedData(newData);closeWorkout();
+      const dayName=new Date(key+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+      showToast(`👟 ${steps.toLocaleString("en-US")} steps ${late?`added to ${dayName}`:"logged"}`);
+      if(late)await postLateCard(key,dayName,[],[],opts?.proof,steps);
+      else await checkMilestones(newData,{stepsOnly:true});
+      return;
+    }
     // Support multiple workout types - merge with existing entries for today
     const existing=history[key]?.[currentUser]||{};
     const prevWorkouts=existing.workouts||[];
@@ -502,6 +519,7 @@ useEffect(()=>{
     const totalDur=newWorkouts.reduce((s,w)=>s+(Number(mergedDetails?.[w.id]?.duration)||Number(mergedDetails?.[w.key]?.duration)||0),0)||null;
     const sessionCount=(existing.sessionCount||1)+workouts.length-1;
     const entry={done:true,workouts:newWorkouts,workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:mergedDetails,time,
+      ...((steps??existing.steps)?{steps:steps??existing.steps}:{}),
       ts:late?(existing.ts||new Date(key+"T12:00:00").getTime()):Date.now(),sessionCount,
       ...(late?{late:{addedOn:today,addedAt:Date.now(),...(existing.late?{count:(existing.late.count||1)+1}:{})}}:{})};
     const newData={...history,[key]:{...(history[key]||{}),[currentUser]:entry}};
@@ -511,7 +529,7 @@ useEffect(()=>{
     if(late){
       const dayName=new Date(key+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
       showToast(`${icons} Added to ${dayName} ✓`);
-      await postLateCard(key,dayName,workouts,summaryLines,opts?.proof);
+      await postLateCard(key,dayName,workouts,summaryLines,opts?.proof,steps);
     }else{
       showToast(`${icons} Logged! Keep grinding! 🐺`);
       await checkMilestones(newData);
@@ -520,11 +538,11 @@ useEffect(()=>{
     finally{setLoggingWorkout(false);}
   };
   // Workouts added for a past day get their own chat card, marked late, with any proof photo.
-  const postLateCard=async(day,dayName,added,summaryLines,proof)=>{
+  const postLateCard=async(day,dayName,added,summaryLines,proof,steps)=>{
     const safe=currentUser.replace(/[^\w]/g,"_");
     const ids=new Set(added.map(w=>w.label));
     const card={id:`late_${safe}_${day}_${Date.now().toString(36)}`,kind:"activity",author:currentUser,late:true,forDay:day,
-      text:`added ${added.map(w=>`${w.icon} ${w.label}`).join(" + ")} for ${dayName}`,
+      text:`added ${[...added.map(w=>`${w.icon} ${w.label}`),...(steps?[`👟 ${steps.toLocaleString("en-US")} steps`]:[])].join(" + ")} for ${dayName}`,
       detail:["Logged late",...summaryLines.filter(x=>x.includes(":")&&ids.has(x.split(":")[0]))].join(" · ").slice(0,120),
       ...(proof?{photo:proof}:{})};
     const targets=myGroups.filter(g=>g.chatSystem!==false);
@@ -697,6 +715,7 @@ useEffect(()=>{
   const handleHabitLog=(cid,date,patch)=>fsSet(gp(`hlog_${cid}`),{byUser:{[currentUser]:{days:{[date]:patch}}}});
   const handleSavePersonal=(cid,goal)=>fsSet(gp(`hlog_${cid}`),{byUser:{[currentUser]:{personal:{[goal.id]:goal}}}});
   const handleDeletePersonal=(cid,id)=>fsDeleteFields(gp(`hlog_${cid}`),[["byUser",currentUser,"personal",id]]);
+  const handleUsePass=(cid,monday,list)=>fsSet(gp(`hlog_${cid}`),{byUser:{[currentUser]:{passes:{[monday]:list}}}});
   const handleGoalWeight=(cid,w)=>fsSet(gp(`hlog_${cid}`),{byUser:{[currentUser]:{goalWeight:w}}});
   const handleJoinHabit=async cid=>{
     await fsSet(gp("habits"),{list:{[cid]:{participants:{[currentUser]:{joinedAt:todayStr(),leftAt:null}}}}});
@@ -848,9 +867,9 @@ useEffect(()=>{
             />
             {view==="pack"&&<NotifBanner currentUser={currentUser}/>}
             {habitList.filter(c=>c.participants?.[currentUser]&&!c.participants[currentUser].leftAt&&c.start<=todayStr()&&todayStr()<=c.end).map(c=>(
-              <HabitTodayCard key={c.id} challenge={c} log={habitLogs[c.id]} history={history} currentUser={currentUser} today={todayStr()} onLog={handleHabitLog} onSetGoalWeight={handleGoalWeight} onLogWorkout={d=>{setWorkoutDate(d&&d!==todayStr()?d:null);setWorkoutOpen(true);}} onSavePersonal={handleSavePersonal} onDeletePersonal={handleDeletePersonal}/>
+              <HabitTodayCard key={c.id} challenge={c} log={habitLogs[c.id]} history={history} currentUser={currentUser} today={todayStr()} onLog={handleHabitLog} onSetGoalWeight={handleGoalWeight} onLogWorkout={d=>{setWorkoutDate(d&&d!==todayStr()?d:null);setWorkoutOpen(true);}} onSavePersonal={handleSavePersonal} onDeletePersonal={handleDeletePersonal} onUsePass={handleUsePass}/>
             ))}
-            <PackTab currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onOpenMealScanner={()=>setMealScannerOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
+            <PackTab sinceFor={sinceFor} currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onOpenMealScanner={()=>setMealScannerOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
           </>
         )}
         {view==="feed"&&<ChatTab groupName={group.name} messages={chatMessages} currentUser={currentUser} profiles={profiles} today={todayStr()} dividerTs={chatDivider}
@@ -865,7 +884,7 @@ useEffect(()=>{
           <button className="btn-ghost" style={{width:"100%",padding:12}} onClick={()=>setHabitBuilder("new")}>+ New habit challenge (like Winter Arc)</button>
         </div>}
         {view==="challenges"&&<ChallengesTab currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)} onMarkPaid={handleMarkPaid} onLogPayment={handleLogPayment}/>}
-        {view==="stats"&&<StatsTab currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed} onEditExercises={(date,entry)=>setEditCompletedWorkout({date,entry})}/>}
+        {view==="stats"&&<StatsTab sinceFor={sinceFor} currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed} onEditExercises={(date,entry)=>setEditCompletedWorkout({date,entry})}/>}
       </div>
       <nav className="nav">
         {NAV.filter(n=>n.id!=="gym"||group.gym).map(n=>{

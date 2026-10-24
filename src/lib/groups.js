@@ -26,6 +26,17 @@ export function makeGroupId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+// The day someone's group stats start counting: when they joined, or when the
+// group was created for people who were in it before join dates were recorded.
+// null means count everything (the original WOLFPACK group).
+export function memberSince(group, user) {
+  const j = group?.joined?.[user];
+  if (j) return j;
+  if (!group?.createdAt) return null;
+  const d = new Date(group.createdAt);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export const groupsForUser = (groups, user) =>
   Object.values(groups || {})
     .filter(g => (g.members || []).includes(user))

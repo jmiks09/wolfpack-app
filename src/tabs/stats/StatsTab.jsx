@@ -5,7 +5,8 @@ import { isWeekend, localDateStr } from "../../lib/dates";
 import { computeBadges, getStreak, getTotalWorkouts } from "../../lib/stats";
 import { WorkoutHistorySection } from "./WorkoutHistorySection";
 
-export function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditExercises}){
+export function StatsTab({currentUser,members,profiles,history,challenges,feed,onEditExercises,sinceFor}){
+  const groupTotal=m=>getTotalWorkouts(history,m,sinceFor?.(m));
   const last30=Array.from({length:30},(_,i)=>{const d=new Date();d.setDate(d.getDate()-29+i);return{date:localDateStr(d),day:d.getDate()};});
   const mb=computeBadges(currentUser,history,feed,challenges,profiles[currentUser]);
 
@@ -226,8 +227,8 @@ export function StatsTab({currentUser,members,profiles,history,challenges,feed,o
         {BADGES.map(b=>{const earned=mb.includes(b.id);return<div key={b.id} className={`badge-item ${earned?"earned":"locked"}`}><div style={{fontSize:28,marginBottom:4}}>{b.icon}</div><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:12,letterSpacing:1}}>{b.label}</div><div style={{fontSize:10,color:"var(--muted)",marginTop:2,lineHeight:1.3}}>{b.desc}</div></div>;})}
       </div>
       <div className="section-label">PACK COMPARISON</div>
-      {[...members].sort((a,b)=>getTotalWorkouts(history,b)-getTotalWorkouts(history,a)).map((m,i)=>{
-        const t=getTotalWorkouts(history,m),s=getStreak(history,m,profiles[m]),mx=Math.max(...members.map(x=>getTotalWorkouts(history,x)),1);
+      {[...members].sort((a,b)=>groupTotal(b)-groupTotal(a)).map((m,i)=>{
+        const t=groupTotal(m),s=getStreak(history,m,profiles[m]),mx=Math.max(...members.map(groupTotal),1);
         return<div key={m} className="member-row" style={{margin:"0 16px 8px"}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,color:"var(--muted)",width:22}}>{i+1}</div><AvatarDisplay profile={profiles[m]} size={36}/><div style={{flex:1}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1}}>{m}{m===currentUser&&" (you)"}</span><span style={{fontSize:12,color:"var(--muted)"}}>{t} workouts</span></div><div className="progress-bar" style={{height:4}}><div className="progress-fill" style={{width:`${(t/mx)*100}%`}}/></div><div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>🔥{s} day streak</div></div></div>;
       })}
       <div className="section-label">MY WORKOUT HISTORY</div>

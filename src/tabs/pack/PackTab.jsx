@@ -5,8 +5,8 @@ import { MemberCard } from "./MemberCard";
 import { MyWeekStrip } from "./MyWeekStrip";
 import { PackGoals } from "./PackGoals";
 
-export function PackTab({currentUser,members,profiles,history,sharedData,onLogWorkout,onOpenAITrainer,onOpenNutrition,onOpenMealScanner,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,reactions,onReact,weeklyRecap,onDismissRecap}){
-  const key=todayStr(),td=sharedData[key]||{},my=td[currentUser],str=getStreak(history,currentUser,profiles[currentUser]),tot=getTotalWorkouts(history,currentUser),we=isRestDay(key,profiles[currentUser]);
+export function PackTab({sinceFor,currentUser,members,profiles,history,sharedData,onLogWorkout,onOpenAITrainer,onOpenNutrition,onOpenMealScanner,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,reactions,onReact,weeklyRecap,onDismissRecap}){
+  const key=todayStr(),td=sharedData[key]||{},my=td[currentUser],str=getStreak(history,currentUser,profiles[currentUser]),tot=getTotalWorkouts(history,currentUser,sinceFor?.(currentUser)),we=isRestDay(key,profiles[currentUser]);
   const sorted=[...members].sort((a,b)=>{const sa=getStreak(history,a,profiles[a]),sb=getStreak(history,b,profiles[b]);if(sb!==sa)return sb-sa;return b===currentUser?1:a===currentUser?-1:0;});
 
   return(
@@ -126,7 +126,7 @@ export function PackTab({currentUser,members,profiles,history,sharedData,onLogWo
           const sessionMuscles=td[m]?.details?.lift?.muscles||[];
           return(
             <MemberCard key={m}
-              m={m} i={i} done={done} isMe={isMe} ms={ms}
+              m={m} i={i} done={done} isMe={isMe} ms={ms} since={sinceFor?.(m)}
               restToday={restToday} td={td} profiles={profiles}
               sessionExercises={sessionExercises}
               sessionMuscles={sessionMuscles}

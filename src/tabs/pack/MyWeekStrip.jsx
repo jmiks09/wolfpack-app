@@ -27,7 +27,7 @@ export function MyWeekStrip({currentUser, history}){
       dateStr,
       label:["M","T","W","T","F","S","S"][i],
       fullLabel:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][i],
-      entry,
+      entry:entry?.done?entry:undefined, // a steps-only day isn't a workout
       isToday,
       isFuture,
       done:!!entry?.done,

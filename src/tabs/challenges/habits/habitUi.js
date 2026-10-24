@@ -7,6 +7,10 @@ export function chipColor(s){
   return {bg:"var(--bg2)",bd:"var(--border)",fg:"var(--muted)"};
 }
 export function chipText(h,s){
+  const t=chipTextBase(h,s);
+  return s.bonus?`${t} 🎟️`:t;
+}
+function chipTextBase(h,s){
   if(s.kind==="total")return `${fmtAmount(s.total,h.unit)}/${fmtAmount(s.target,h.unit)}`;
   if(s.kind==="count")return `${s.count}/${s.target}`;
   if(s.misses>0)return `${s.misses} miss${s.misses===1?"":"es"}`;

@@ -100,6 +100,7 @@ export function HabitBuilder({existing,members,profiles,currentUser,today,onSave
                       <option value="any">Any workout</option><option value="strength">Strength (weights)</option><option value="cardio">Cardio or activity</option>
                     </select></Field>}
                   {h.type==="workout"&&h.filter==="cardio"&&<Field label="Activity min."><input className="input" type="number" value={h.minMinutes??20} onChange={e=>upHabit(i,{minMinutes:num(e.target.value)})} style={{padding:8}}/></Field>}
+                  {h.type==="workout"&&h.filter!=="strength"&&<Field label="Steps count at"><input className="input" type="number" min={0} step={500} aria-label="Steps count as cardio at" placeholder="Off" value={h.steps===undefined?10000:(h.steps??"")} onChange={e=>upHabit(i,{steps:e.target.value===""?null:Number(e.target.value)})} style={{padding:8}}/></Field>}
                   {(h.type==="max"||h.type==="min")&&<>
                     <Field label={h.type==="max"?"Daily limit":"Daily minimum"}><input className="input" type="number" value={h.target} onChange={e=>upHabit(i,{target:num(e.target.value)})} style={{padding:8}}/></Field>
                     <Field label="Unit"><input className="input" value={h.unit||""} onChange={e=>upHabit(i,{unit:e.target.value.slice(0,8)})} placeholder="min" style={{padding:8}}/></Field>
@@ -124,7 +125,7 @@ export function HabitBuilder({existing,members,profiles,currentUser,today,onSave
             </div>
             <div style={{display:"flex",gap:8}}>
               <Field label="Grace days per week" hint="Misses allowed on daily habits."><input className="input" type="number" min={0} max={6} value={c.graceDays} onChange={e=>up({graceDays:num(e.target.value)})}/></Field>
-              <Field label="Passes per week" hint="Sick or traveling days."><input className="input" type="number" min={0} max={7} value={c.passesPerWeek} onChange={e=>up({passesPerWeek:num(e.target.value)})}/></Field>
+              <Field label="Passes per week" hint="Each person puts a pass on any one goal that carries the penalty, like an extra cardio day."><input className="input" type="number" min={0} max={7} value={c.passesPerWeek} onChange={e=>up({passesPerWeek:num(e.target.value)})}/></Field>
             </div>
             <Field label="Rest days allowed per week" hint="Caps how many of each person's rest days count toward their streak during this challenge.">
               <select className="input" aria-label="Rest days allowed per week" value={c.restDays==null?"":String(c.restDays)} onChange={e=>up({restDays:e.target.value===""?null:Number(e.target.value)})}>

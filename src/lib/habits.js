@@ -48,7 +48,7 @@ export function winterArcTemplate(startDate) {
       { id: "read",     type: "check",   label: "Read",                    icon: "📖", target: 3 },
       { id: "workout",  type: "workout", label: "Workout",                 icon: "🔥", target: 7, filter: "any" },
       { id: "strength", type: "workout", label: "Strength training",       icon: "🏋️", target: 3, filter: "strength" },
-      { id: "cardio",   type: "workout", label: "Cardio or 20-min activity", icon: "🏃", target: 4, filter: "cardio", minMinutes: 20 },
+      { id: "cardio",   type: "workout", label: "Cardio, 20-min activity, or 10k steps", icon: "🏃", target: 4, filter: "cardio", minMinutes: 20, steps: 10000 },
       { id: "screen",   type: "max",     label: "Screen time",             icon: "📵", target: 60, unit: "min" },
       { id: "protein",  type: "protein", label: "Protein",                 icon: "🥩", perLb: 0.7 },
     ],
@@ -92,21 +92,51 @@ function workoutMinutes(entry, w) {
   if (m) return m;
   return (entry.workouts || []).length === 1 ? Number(entry.duration) || 0 : 0;
 }
-export function workoutKinds(entry, minMinutes = 20) {
-  if (!entry?.done) return { any: false, strength: false, cardio: false };
+// Steps (entry.steps) count toward cardio and "any workout" goals, never strength.
+// stepsAt: the step count that makes the day count, or null when steps don't count.
+export const stepsThreshold = habit =>
+  habit?.type === "workout" && ["cardio", "any", undefined].includes(habit.filter) ? (habit.steps === undefined ? 10000 : habit.steps) : null;
+export function workoutKinds(entry, minMinutes = 20, stepsAt = null) {
+  const stepDay = stepsAt != null && stepsAt > 0 && Number(entry?.steps) >= stepsAt;
+  if (!entry?.done) return { any: stepDay, strength: false, cardio: stepDay };
   const ws = entry.workouts || [];
   const strength = ws.some(w => STRENGTH_IDS.includes(w.id));
   const cardio = ws.some(w => !STRENGTH_IDS.includes(w.id) &&
     (CARDIO_IDS.includes(w.id) || workoutMinutes(entry, w) >= minMinutes));
-  return { any: true, strength, cardio };
+  return { any: true, strength, cardio: cardio || stepDay };
 }
 
 export const proteinTarget = (habit, goalWeight) =>
   goalWeight ? Math.round(habit.perLb * Number(goalWeight)) : null;
 
+// ── PASSES ──
+// A pass is applied to one challenge habit for a week: userLog.passes[monday] = [habitId, ...].
+//   weekly-count habit → counts as one extra time that week
+//   daily habit        → excuses one missed day that week
+// A strength or cardio pass also counts as a workout day for any "Workout" habit.
+// Older passes were tied to a day (days[d].pass); weeks that still use those keep the old rules.
+export const passesForWeek = (userLog, week) => userLog?.passes?.[week.monday] || [];
+export const legacyPassMode = (userLog, week) => passesForWeek(userLog, week).length === 0;
+// Passes only work on goals that carry the penalty; a pass on any other goal doesn't count.
+export const passableHabits = ch => ch.habits.filter(h => h.type !== "total" && countsForPenalty(h));
+export const validPassesForWeek = (ch, userLog, week) => {
+  const ok = new Set(passableHabits(ch).map(h => h.id));
+  return passesForWeek(userLog, week).filter(id => ok.has(id));
+};
+export function passesUsedInWeek(ch, userLog, week) {
+  if (!legacyPassMode(userLog, week)) return validPassesForWeek(ch, userLog, week).length;
+  return dateRange(week.from, week.to).filter(d => userLog?.days?.[d]?.pass).length;
+}
+export function passBonus(ch, habit, passes) {
+  const isWorkoutHabit = id => ch.habits.find(h => h.id === id)?.type === "workout";
+  const anyWorkout = habit.type === "workout" && (habit.filter || "any") === "any";
+  return passes.filter(p => p === habit.id || (anyWorkout && isWorkoutHabit(p))).length;
+}
+
 // Does a single day meet a daily habit? null = nothing entered.
-export function dailyHit(habit, dayLog, goalWeight) {
-  if (dayLog?.pass) return true;
+// legacyPass: a day-style pass covers the day (old rules).
+export function dailyHit(habit, dayLog, goalWeight, legacyPass = true) {
+  if (legacyPass && dayLog?.pass) return true;
   const v = dayLog?.[habit.id];
   if (v === undefined || v === null || v === "") return null;
   const n = Number(v);
@@ -123,18 +153,21 @@ export function scoreHabitWeek(ch, habit, week, userLog, history, user, asOf) {
   if (habit.type === "total") return scoreTotal(ch, habit, userLog, asOf);
   const judged = dateRange(week.from, minDate(week.to, asOf));
   const finished = asOf > week.to;
-  const passDays = judged.filter(d => days[d]?.pass).length;
+  const legacy = legacyPassMode(userLog, week);
+  const passDays = legacy ? judged.filter(d => days[d]?.pass).length : 0;
+  const bonus = legacy ? 0 : passBonus(ch, habit, validPassesForWeek(ch, userLog, week));
 
   if (HABIT_TYPES[habit.type]?.daily) {
-    let hits = 0, misses = 0;
+    let hits = 0, rawMisses = 0;
     for (const d of judged) {
-      const h = dailyHit(habit, days[d], userLog?.goalWeight);
+      const h = dailyHit(habit, days[d], userLog?.goalWeight, legacy);
       if (h) hits++;
-      else if (h === false || d < asOf) misses++; // blank counts as a miss once the day is over
+      else if (h === false || d < asOf) rawMisses++; // blank counts as a miss once the day is over
     }
+    const misses = Math.max(0, rawMisses - bonus);
     const grace = ch.graceDays ?? 1;
     const passed = misses <= grace;
-    return { kind: "daily", hits, misses, grace, judgedDays: judged.length, weekDays: week.days,
+    return { kind: "daily", hits, misses, grace, judgedDays: judged.length, weekDays: week.days, bonus,
       passed: finished ? passed : null, failing: misses > grace };
   }
 
@@ -144,14 +177,14 @@ export function scoreHabitWeek(ch, habit, week, userLog, history, user, asOf) {
   for (const d of judged) {
     if (habit.type === "check") { if (days[d]?.[habit.id]) hitDays.add(d); }
     else if (habit.type === "workout") {
-      const k = workoutKinds(history?.[d]?.[user], habit.minMinutes ?? 20);
-      if (k[habit.filter || "any"] || ((habit.filter || "any") === "any" && days[d]?.pass)) hitDays.add(d);
+      const k = workoutKinds(history?.[d]?.[user], habit.minMinutes ?? 20, stepsThreshold(habit));
+      if (k[habit.filter || "any"] || (legacy && (habit.filter || "any") === "any" && days[d]?.pass)) hitDays.add(d);
     }
   }
-  const count = hitDays.size;
+  const count = hitDays.size + bonus;
   // Days still available this week, counting today if it isn't done yet.
   const daysLeft = finished ? 0 : dateRange(maxDate(asOf, week.from), week.to).filter(d => !hitDays.has(d)).length;
-  return { kind: "count", count, target, passDays,
+  return { kind: "count", count, target, passDays, bonus,
     passed: finished ? count >= target : null,
     failing: !finished && count + daysLeft < target };
 }
@@ -184,7 +217,7 @@ export function scoreMember(ch, user, logs, history, asOf) {
     const fee = !penalized ? 0 : penaltyMode(ch) === "flat"
       ? (missedPenalty > 0 ? Number(ch.money?.flatAmount) || 0 : 0)
       : missedPenalty * (Number(ch.money?.missFee) || 0);
-    const passesUsed = dateRange(week.from, minDate(week.to, asOf)).filter(d => userLog?.days?.[d]?.pass).length;
+    const passesUsed = passesUsedInWeek(ch, userLog, week);
     return { week, habits, finished, counted, missed, missedPenalty, penalized, fee, passesUsed };
   });
   const done = rows.filter(r => r.finished && r.counted);

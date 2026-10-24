@@ -103,7 +103,7 @@ export function HabitChallengeCard({challenge:ch,log,history,profiles,currentUse
           {ch.habits.map(h=>`${h.icon} ${h.label}`).join("  ·  ")}. Daily habits allow {ch.graceDays??1} miss{(ch.graceDays??1)===1?"":"es"} a week.
           {ch.restDays!=null&&<> {ch.restDays===0?"No rest days during this challenge.":`Up to ${ch.restDays} rest day${ch.restDays===1?"":"s"} a week count.`}</>}
           {penaltyHabits.length<ch.habits.length&&<> Penalty applies to {penaltyHabits.map(h=>`${h.icon} ${h.label}`).join(", ")}; the rest count toward completion only.</>}
-          {" "}Dashed chips are personal goals and don't affect money.
+          {" "}🎟️ means a pass was used on that goal. Dashed chips are personal goals and don't affect money.
         </div>
       </div>}
 

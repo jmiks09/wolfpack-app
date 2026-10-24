@@ -3,7 +3,7 @@ import { AvatarDisplay } from "../../components/AvatarDisplay";
 import { getTotalWorkouts } from "../../lib/stats";
 
 // ── MEMBER CARD ──────────────────────────────────────────────────────────────
-export function MemberCard({m,i,done,isMe,ms,restToday,td,profiles,sessionExercises,sessionMuscles,onOpenProfile,history}){
+export function MemberCard({m,i,done,isMe,ms,restToday,td,profiles,sessionExercises,sessionMuscles,onOpenProfile,history,since}){
   const [expanded,setExpanded]=useState(false);
   const hasExercises=sessionExercises?.length>0;
 
@@ -41,7 +41,7 @@ export function MemberCard({m,i,done,isMe,ms,restToday,td,profiles,sessionExerci
             <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:1,color:isMe?"var(--accent2)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>{m}</span>
             {isMe&&<span style={{fontSize:10,color:"var(--accent2)",background:"rgba(124,92,191,0.2)",padding:"1px 5px",borderRadius:4,flexShrink:0}}>YOU</span>}
           </div>
-          <div style={{fontSize:11,color:"var(--muted)"}}>🔥 {ms} days · {getTotalWorkouts(history,m)} sessions</div>
+          <div style={{fontSize:11,color:"var(--muted)"}}>🔥 {ms} days · {getTotalWorkouts(history,m,since)} sessions</div>
           {done&&(
             <div style={{marginTop:3}}>
               {Array.isArray(td[m]?.summary)

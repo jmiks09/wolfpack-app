@@ -49,9 +49,14 @@ export function WorkoutModal({onClose,onSubmit,loading,today,initialDate}){
   };
   const removeExercise=id=>setExercises(ex=>ex.filter(e=>e.id!==id));
 
+  const stepsPicked=selected.some(s=>s.id==="steps");
+  const stepsCount=Number(String(cardioDetails.steps?.count||"").replace(/[^\d]/g,""))||0;
   const handleSubmit=()=>{
+    if(stepsPicked&&!stepsCount)return;
+    // Steps are stored separately: they only count toward cardio goals, not as a workout.
+    const workoutsOnly=selected.filter(s=>s.id!=="steps");
     // Build selected list — if lifting selected, convert to weight training type
-    const finalSelected=selected.map(s=>s.id==="lift"?{...s,label:"Weight Training"}:s);
+    const finalSelected=workoutsOnly.map(s=>s.id==="lift"?{...s,label:"Weight Training"}:s);
     // Build details
     const details={};
     if(hasLifting){
@@ -62,12 +67,12 @@ export function WorkoutModal({onClose,onSubmit,loading,today,initialDate}){
         focus:muscles.join(", ")||"General",
       };
     }
-    selected.filter(s=>s.id!=="lift").forEach(s=>{
+    workoutsOnly.filter(s=>s.id!=="lift").forEach(s=>{
       details[s.id]=cardioDetails[s.id]||{};
     });
     const summary=buildManualSummary(finalSelected,muscles,exercises,duration);
-    const totalDuration=Number(duration)||selected.filter(s=>s.id!=="lift").reduce((sum,w)=>sum+(Number(cardioDetails[w.id]?.duration)||0),0)||null;
-    onSubmit(finalSelected,note,totalDuration,details,summary,{date,proof:late?proof:null});
+    const totalDuration=Number(duration)||workoutsOnly.filter(s=>s.id!=="lift").reduce((sum,w)=>sum+(Number(cardioDetails[w.id]?.duration)||0),0)||null;
+    onSubmit(finalSelected,note,totalDuration,details,summary,{date,proof:late?proof:null,steps:stepsPicked?stepsCount:null});
   };
 
   const buildManualSummary=(types,msc,exs,dur)=>{
@@ -123,6 +128,7 @@ export function WorkoutModal({onClose,onSubmit,loading,today,initialDate}){
                 {id:"bike",icon:"🚴",label:"Cycling"},
                 {id:"hiit",icon:"⚡",label:"HIIT"},
                 {id:"walk",icon:"🚶",label:"Walking"},
+                {id:"steps",icon:"👟",label:"Steps"},
                 {id:"cardio",icon:"❤️‍🔥",label:"Mixed Cardio"},
                 {id:"swim",icon:"🏊",label:"Swimming"},
                 {id:"other",icon:"💪",label:"Other"},
@@ -270,7 +276,19 @@ export function WorkoutModal({onClose,onSubmit,loading,today,initialDate}){
             </div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:14}}>All optional — fill in what you tracked.</div>
 
-            {CARDIO_TYPES.map(w=>(
+            {CARDIO_TYPES.map(w=>w.id==="steps"?(
+              <div key="steps" style={{marginBottom:14,padding:"12px 14px",background:"var(--bg3)",borderRadius:14,border:"1px solid var(--border)"}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:20}}>👟</span>STEPS
+                </div>
+                <div style={{fontSize:11,color:"var(--muted)",marginBottom:4}}>Steps {late?"that day":"today"} (from your watch or phone)</div>
+                <input className="input" type="text" inputMode="numeric" placeholder="10,000" aria-label="Step count"
+                  value={cardioDetails.steps?.count||""}
+                  onChange={e=>{const n=e.target.value.replace(/[^\d]/g,"").slice(0,6);setCardioDetails(d=>({...d,steps:{count:n?Number(n).toLocaleString("en-US"):""}}));}}
+                  style={{padding:"10px 12px",fontSize:18}}/>
+                <div style={{fontSize:11,color:"var(--muted)",marginTop:6,lineHeight:1.5}}>10,000+ steps counts toward your cardio and workout goals (not strength).</div>
+              </div>
+            ):(
               <div key={w.id} style={{marginBottom:14,padding:"12px 14px",background:"var(--bg3)",borderRadius:14,border:"1px solid var(--border)"}}>
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
                   <span style={{fontSize:20}}>{w.icon}</span>{w.label}
@@ -310,7 +328,8 @@ export function WorkoutModal({onClose,onSubmit,loading,today,initialDate}){
               <input className="input" placeholder="How it went..." value={note} onChange={e=>setNote(e.target.value)} maxLength={120}/>
             </div>
 
-            <button className="btn-primary" onClick={handleSubmit} disabled={loading} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
+            {stepsPicked&&!stepsCount&&<div style={{fontSize:12,color:"var(--orange)",marginBottom:8}}>Enter your step count to log steps.</div>}
+            <button className="btn-primary" onClick={handleSubmit} disabled={loading||(stepsPicked&&!stepsCount)} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
               {loading?"LOGGING...":"LOG IT 💪"}
             </button>
           </>

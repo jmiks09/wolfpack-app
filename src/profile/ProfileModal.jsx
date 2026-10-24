@@ -184,7 +184,7 @@ export function ProfileModal({currentUser,profile,profiles,history,challenges,on
                 {[
                   ["🔥","Consecutive days logged",`${streak} day streak`],
                   ["🏆","Best consecutive days",`${longestStreak} days`],
-                  ["💪","Total sessions logged",total],
+                  ["💪","Lifetime sessions logged",total],
                   ["📅","Sessions this month",Object.keys(history).filter(d=>{const m=new Date();return d.startsWith(`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,"0")}`)&&history[d]?.[currentUser]?.done}).reduce((sum,d)=>{const s=history[d]?.[currentUser]?.workouts?.length||1;return sum+s;},0)],
                 ].map(([icon,label,val])=>(
                   <div key={label} style={{padding:"14px",background:"var(--bg3)",borderRadius:14,border:"1px solid var(--border)",textAlign:"center"}}>

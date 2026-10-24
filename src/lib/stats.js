@@ -18,9 +18,11 @@ export function getStreak(h,n,profile){
   return s;
 }
 
-export function getTotalWorkouts(h,n){
-  // Count total sessions — each workout type logged counts as 1 session
-  return Object.values(h).reduce((sum,d)=>{
+export function getTotalWorkouts(h,n,since=null){
+  // Count total sessions — each workout type logged counts as 1 session.
+  // since: only count days on or after this date (e.g. when someone joined the group).
+  return Object.entries(h).reduce((sum,[day,d])=>{
+    if(since&&day<since)return sum;
     if(!d?.[n]?.done)return sum;
     const sessions=d[n]?.workouts?.length||1; // multi-type = multiple sessions
     return sum+sessions;
