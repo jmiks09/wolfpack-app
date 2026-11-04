@@ -1,17 +1,19 @@
 import { QUOTES } from "./constants";
-import { getDateRange, getWeekStart, getWorkoutDays, isRestDay, localDateStr, todayStr } from "./dates";
+import { getDateRange, getWeekStart, getWorkoutDays, isActiveDay, isRestDay, localDateStr, todayStr } from "./dates";
 
 export function getStreak(h,n,profile){
   let s=0;const b=new Date();const today=localDateStr(b);
   for(let i=0;i<365;i++){
     const d=new Date(b);d.setDate(b.getDate()-i);
     const k=localDateStr(d);
-    // Rest days: a workout still adds to the streak; skipping it never breaks it
-    if(isRestDay(k,profile)){if(h[k]?.[n]?.done)s++;continue;}
+    // A logged workout or a big-steps day both count
+    const active=isActiveDay(h[k]?.[n],profile,k);
+    // Rest days: activity still adds to the streak; skipping it never breaks it
+    if(isRestDay(k,profile)){if(active)s++;continue;}
     // Skip today if not yet logged — don't penalize for current day
-    if(k===today&&!h[k]?.[n]?.done)continue;
+    if(k===today&&!active)continue;
     // Count logged days
-    if(h[k]?.[n]?.done){s++;}
+    if(active){s++;}
     // Any past workout day that's missing breaks the streak
     else break;
   }

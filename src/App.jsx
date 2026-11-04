@@ -42,13 +42,23 @@ import { WorkoutModal } from "./workouts/WorkoutModal";
 const NO_MEMBERS=[];
 const restRuleKey=(gid,cid)=>`${gid}_${cid}`;
 // The rest-day cap a habit challenge puts on one participant, or null.
+// The step count a challenge set for counting a day as a workout: its "Workout" goal's
+// setting, else its cardio goal's. null when the challenge doesn't set one.
+function challengeSteps(c){
+  const ws=(c?.habits||[]).filter(h=>h.type==="workout");
+  const pick=ws.find(h=>(h.filter||"any")==="any")||ws.find(h=>h.filter==="cardio");
+  return Number(pick?.steps)>0?Number(pick.steps):null;
+}
+// What a habit challenge sets for one participant on their profile (rest-day cap,
+// step count), or null if it sets neither.
 function restRuleFor(gid,c,user){
   const p=c?.participants?.[user];
-  if(!p||c.restDays==null||!c.start||!c.end)return null;
+  const steps=challengeSteps(c);
+  if(!p||(c.restDays==null&&steps==null)||!c.start||!c.end)return null;
   const start=p.joinedAt&&p.joinedAt>c.start?p.joinedAt:c.start;
   const end=p.leftAt?addDays(p.leftAt,-1):c.end;
   if(end<start)return null;
-  return {limit:c.restDays,start,end,name:c.name||"Challenge",emoji:c.emoji||"🔥"};
+  return {limit:c.restDays??null,...(steps!=null?{steps}:{}),start,end,name:c.name||"Challenge",emoji:c.emoji||"🔥"};
 }
 
 export default function App(){

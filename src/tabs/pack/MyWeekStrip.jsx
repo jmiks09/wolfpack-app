@@ -1,36 +1,40 @@
 import { useState } from "react";
 import { AI_MUSCLE_GROUPS } from "../../lib/aiConfig";
+import { localDateStr, stepDayOn } from "../../lib/dates";
+
+const fmtSteps=n=>Number(n).toLocaleString("en-US");
 
 // ── MY WEEK STRIP ────────────────────────────────────────────────────────────
 // Shows Mon-Sun of current week. Each day is a dot — tap to see exercises.
-export function MyWeekStrip({currentUser, history}){
+export function MyWeekStrip({currentUser, history, profile}){
   const [selectedDay,setSelectedDay]=useState(null);
 
-  // Build Mon-Sun of current Central-time week
+  // Build Mon-Sun of the current week, in the phone's own time zone
   const days=[];
   const now=new Date();
-  const central=new Date(now.getTime()+(-5*60*60*1000));
-  const todayCentral=central.toISOString().slice(0,10);
-  // Get Monday of current week
-  const dow=central.getDay(); // 0=Sun, 1=Mon...
-  const monday=new Date(central);
-  monday.setDate(central.getDate()-(dow===0?6:dow-1));
+  const todayStr=localDateStr(now);
+  const dow=now.getDay(); // 0=Sun, 1=Mon...
+  const monday=new Date(now.getFullYear(),now.getMonth(),now.getDate()-(dow===0?6:dow-1),12);
 
   for(let i=0;i<7;i++){
     const d=new Date(monday);
     d.setDate(monday.getDate()+i);
-    const dateStr=d.toISOString().slice(0,10);
+    const dateStr=localDateStr(d);
     const entry=history[dateStr]?.[currentUser];
-    const isToday=dateStr===todayCentral;
-    const isFuture=dateStr>todayCentral;
+    const steps=Number(entry?.steps)||0;
+    const stepGoal=stepDayOn(profile,dateStr);
+    const stepDay=!entry?.done&&steps>=stepGoal; // enough steps counts as a workout day
     days.push({
       dateStr,
       label:["M","T","W","T","F","S","S"][i],
       fullLabel:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][i],
-      entry:entry?.done?entry:undefined, // a steps-only day isn't a workout
-      isToday,
-      isFuture,
-      done:!!entry?.done,
+      entry:entry?.done||steps?entry:undefined,
+      steps,
+      stepDay,
+      stepGoal,
+      isToday:dateStr===todayStr,
+      isFuture:dateStr>todayStr,
+      done:!!entry?.done||stepDay,
     });
   }
 
@@ -89,7 +93,9 @@ export function MyWeekStrip({currentUser, history}){
               transform:day.dateStr===selectedDay?"scale(1.15)":"scale(1)",
             }}>
               {day.done
-                ? day.entry?.workoutIcon||"💪"
+                ? (day.stepDay?"👟":day.entry?.workoutIcon||"💪")
+                : day.steps
+                  ? <span style={{opacity:.5}} title={`${fmtSteps(day.steps)} steps`}>👟</span>
                 : day.isToday
                   ? <span style={{fontSize:8,color:"rgba(124,92,191,0.6)"}}>TODAY</span>
                   : ""}
@@ -114,7 +120,7 @@ export function MyWeekStrip({currentUser, history}){
                 {selected.fullLabel} {selected.dateStr.slice(5).replace("-","/")}
               </div>
               <div style={{fontSize:11,color:"rgba(255,255,255,0.7)"}}>
-                {selected.entry.workoutLabel||"Workout logged"}
+                {selected.entry.done?(selected.entry.workoutLabel||"Workout logged"):`👟 ${fmtSteps(selected.steps)} steps`}
               </div>
             </div>
             <button onClick={()=>setSelectedDay(null)} style={{
@@ -124,7 +130,11 @@ export function MyWeekStrip({currentUser, history}){
           </div>
 
           {/* WOLFMODE exercises if available */}
-          {getExercises(selected.entry)?(
+          {!selected.entry.done?(
+            <div style={{fontSize:12,color:selected.stepDay?"var(--green)":"var(--muted)",lineHeight:1.6}}>
+              {selected.stepDay?"Counts as a workout and cardio day.":`Under ${fmtSteps(selected.stepGoal)} steps, so it doesn't count as a workout day.`}
+            </div>
+          ):getExercises(selected.entry)?(
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {getExercises(selected.entry)
                 .filter(ex=>!ex.skipped||ex.substitutedWith) // hide pure skips, keep substitutes
@@ -166,6 +176,10 @@ export function MyWeekStrip({currentUser, history}){
                 ?selected.entry.summary.map((s,i)=><div key={i}>{s}</div>)
                 :selected.entry.workoutLabel}
             </div>
+          )}
+
+          {selected.entry.done&&selected.steps>0&&(
+            <div style={{marginTop:8,fontSize:12,color:"rgba(255,255,255,0.7)"}}>👟 {fmtSteps(selected.steps)} steps</div>
           )}
 
           {/* Effort rating if saved */}

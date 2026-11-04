@@ -141,7 +141,7 @@ export function PackTab({sinceFor,currentUser,members,profiles,history,sharedDat
       <PackGoals currentUser={currentUser} packGoals={packGoals} profiles={profiles} members={members} onAddGoal={onAddGoal} onCheer={onCheer} onDeleteGoal={onDeleteGoal}/>
 
       {/* ── MY WEEK ── */}
-      <MyWeekStrip currentUser={currentUser} history={history}/>
+      <MyWeekStrip currentUser={currentUser} history={history} profile={profiles[currentUser]}/>
 
       <div style={{height:16}}/>
     </div>

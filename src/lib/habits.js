@@ -94,8 +94,9 @@ function workoutMinutes(entry, w) {
 }
 // Steps (entry.steps) count toward cardio and "any workout" goals, never strength.
 // stepsAt: the step count that makes the day count, or null when steps don't count.
+export const STEP_DAY = 10000; // default steps that count as a workout/cardio day
 export const stepsThreshold = habit =>
-  habit?.type === "workout" && ["cardio", "any", undefined].includes(habit.filter) ? (habit.steps === undefined ? 10000 : habit.steps) : null;
+  habit?.type === "workout" && ["cardio", "any", undefined].includes(habit.filter) ? (habit.steps === undefined ? STEP_DAY : habit.steps) : null;
 export function workoutKinds(entry, minMinutes = 20, stepsAt = null) {
   const stepDay = stepsAt != null && stepsAt > 0 && Number(entry?.steps) >= stepsAt;
   if (!entry?.done) return { any: stepDay, strength: false, cardio: stepDay };

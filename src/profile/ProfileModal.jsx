@@ -3,7 +3,7 @@ import { AITrainerProfileTab } from "../ai/AITrainerProfileTab";
 import { AvatarDisplay } from "../components/AvatarDisplay";
 import { fsSet } from "../firebase";
 import { WOLF_AVATARS } from "../lib/constants";
-import { DAY_NAMES, activeRestRules, fmtDate, isRestDay, localDateStr, todayStr } from "../lib/dates";
+import { DAY_NAMES, activeRestRules, fmtDate, isActiveDay, isRestDay, localDateStr, todayStr } from "../lib/dates";
 import { getStreak, getTotalWorkouts } from "../lib/stats";
 import { compressImage, readFileAsDataURL } from "../lib/utils";
 
@@ -112,8 +112,9 @@ export function ProfileModal({currentUser,profile,profiles,history,challenges,on
     for(let i=365;i>=0;i--){
       const d=new Date(base);d.setDate(base.getDate()-i);
       const k=localDateStr(d);
-      if(isRestDay(k,profile)){if(history[k]?.[currentUser]?.done){cur++;best=Math.max(best,cur);}continue;}
-      if(history[k]?.[currentUser]?.done){cur++;best=Math.max(best,cur);}
+      const active=isActiveDay(history[k]?.[currentUser],profile,k);
+      if(isRestDay(k,profile)){if(active){cur++;best=Math.max(best,cur);}continue;}
+      if(active){cur++;best=Math.max(best,cur);}
       else cur=0;
     }
     return best;

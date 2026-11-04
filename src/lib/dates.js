@@ -23,6 +23,21 @@ export const restLimitOn=(profile,d)=>{
   }
   return limit;
 };
+// Steps that make a day count as a workout day (streaks, "this week", calendars):
+// the step count set by a challenge the person is in on that date (the highest, if
+// several), otherwise 10,000.
+export const DEFAULT_STEP_DAY=10000;
+export const stepDayOn=(profile,d)=>{
+  let n=null;
+  for(const r of Object.values(profile?.restRules||{})){
+    if(!r||!(Number(r.steps)>0)||!(r.start<=d&&d<=r.end))continue;
+    n=n==null?Number(r.steps):Math.max(n,Number(r.steps));
+  }
+  return n??DEFAULT_STEP_DAY;
+};
+// A workout was logged, or enough steps were.
+export const isActiveDay=(entry,profile,d)=>!!entry?.done||(Number(entry?.steps)||0)>=stepDayOn(profile,d);
+export const isStepDay=(entry,profile,d)=>!entry?.done&&(Number(entry?.steps)||0)>=stepDayOn(profile,d);
 export const activeRestRules=(profile,d)=>Object.values(profile?.restRules||{}).filter(r=>r&&r.limit!=null&&r.start<=d&&d<=r.end);
 export const getRestDays=(profile,d)=>{
   const chosen=[...(profile?.restDays||[0,6])].sort((a,b)=>a-b);

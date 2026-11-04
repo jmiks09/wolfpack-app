@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { fmtDate } from "../../lib/dates";
+import { stepDayOn } from "../../lib/dates";
 
-export function WorkoutHistorySection({currentUser, history, onEditExercises}){
+const fmtSteps=n=>Number(n).toLocaleString("en-US");
+
+export function WorkoutHistorySection({currentUser, history, onEditExercises, profile}){
   const now=new Date();
   const [viewYear,setViewYear]=useState(now.getFullYear());
   const [viewMonth,setViewMonth]=useState(now.getMonth()); // 0-indexed
@@ -24,14 +27,18 @@ export function WorkoutHistorySection({currentUser, history, onEditExercises}){
 
   const isCurrentMonth=viewYear===now.getFullYear()&&viewMonth===now.getMonth();
 
-  // Get all logged days in this month
+  // Get all logged days in this month (workouts and/or steps)
   const entries=Object.entries(history)
     .filter(([date,d])=>{
-      if(!d?.[currentUser]?.done)return false;
+      const e=d?.[currentUser];
+      if(!e?.done&&!(Number(e?.steps)>0))return false;
       const [y,m]=date.split("-").map(Number);
       return y===viewYear&&m-1===viewMonth;
     })
     .sort((a,b)=>b[0].localeCompare(a[0]));
+  const monthSteps=entries.reduce((s,[,d])=>s+(Number(d[currentUser]?.steps)||0),0);
+  const stepDays=entries.filter(([date,d])=>Number(d[currentUser]?.steps)>=stepDayOn(profile,date)).length;
+  const goals=[...new Set(entries.map(([date])=>stepDayOn(profile,date)))];
 
   return(
     <div style={{padding:"0 16px 16px"}}>
@@ -42,15 +49,23 @@ export function WorkoutHistorySection({currentUser, history, onEditExercises}){
         <button onClick={goForward} disabled={isCurrentMonth} style={{background:"none",border:"none",cursor:"pointer",color:isCurrentMonth?"rgba(255,255,255,0.1)":"var(--muted)",fontSize:20,padding:"0 8px",lineHeight:1}}>›</button>
       </div>
 
+      {monthSteps>0&&(
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,padding:"8px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12,fontSize:12}}>
+          <span>👟 {fmtSteps(monthSteps)} steps</span>
+          <span style={{color:"var(--muted)"}}>{stepDays} day{stepDays===1?"":"s"} at {goals.length===1?`${fmtSteps(goals[0])}+`:"your step goal"}</span>
+        </div>
+      )}
       {entries.length===0?(
         <div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)",fontSize:13}}>
-          No workouts logged in {monthName}.
+          No workouts or steps logged in {monthName}.
         </div>
       ):(
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {entries.map(([date,dayData])=>{
             const entry=dayData[currentUser];
-            const summary=Array.isArray(entry.summary)?entry.summary:[entry.workoutLabel||"Workout"];
+            const summary=!entry.done?[]:Array.isArray(entry.summary)?entry.summary:[entry.workoutLabel||"Workout"];
+            const steps=Number(entry.steps)||0;
+            const stepGoal=stepDayOn(profile,date);
             const exercises=entry.wolfmodeSession?.exercises||entry.details?.lift?.exercises||[];
             const doneExercises=exercises.filter(e=>!e.skipped||e.substitutedWith);
             const isExpanded=expandedDate===date;
@@ -68,6 +83,7 @@ export function WorkoutHistorySection({currentUser, history, onEditExercises}){
                       <div style={{fontSize:11,color:"var(--muted)"}}>{entry.time||""}</div>
                     </div>
                     {summary.map((line,i)=><div key={i} style={{fontSize:12,color:"var(--green)",lineHeight:1.6}}>{line}</div>)}
+                    {steps>0&&<div style={{fontSize:12,lineHeight:1.6,color:steps>=stepGoal?"var(--green)":"var(--muted)"}}>👟 {fmtSteps(steps)} steps{steps>=stepGoal?"":` (under ${fmtSteps(stepGoal)})`}</div>}
                     {entry.note&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>"{entry.note}"</div>}
                   </div>
                   {doneExercises.length>0&&(

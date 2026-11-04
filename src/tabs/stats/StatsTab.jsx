@@ -1,7 +1,7 @@
 import { AvatarDisplay } from "../../components/AvatarDisplay";
 import { AI_MUSCLE_GROUPS } from "../../lib/aiConfig";
 import { BADGES } from "../../lib/constants";
-import { isWeekend, localDateStr } from "../../lib/dates";
+import { isStepDay, isWeekend, localDateStr } from "../../lib/dates";
 import { computeBadges, getStreak, getTotalWorkouts } from "../../lib/stats";
 import { WorkoutHistorySection } from "./WorkoutHistorySection";
 
@@ -123,10 +123,11 @@ export function StatsTab({currentUser,members,profiles,history,challenges,feed,o
       <div className="section-label" style={{marginTop:12}}>LAST 30 DAYS</div>
       <div style={{padding:"0 16px 16px"}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(10,1fr)",gap:5}}>
-          {last30.map(({date,day})=>{const done=!!history[date]?.[currentUser]?.done,we=isWeekend(date);return<div key={date} style={{aspectRatio:"1",borderRadius:6,background:done?"linear-gradient(135deg,var(--accent),var(--orange))":we?"rgba(255,255,255,0.02)":"var(--bg3)",border:`1px solid ${we?"rgba(255,255,255,0.03)":"var(--border)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:done?"#fff":we?"rgba(255,255,255,0.15)":"var(--muted)"}}>{we?"":day}</div>;})}
+          {last30.map(({date,day})=>{const e=history[date]?.[currentUser],stepDay=isStepDay(e,profiles[currentUser],date),done=!!e?.done||stepDay,we=isWeekend(date);return<div key={date} title={stepDay?`${Number(e.steps).toLocaleString("en-US")} steps`:undefined} style={{aspectRatio:"1",borderRadius:6,background:stepDay?"linear-gradient(135deg,#2ecc71,#1abc9c)":done?"linear-gradient(135deg,var(--accent),var(--orange))":we?"rgba(255,255,255,0.02)":"var(--bg3)",border:`1px solid ${we?"rgba(255,255,255,0.03)":"var(--border)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:done?"#fff":we?"rgba(255,255,255,0.15)":"var(--muted)"}}>{we?"":day}</div>;})}
         </div>
         <div style={{display:"flex",gap:12,marginTop:8,fontSize:11,color:"var(--muted)"}}>
           <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:10,height:10,borderRadius:2,background:"linear-gradient(135deg,var(--accent),var(--orange))",display:"inline-block"}}/>Workout</span>
+          <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:10,height:10,borderRadius:2,background:"linear-gradient(135deg,#2ecc71,#1abc9c)",display:"inline-block"}}/>10k steps</span>
           <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:10,height:10,borderRadius:2,background:"var(--bg3)",border:"1px solid var(--border)",display:"inline-block"}}/>Missed</span>
           <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:10,height:10,borderRadius:2,background:"rgba(255,255,255,0.02)",display:"inline-block"}}/>Weekend</span>
         </div>
@@ -232,7 +233,7 @@ export function StatsTab({currentUser,members,profiles,history,challenges,feed,o
         return<div key={m} className="member-row" style={{margin:"0 16px 8px"}}><div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,color:"var(--muted)",width:22}}>{i+1}</div><AvatarDisplay profile={profiles[m]} size={36}/><div style={{flex:1}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontFamily:"'Bebas Neue',cursive",fontSize:15,letterSpacing:1}}>{m}{m===currentUser&&" (you)"}</span><span style={{fontSize:12,color:"var(--muted)"}}>{t} workouts</span></div><div className="progress-bar" style={{height:4}}><div className="progress-fill" style={{width:`${(t/mx)*100}%`}}/></div><div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>🔥{s} day streak</div></div></div>;
       })}
       <div className="section-label">MY WORKOUT HISTORY</div>
-      <WorkoutHistorySection currentUser={currentUser} history={history} onEditExercises={onEditExercises}/>
+      <WorkoutHistorySection currentUser={currentUser} history={history} onEditExercises={onEditExercises} profile={profiles[currentUser]}/>
     </div>
   );
 }
