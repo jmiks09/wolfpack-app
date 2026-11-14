@@ -7,7 +7,7 @@ import { removeFavoriteFS } from "../lib/favorites";
 import { buildPriorPerformanceString, getTrainingLog } from "../lib/trainingLog";
 import { ExerciseCard } from "./ExerciseCard";
 import { BodyMap } from "../components/BodyMap";
-import { MUSCLES, QUICK_PICKS, availableGear, muscleKey, muscleKeyIcon, muscleKeyLabel, stylesFor, targetsFromKey } from "../lib/exerciseLibrary";
+import { MUSCLES, QUICK_PICKS, availableGear, muscleKey, muscleKeyIcon, muscleKeyLabel, styleIds, styleLabelOf, styleWithin, stylesFor, targetsFromKey, toggleStyle } from "../lib/exerciseLibrary";
 import { INTENSITIES, buildPlan, estimateMinutes, exerciseFromLibrary, intensityPrompt, loadSeen, mergeWithAI, musclesFor, pickSwap, recentLogged, rememberSeen, rulesSummary } from "../lib/coachPicker";
 
 // ── AI TRAINER MODAL ────────────────────────────────────────────────────────
@@ -84,8 +84,9 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
   const equipmentText=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
   const gear=availableGear(selectedPreset,equipmentText);
   const styleOptions=stylesFor(gear);
-  const activeStyle=styleOptions.some(s=>s.id===equipStyle)?equipStyle:"any";
-  const pickStyle=id=>{setEquipStyle(id);try{localStorage.setItem(`wp_coach_style_${currentUser}`,id);}catch{/* ignore */}};
+  const activeStyle=styleWithin(equipStyle,styleOptions);
+  const activeIds=styleIds(activeStyle);
+  const pickStyle=id=>{const next=toggleStyle(activeStyle,id);setEquipStyle(next);try{localStorage.setItem(`wp_coach_style_${currentUser}`,next);}catch{/* ignore */}};
 
   // "AI pick for me": the muscle group trained least recently.
   const autoPick=()=>{
@@ -152,7 +153,7 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
     const recent=new Set([...loadSeen(currentUser),...logged.names]);
     const exclude=isRegen&&workout?new Set((workout.exercises||[]).map(e=>e.name)):new Set();
     const plan=buildPlan({targets:useTargets,n:numExercises,gear,style:activeStyle,injuries:profile?.aiTrainer?.injuries||[],exclude,recent,recentMuscles:logged.muscles});
-    const styleLabel=styleOptions.find(s=>s.id===activeStyle)?.label||"Everything";
+    const styleLabel=styleLabelOf(activeStyle);
     if(!plan.exercises.length){
       setError(`No ${label.toLowerCase()} exercises fit ${activeStyle==="any"?"your equipment":`${styleLabel.toLowerCase()} only`}${plan.flags.size?" and your injuries":""}. Try another equipment option or muscle group.`);
       setStep("setup");return;
@@ -400,9 +401,9 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
                   <div style={{fontSize:12,color:sel?"var(--accent2)":"#fff"}}>⚙️ {sp.name}</div>
                 </button>
               );})}
-              <div style={{fontSize:11,color:"var(--muted)",margin:"12px 0 6px"}}>Use today</div>
+              <div style={{fontSize:11,color:"var(--muted)",margin:"12px 0 6px"}}>Use today <span style={{opacity:0.7}}>· pick as many as you like</span></div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {styleOptions.map(st=>{const sel=activeStyle===st.id;return(
+                {styleOptions.map(st=>{const sel=st.id==="any"?!activeIds.length:activeIds.includes(st.id);return(
                   <button key={st.id} aria-pressed={sel} onClick={()=>pickStyle(st.id)}
                     style={{padding:"7px 12px",borderRadius:20,cursor:"pointer",fontSize:12,background:sel?"rgba(124,92,191,0.25)":"var(--bg3)",border:sel?"1px solid var(--accent)":"1px solid var(--border)",color:sel?"var(--accent2)":"var(--muted)"}}>{st.icon} {st.label}</button>
                 );})}

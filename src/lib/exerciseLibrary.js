@@ -343,6 +343,28 @@ export const EQUIPMENT_STYLES = [
 ];
 export const stylesFor = gear => EQUIPMENT_STYLES.filter(s => !s.gear || s.gear.some(g => gear.has(g)));
 
+// A style can combine several picks: "db+bb" = dumbbells and barbell, nothing else.
+export const styleIds = style =>
+  EQUIPMENT_STYLES.filter(s => s.gear && String(style || "").split("+").includes(s.id)).map(s => s.id);
+export const styleKey = ids => (ids.length ? EQUIPMENT_STYLES.filter(s => ids.includes(s.id)).map(s => s.id).join("+") : "any");
+export function styleGearOf(style) {
+  const ids = styleIds(style);
+  return ids.length ? EQUIPMENT_STYLES.filter(s => ids.includes(s.id)).flatMap(s => s.gear) : null;
+}
+export function styleLabelOf(style) {
+  const labels = EQUIPMENT_STYLES.filter(s => styleIds(style).includes(s.id)).map(s => s.label);
+  if (!labels.length) return "Everything";
+  return labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} & ${labels.at(-1)}`;
+}
+// Tap a chip: "Everything" resets; others toggle on/off; none left = Everything.
+export function toggleStyle(style, id) {
+  if (id === "any") return "any";
+  const ids = styleIds(style);
+  return styleKey(ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+}
+// Keep only picks this location has.
+export const styleWithin = (style, options) => styleKey(styleIds(style).filter(id => options.some(o => o.id === id)));
+
 // ── TARGETS ──────────────────────────────────────────────────────────────────
 // What people pick in the coach (tap muscles on the body map, several allowed).
 export const TARGETS = Object.entries(MUSCLES).map(([id, label]) => ({ id, label, muscles: [id] }));

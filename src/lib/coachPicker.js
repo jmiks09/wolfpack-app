@@ -7,7 +7,7 @@
 //     and never the exact same movement twice
 //   • a different set of exercises each time (recently seen ones go last)
 // The AI is then only asked for sets, reps, weights and notes for these exercises.
-import { EQUIPMENT_STYLES, EXERCISES, INJURY_FLAGS, MUSCLES, injuryFlags, targetsFromKey } from "./exerciseLibrary";
+import { EQUIPMENT_STYLES, EXERCISES, INJURY_FLAGS, MUSCLES, injuryFlags, styleGearOf, styleIds, styleLabelOf, targetsFromKey } from "./exerciseLibrary";
 
 const PRIORITY = ["quads", "back", "chest", "glutes", "hamstrings", "shoulders", "biceps", "triceps", "core", "calves"];
 const LAST = new Set(["core", "calves"]); // finish the workout with these
@@ -21,7 +21,7 @@ export const findExercise = name => {
 };
 
 export function isEligible(ex, { gear, style = "any", flags = new Set() }) {
-  const styleGear = EQUIPMENT_STYLES.find(s => s.id === style)?.gear;
+  const styleGear = styleGearOf(style);
   const usable = ex.equip.filter(g => gear.has(g) && (!styleGear || styleGear.includes(g)));
   if (!usable.length) return false;
   if (ex.needs.some(n => !gear.has(n))) return false;
@@ -232,8 +232,8 @@ export function rulesSummary({ flags, style, intensity }) {
   const out = [];
   const it = INTENSITIES.find(x => x.id === intensity);
   if (it && it.id !== "normal") out.push(`${it.icon} ${it.label} day`);
-  const st = EQUIPMENT_STYLES.find(s => s.id === style);
-  if (st && st.id !== "any") out.push(`${st.icon} ${st.label} only`);
+  const ids = styleIds(style);
+  if (ids.length) out.push(`${ids.length === 1 ? EQUIPMENT_STYLES.find(s => s.id === ids[0]).icon : "🧰"} ${styleLabelOf(style)} only`);
   // Don't list what another injury already implies (shoulder → overhead, knee/ankle → jumping).
   const implied = f => (f === "overhead" && flags.has("shoulder")) || (f === "jump" && (flags.has("knee") || flags.has("ankle")));
   const shown = [...flags].filter(f => !implied(f));
