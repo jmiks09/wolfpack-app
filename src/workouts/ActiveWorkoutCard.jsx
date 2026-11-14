@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ExerciseCard } from "../ai/ExerciseCard";
 import { getActiveWorkout } from "../lib/activeWorkout";
-import { AI_MUSCLE_GROUPS } from "../lib/aiConfig";
+import { muscleKeyLabel } from "../lib/exerciseLibrary";
 import { centralDateStr } from "../lib/dates";
 import { removeFavoriteFS, saveFavoriteFS } from "../lib/favorites";
 
@@ -26,7 +26,7 @@ export function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismis
 
   const {workout,muscleGroup,completed}=data;
   const isToday=targetDate==="today";
-  const mgObj=AI_MUSCLE_GROUPS?.find(m=>m.id===muscleGroup);
+  const mgObj=muscleGroup?{label:muscleKeyLabel(muscleGroup)}:null;
   const displayMinutes=localDuration!==null?localDuration:workout.estimatedMinutes;
 
   const saveDuration=(newMins)=>{

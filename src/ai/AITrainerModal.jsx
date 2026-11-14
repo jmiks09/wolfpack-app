@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { aiGenerateWorkout } from "../firebase";
 import { saveActiveWorkout } from "../lib/activeWorkout";
-import { AI_EQUIPMENT_PRESETS, AI_GOALS, AI_MUSCLE_GROUPS, AI_SECONDARY_GOALS, MAX_DAILY_REGENS } from "../lib/aiConfig";
+import { AI_EQUIPMENT_PRESETS, AI_GOALS, AI_SECONDARY_GOALS, MAX_DAILY_REGENS } from "../lib/aiConfig";
 import { buildEquipmentString, bumpRegenCount, getLastWorkoutForMuscle, getRecentHistoryString, getRegenCount } from "../lib/aiHelpers";
 import { removeFavoriteFS } from "../lib/favorites";
 import { buildPriorPerformanceString, getTrainingLog } from "../lib/trainingLog";
 import { ExerciseCard } from "./ExerciseCard";
+import { MUSCLES, QUICK_PICKS, TARGETS, availableGear, muscleKey, muscleKeyIcon, muscleKeyLabel, stylesFor, targetsFromKey } from "../lib/exerciseLibrary";
+import { buildPlan, estimateMinutes, exerciseFromLibrary, loadSeen, mergeWithAI, musclesFor, pickSwap, recentLogged, rememberSeen, rulesSummary } from "../lib/coachPicker";
 
 // ── AI TRAINER MODAL ────────────────────────────────────────────────────────
 
@@ -17,11 +19,17 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
   const [workout,setWorkout]=useState(null);
   const [error,setError]=useState(null);
   const [regenCount,setRegenCount]=useState(getRegenCount(currentUser));
-  const [muscleGroup,setMuscleGroup]=useState(null);
+  const [targets,setTargets]=useState([]); // picker ids, several allowed
+  const muscleGroup=muscleKey(targets);     // saved id, e.g. "upper" or "biceps+shoulders"
+  const setMuscleGroup=key=>setTargets(targetsFromKey(key));
+  const [equipStyle,setEquipStyle]=useState(()=>{try{return localStorage.getItem(`wp_coach_style_${currentUser}`)||"any";}catch{return "any";}});
+  const [shown,setShown]=useState(()=>new Set()); // everything shown this visit, so swaps keep finding new ones
+  const [rules,setRules]=useState([]);
+  const [planNote,setPlanNote]=useState("");
   const [aiMuscleReason,setAiMuscleReason]=useState("");
   const [numExercises,setNumExercises]=useState(5);
   const [setsPerExercise,setSetsPerExercise]=useState(4);
-  const [swappingIdx,setSwappingIdx]=useState(null);
+  const swappingIdx=null; // swaps happen instantly now
   const [customDuration,setCustomDuration]=useState(null);
   const [expandedFavGroup,setExpandedFavGroup]=useState(null);
   const [repeatMode,setRepeatMode]=useState(false); // true = repeat last workout
@@ -40,10 +48,8 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
     const favs=userFavorites||[];
     const groups={};
     favs.forEach(fav=>{
-      const mgId=fav.muscleGroup||"other";
-      const mg=AI_MUSCLE_GROUPS.find(m=>m.id===mgId);
-      const key=mg?.label||fav.muscleGroup||"Other";
-      const icon=mg?.icon||"💪";
+      const key=muscleKeyLabel(fav.muscleGroup)||"Other";
+      const icon=fav.muscleGroup?muscleKeyIcon(fav.muscleGroup):"💪";
       if(!groups[key])groups[key]={icon,favs:[]};
       groups[key].favs.push(fav);
     });
@@ -66,14 +72,31 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
     );
   }
 
+  // Location → what gear exists; style → what to use today (e.g. dumbbells only).
+  const equipmentText=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
+  const gear=availableGear(selectedPreset,equipmentText);
+  const styleOptions=stylesFor(gear);
+  const activeStyle=styleOptions.some(s=>s.id===equipStyle)?equipStyle:"any";
+  const pickStyle=id=>{setEquipStyle(id);try{localStorage.setItem(`wp_coach_style_${currentUser}`,id);}catch{/* ignore */}};
+
+  // "AI pick for me": the muscle group trained least recently.
+  const autoPick=()=>{
+    const groups=["chest","back","legs","glutes","shoulders","arms","core"];
+    const counts={};groups.forEach(g=>{counts[g]=0;});
+    const lower=getRecentHistoryString(history,currentUser).toLowerCase();
+    ["chest","back","shoulder","arm","core"].forEach(k=>{const g=groups.find(x=>x.startsWith(k));if(lower.includes(k))counts[g]+=2;});
+    if(lower.includes("leg")||lower.includes("squat"))counts.legs+=2;if(lower.includes("glute"))counts.glutes+=2;
+    const pick=groups.sort((a,b)=>(counts[a]||0)-(counts[b]||0))[0];
+    return {key:pick,targets:targetsFromKey(pick)};
+  };
+
   const generate=async(isRegen=false,forceRepeat=false)=>{
     if(isRegen&&regenCount>=MAX_DAILY_REGENS){showToast("Daily limit reached.");return;}
-    setStep("loading");setError(null);
-    const equipment=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
+    setStep("loading");setError(null);setPlanNote("");
+    const equipment=equipmentText;
     const trainingLog=await getTrainingLog(currentUser);
-    const muscleLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label:"AI choice";
+    const muscleLabel=muscleGroup?muscleKeyLabel(muscleGroup):"AI choice";
     const priorPerf=buildPriorPerformanceString(trainingLog,muscleLabel);
-    const prevExercises=isRegen&&workout?workout.exercises?.map(e=>e.name)||[]:[];
 
     // Repeat mode — load last workout and ask AI to progress weights
     if((forceRepeat||repeatMode)&&muscleGroup){
@@ -112,53 +135,77 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
       }
     }
 
+    // The app chooses the exercises (safe, right equipment, varied), then the
+    // AI only writes sets, reps, weights and notes for them.
+    let useTargets=targets;
+    if(!useTargets.length){const a=autoPick();useTargets=a.targets;setTargets(a.targets);setAiMuscleReason(`You haven't trained ${muscleKeyLabel(a.key).toLowerCase()} much recently.`);}
+    const key=muscleKey(useTargets),label=muscleKeyLabel(key);
+    const logged=recentLogged(history,currentUser);
+    const recent=new Set([...loadSeen(currentUser),...logged.names]);
+    const exclude=isRegen&&workout?new Set((workout.exercises||[]).map(e=>e.name)):new Set();
+    const plan=buildPlan({targets:useTargets,n:numExercises,gear,style:activeStyle,injuries:profile?.aiTrainer?.injuries||[],exclude,recent,recentMuscles:logged.muscles});
+    const styleLabel=styleOptions.find(s=>s.id===activeStyle)?.label||"Everything";
+    if(!plan.exercises.length){
+      setError(`No ${label.toLowerCase()} exercises fit ${activeStyle==="any"?"your equipment":`${styleLabel.toLowerCase()} only`}${plan.flags.size?" and your injuries":""}. Try another equipment option or muscle group.`);
+      setStep("setup");return;
+    }
+    const notes=[];
+    if(plan.missing.length)notes.push(`No safe ${plan.missing.map(m=>MUSCLES[m].toLowerCase()).join(" or ")} options with your ${plan.flags.size?"injuries and ":""}equipment, so this workout skips ${plan.missing.length===1?"it":"them"}.`);
+    if(plan.exercises.length<numExercises)notes.push(`Only ${plan.exercises.length} different exercises fit, so the workout is a little shorter.`);
+    const list=plan.exercises.map((e,i)=>`${i+1}. ${e.name} (${MUSCLES[e.muscle]})`).join("; ");
     const result=await aiGenerateWorkout({
       userName:currentUser,
       goal:fullGoal,
       experience:experience||"intermediate",
       injuries:injuries||"None",
-      equipment,
+      equipment:`${equipment} Today: ${styleLabel==="Everything"?"any of this equipment":`${styleLabel.toLowerCase()} only`}. The app has already chosen the exercises to fit the athlete's injuries and equipment. Use EXACTLY these ${plan.exercises.length} exercises, in this order, with these exact names, one entry each: ${list}. Do not add, remove, rename or replace any exercise. Your job is the sets, reps, weight, rest and a short coaching note for each.`,
       recentHistory:getRecentHistoryString(history,currentUser),
-      muscleGroup:muscleLabel,
+      muscleGroup:`${label} (${musclesFor(useTargets).map(m=>MUSCLES[m]).join(", ")})`,
       requestType:"freestyle",
-      numExercises,
+      numExercises:plan.exercises.length,
       setsPerExercise,
       daysPerWeek,
       priorPerformance:priorPerf,
-      previousExercises:prevExercises,
+      previousExercises:[...exclude],
       isRegen,
     });
+    let built;
     if(result.ok){
-      setWorkout(result.workout);
-      setCustomDuration(result.workout?.estimatedMinutes||45);
-      setStep("result");
-      if(isRegen)setRegenCount(bumpRegenCount(currentUser));
+      const merged=mergeWithAI(plan.exercises,result.workout,{sets:setsPerExercise,goal:fullGoal,trainingLog});
+      built={...result.workout,title:result.workout?.title||`${label} Workout`,exercises:merged.exercises,
+        reasoning:merged.replaced>=2?`${label} session: ${plan.exercises.length} different movements chosen for your goal and equipment.`:result.workout?.reasoning,
+        estimatedMinutes:Number(result.workout?.estimatedMinutes)||estimateMinutes(merged.exercises)};
     }else{
-      setError(result.error);
-      setStep("setup");
+      // The AI couldn't be reached: still give a full workout, just without its weight suggestions.
+      const exercises=plan.exercises.map(e=>exerciseFromLibrary(e,{sets:setsPerExercise,goal:fullGoal,trainingLog}));
+      built={title:`${label} Workout`,reasoning:"",exercises,estimatedMinutes:estimateMinutes(exercises)};
+      notes.push(`The coach couldn't add weight suggestions right now (${result.error||"connection problem"}), so pick a weight you can do for the reps shown.`);
     }
+    const names=built.exercises.map(e=>e.name);
+    rememberSeen(currentUser,names);
+    setShown(s=>new Set([...s,...names]));
+    setRules(rulesSummary({flags:plan.flags,style:activeStyle}));
+    setPlanNote(notes.join(" "));
+    setWorkout(built);
+    setCustomDuration(built.estimatedMinutes||45);
+    setStep("result");
+    if(isRegen)setRegenCount(bumpRegenCount(currentUser));
   };
 
-  const handleSwapExercise=async(idx,exercise)=>{
-    if(swappingIdx!==null)return;
-    setSwappingIdx(idx);
-    const equipment=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
-    const otherExercises=workout.exercises.map(e=>e.name);
-    const result=await aiGenerateWorkout({
-      userName:currentUser,goal:goalLabel,experience:experience||"intermediate",
-      injuries:injuries||"None",equipment,muscleGroup:exercise.primaryMuscle||muscleGroup||"",
-      requestType:"swap_exercise",exerciseToReplace:exercise.name,
-      exerciseMuscle:exercise.primaryMuscle||"",otherExercises,
-      numExercises:1,setsPerExercise:exercise.sets||4,
-    });
-    setSwappingIdx(null);
-    if(result.ok&&result.workout?.exercises?.[0]){
-      const newExercise={...result.workout.exercises[0],sets:exercise.sets,isCoreLift:false};
-      const newExercises=[...workout.exercises];
-      newExercises[idx]=newExercise;
-      setWorkout({...workout,exercises:newExercises});
-      showToast(`🔄 Swapped ${exercise.name} → ${newExercise.name}`);
-    }else{showToast("Couldn't find a swap — try again");}
+  // Swapping is done by the app instantly: same muscle, something new, not like the rest.
+  const handleSwapExercise=(idx,exercise)=>{
+    const seen=new Set([...shown,...loadSeen(currentUser)]);
+    const pick=pickSwap({workoutNames:workout.exercises.map(e=>e.name),replace:exercise,targets:targets.length?targets:targetsFromKey(muscleGroup),gear,style:activeStyle,injuries:profile?.aiTrainer?.injuries||[],seen});
+    if(!pick){showToast(`No other ${String(exercise.primaryMuscle||"").toLowerCase()||"matching"} exercises fit your equipment and injuries.`);return;}
+    const replacement={...exerciseFromLibrary(pick,{sets:exercise.sets,goal:fullGoal}),sets:exercise.sets};
+    const newExercises=[...workout.exercises];
+    newExercises[idx]=replacement;
+    setWorkout({...workout,exercises:newExercises});
+    setShown(s=>new Set([...s,pick.name]));
+    rememberSeen(currentUser,[pick.name]);
+    showToast(seen.has(pick.name)
+      ?`🔄 ${pick.name}. You've now seen every ${String(exercise.primaryMuscle||"").toLowerCase()} exercise that fits your equipment and injuries, so they'll start repeating.`
+      :`🔄 Swapped ${exercise.name} → ${pick.name}`);
   };
 
   const handleUseWorkout=()=>{
@@ -233,33 +280,34 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,color:"#fff"}}>⚡ GENERATE WORKOUT</div>
             </div>
 
-            {/* Muscle picker */}
+            {/* Muscle picker: quick picks, or tap as many muscles as you like */}
             <div style={{marginBottom:14}}>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🎯 MUSCLE GROUP</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:8}}>
-                {AI_MUSCLE_GROUPS.map(mg=>{const sel=muscleGroup===mg.id;return(
-                  <button key={mg.id} onClick={()=>{setMuscleGroup(mg.id);setAiMuscleReason("");}} style={{padding:"8px 4px",borderRadius:10,cursor:"pointer",textAlign:"center",background:sel?"rgba(255,107,53,0.2)":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)"}}>
-                    <div style={{fontSize:16,marginBottom:2}}>{mg.icon}</div>
-                    <div style={{fontSize:9,color:sel?"#ff6b35":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{mg.label}</div>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🎯 WHAT ARE WE TRAINING?</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+                {QUICK_PICKS.map(q=>{const sel=muscleGroup===q.id;return(
+                  <button key={q.id} aria-pressed={sel} onClick={()=>{setTargets(sel?[]:[...q.targets]);setAiMuscleReason("");setRepeatMode(false);}}
+                    style={{padding:"7px 12px",borderRadius:20,cursor:"pointer",fontSize:12,background:sel?"rgba(255,107,53,0.2)":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",color:sel?"#ff6b35":"var(--muted)"}}>{q.label}</button>
+                );})}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:6}}>
+                {TARGETS.map(t=>{const sel=targets.includes(t.id);return(
+                  <button key={t.id} aria-pressed={sel} onClick={()=>{setTargets(x=>sel?x.filter(y=>y!==t.id):[...x,t.id]);setAiMuscleReason("");setRepeatMode(false);}}
+                    style={{padding:"8px 4px",borderRadius:10,cursor:"pointer",textAlign:"center",background:sel?"rgba(255,107,53,0.2)":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)"}}>
+                    <div style={{fontSize:16,marginBottom:2}}>{t.icon}</div>
+                    <div style={{fontSize:10,color:sel?"#ff6b35":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{t.label}</div>
                   </button>
                 );})}
               </div>
-              <button onClick={()=>{
-                const groups=["chest","back","legs","glutes","shoulders","arms","core"];
-                const counts={};groups.forEach(g=>{counts[g]=0;});
-                const lower=getRecentHistoryString(history,currentUser).toLowerCase();
-                ["chest","back","shoulder","arm","core"].forEach(k=>{if(lower.includes(k))counts[k]=(counts[k]||0)+2;});
-                if(lower.includes("leg")||lower.includes("squat"))counts.legs+=2;if(lower.includes("glute"))counts.glutes+=2;
-                const pick=groups.sort((a,b)=>(counts[a]||0)-(counts[b]||0))[0];
-                const mg=AI_MUSCLE_GROUPS.find(m=>m.id===pick)||AI_MUSCLE_GROUPS[7];
-                setMuscleGroup(mg.id);setAiMuscleReason(`You haven\'t trained ${mg.label.toLowerCase()} much recently.`);setRepeatMode(false);
-              }} style={{width:"100%",padding:"10px 12px",borderRadius:10,cursor:"pointer",background:!muscleGroup?"rgba(124,92,191,0.2)":"var(--bg3)",border:!muscleGroup?"1px solid var(--accent)":"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
+              <div style={{fontSize:11,color:targets.length?"var(--text)":"var(--muted)",marginBottom:8,minHeight:15}}>
+                {targets.length?<>Training: <b>{muscleKeyLabel(muscleGroup)}</b></>:"Pick as many as you like, or let the coach choose."}
+              </div>
+              <button onClick={()=>{const a=autoPick();setTargets(a.targets);setAiMuscleReason(`You haven't trained ${muscleKeyLabel(a.key).toLowerCase()} much recently.`);setRepeatMode(false);}}
+                style={{width:"100%",padding:"10px 12px",borderRadius:10,cursor:"pointer",background:"var(--bg3)",border:"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
                 <span style={{fontSize:16}}>🤖</span>
                 <div style={{textAlign:"left",flex:1}}>
-                  <div style={{fontSize:12,color:!muscleGroup?"var(--accent2)":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1.5}}>AI PICK FOR ME</div>
+                  <div style={{fontSize:12,color:"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1.5}}>AI PICK FOR ME</div>
                   {aiMuscleReason&&<div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>{aiMuscleReason}</div>}
                 </div>
-                {!muscleGroup&&<div style={{fontSize:14,color:"var(--accent)"}}>✓</div>}
               </button>
             </div>
 
@@ -275,7 +323,7 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
               return(
                 <div style={{marginBottom:14,padding:"12px 14px",background:"rgba(46,204,113,0.06)",border:"1px solid rgba(46,204,113,0.2)",borderRadius:14}}>
                   <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--green)",marginBottom:6}}>
-                    📋 PREVIOUS {AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label?.toUpperCase()||""} WORKOUT · {daysLabel.toUpperCase()}
+                    📋 PREVIOUS {(muscleKeyLabel(muscleGroup)||"").toUpperCase()} WORKOUT · {daysLabel.toUpperCase()}
                   </div>
                   <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginBottom:4,lineHeight:1.5}}>
                     {lastWorkout.exercises.filter(e=>!e.skipped).slice(0,3).map(e=>e.name).join(" · ")}
@@ -303,7 +351,7 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
                 <div>
                   <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Exercises</div>
                   <div style={{display:"flex",gap:4}}>
-                    {[3,4,5].map(n=>(
+                    {[3,4,5,6].map(n=>(
                       <button key={n} onClick={()=>setNumExercises(n)} style={{flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",background:numExercises===n?"rgba(255,107,53,0.2)":"var(--bg3)",border:numExercises===n?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",color:numExercises===n?"#ff6b35":"var(--muted)",fontFamily:"'Bebas Neue',cursive",fontSize:15}}>{n}</button>
                     ))}
                   </div>
@@ -335,6 +383,14 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
                   <div style={{fontSize:12,color:sel?"var(--accent2)":"#fff"}}>⚙️ {sp.name}</div>
                 </button>
               );})}
+              <div style={{fontSize:11,color:"var(--muted)",margin:"12px 0 6px"}}>Use today</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {styleOptions.map(st=>{const sel=activeStyle===st.id;return(
+                  <button key={st.id} aria-pressed={sel} onClick={()=>pickStyle(st.id)}
+                    style={{padding:"7px 12px",borderRadius:20,cursor:"pointer",fontSize:12,background:sel?"rgba(124,92,191,0.25)":"var(--bg3)",border:sel?"1px solid var(--accent)":"1px solid var(--border)",color:sel?"var(--accent2)":"var(--muted)"}}>{st.icon} {st.label}</button>
+                );})}
+              </div>
+              {styleOptions.length<7&&<div style={{fontSize:10,color:"var(--muted)",marginTop:6}}>Only showing equipment this location has.</div>}
             </div>
 
             <button className="btn-primary" onClick={()=>generate(false)} style={{background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>
@@ -372,6 +428,12 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
               </div>
             </div>
             {workout.reasoning&&<div style={{padding:"10px 12px",marginBottom:12,background:"rgba(255,107,53,0.06)",border:"1px solid rgba(255,107,53,0.2)",borderRadius:10,fontSize:12,color:"rgba(255,255,255,0.8)",lineHeight:1.5,fontStyle:"italic"}}>💭 {workout.reasoning}</div>}
+            {(rules.length>0||planNote)&&<div style={{marginBottom:12}}>
+              {rules.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:planNote?8:0}}>
+                {rules.map(x=><span key={x} style={{padding:"4px 10px",borderRadius:14,fontSize:11,background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.3)",color:"var(--green)"}}>{x}</span>)}
+              </div>}
+              {planNote&&<div style={{fontSize:11,color:"var(--muted)",lineHeight:1.5}}>{planNote}</div>}
+            </div>}
             {workout.exercises?.map((ex,i)=>(
               <ExerciseCard key={i} exercise={ex} userName={currentUser} experience={experience} injuries={injuries} idx={i} onSwap={handleSwapExercise} swapping={swappingIdx===i}/>
             ))}

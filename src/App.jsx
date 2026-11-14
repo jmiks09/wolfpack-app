@@ -10,7 +10,8 @@ import { WolfIcon } from "./components/WolfIcon";
 import { fsArrayAdd, fsArrayRemove, fsDelete, fsDeleteFields, fsGet, fsListen, fsSet, onForegroundMessage } from "./firebase";
 import { LEGACY_GROUP_ID, REGISTRY_PATH, clearSession, ensureLegacyGroup, findGroupByCode, gpath, groupsForUser, loadSession, makeGroupId, makeInviteCode, memberSince, renameInGroup, saveSession } from "./lib/groups";
 import { dismissActiveWorkout } from "./lib/activeWorkout";
-import { AI_MUSCLE_GROUPS, EFFORT_RATINGS, HOME_GYM_DEFAULT } from "./lib/aiConfig";
+import { EFFORT_RATINGS, HOME_GYM_DEFAULT } from "./lib/aiConfig";
+import { muscleKeyLabel } from "./lib/exerciseLibrary";
 import { MILESTONES, NAV, SESSION_MILESTONES, WHATS_NEW_FALLBACK } from "./lib/constants";
 import { getDateRange, localDateStr, todayStr } from "./lib/dates";
 import { getFavorites, getFavoritesFS } from "./lib/favorites";
@@ -571,7 +572,7 @@ useEffect(()=>{
     const liftKey=`lift_${Date.now()}`;
     const aiLift={id:"lift",key:liftKey,icon:"🏋️",label:"Weight Training"};
     const newWorkouts=[...prevWorkouts,aiLift];
-    const mgLabel=muscleGroup?AI_MUSCLE_GROUPS.find(m=>m.id===muscleGroup)?.label||muscleGroup:null;
+    const mgLabel=muscleGroup?muscleKeyLabel(muscleGroup):null;
     const exCount=exercises?.filter(e=>!e.skipped||e.substitutedWith).length||exercises?.length||0;
     const cleanLabel=[`WOLFMODE · Weight Training`,mgLabel,exCount?`${exCount} exercises`:null,minutes?`${minutes} min`:null].filter(Boolean).join(" · ");
     // Preserve ALL previous details — only add new lift, don't overwrite walk/run distance etc

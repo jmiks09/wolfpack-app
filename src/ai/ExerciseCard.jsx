@@ -62,6 +62,7 @@ export function ExerciseCard({exercise, userName, experience, injuries, idx, onS
             <button onClick={e=>{e.stopPropagation();onSwap(idx,exercise);}}
               disabled={swapping}
               title="Swap this exercise"
+              aria-label={`Swap ${exercise.name}`}
               style={{
                 width:28,height:28,borderRadius:8,cursor:swapping?"default":"pointer",
                 background:"rgba(255,107,53,0.1)",border:"1px solid rgba(255,107,53,0.25)",

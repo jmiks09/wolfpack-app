@@ -1,5 +1,6 @@
 import { AvatarDisplay } from "../../components/AvatarDisplay";
 import { AI_MUSCLE_GROUPS } from "../../lib/aiConfig";
+import { muscleKeyLabel } from "../../lib/exerciseLibrary";
 import { BADGES } from "../../lib/constants";
 import { isStepDay, isWeekend, localDateStr } from "../../lib/dates";
 import { computeBadges, getStreak, getTotalWorkouts } from "../../lib/stats";
@@ -78,7 +79,7 @@ export function StatsTab({currentUser,members,profiles,history,challenges,feed,o
 
     if(mg){
       const normalized=mg.toLowerCase().trim();
-      const label=AI_MUSCLE_GROUPS?.find(m=>m.id===normalized||m.label?.toLowerCase()===normalized)?.label||SPLIT_NORMALIZE[normalized]||mg.charAt(0).toUpperCase()+mg.slice(1);
+      const label=AI_MUSCLE_GROUPS?.find(m=>m.id===normalized||m.label?.toLowerCase()===normalized)?.label||SPLIT_NORMALIZE[normalized]||(normalized.includes("+")?muscleKeyLabel(normalized):null)||mg.charAt(0).toUpperCase()+mg.slice(1);
       if(label)muscleCounts[label]=(muscleCounts[label]||0)+1;
     }
   });
