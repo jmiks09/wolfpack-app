@@ -2,8 +2,9 @@ import { useState } from "react";
 import { EFFORT_RATINGS } from "../lib/aiConfig";
 import { saveTrainingLog } from "../lib/trainingLog";
 
-export function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, onClose}){
-  const [step,setStep]=useState("checklist");
+export function EffortRatingModal({exercises, prelogged, muscleGroup, currentUser, onRate, onClose}){
+  // prelogged = sets checked off during the workout → only the rating is left to ask
+  const [step,setStep]=useState(prelogged?"effort":"checklist");
   const [done,setDone]=useState(()=>Object.fromEntries((exercises||[]).map(e=>[e.name,true])));
   const [subs,setSubs]=useState({});
   const [effortId,setEffortId]=useState(null);
@@ -45,8 +46,15 @@ export function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, 
     })),
   ];
 
-  const handleFinalSave=async()=>{
+  const handleFinalSave=async(forced)=>{
     setSaving(true);
+    if(prelogged){
+      const eid=(typeof forced==="string"&&forced)||effortId||"normal";
+      await saveTrainingLog(currentUser, prelogged.filter(e=>!e.skipped), eid);
+      setSaving(false);
+      onRate(eid, prelogged);
+      return;
+    }
     const logged=doneExercises.map(e=>({
       name:e.name,
       sets:Number(sets[e.name])||e.sets,
@@ -146,6 +154,14 @@ export function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, 
               );
             })}
           </div>
+          {prelogged?(<>
+            <div style={{fontSize:11,color:"var(--muted)",textAlign:"center",marginBottom:10}}>
+              {prelogged.filter(e=>!e.skipped).reduce((n,e)=>n+(e.sets||0),0)} sets logged from your checklist
+              {prelogged.some(e=>e.skipped)&&<> · {prelogged.filter(e=>e.skipped).length} {prelogged.filter(e=>e.skipped).length===1?"exercise":"exercises"} skipped</>}
+            </div>
+            <button className="btn-primary" onClick={()=>handleFinalSave()} disabled={!effortId||saving} style={{width:"100%",background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>{saving?"SAVING...":"SAVE ✓"}</button>
+            <button onClick={()=>handleFinalSave("normal")} disabled={saving} style={{width:"100%",marginTop:8,padding:8,background:"transparent",border:"none",color:"var(--muted)",fontSize:11,cursor:"pointer"}}>Skip rating</button>
+          </>):(<>
           <div style={{display:"flex",gap:8}}>
             <button className="btn-ghost" onClick={e=>{e.stopPropagation();setStep("checklist");}} style={{flex:"0 0 auto",padding:"0 14px",fontSize:11}}>← Back</button>
             <button className="btn-primary" onClick={()=>setStep("weights")} disabled={!effortId} style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>NEXT →</button>
@@ -153,6 +169,7 @@ export function EffortRatingModal({exercises, muscleGroup, currentUser, onRate, 
           <button onClick={()=>{if(effortId)handleFinalSave();else onClose();}} style={{width:"100%",marginTop:8,padding:8,background:"transparent",border:"none",color:"var(--muted)",fontSize:11,cursor:"pointer"}}>
             {effortId?"Save without logging weights":"Skip"}
           </button>
+          </>)}
         </div>
       </div>
     );

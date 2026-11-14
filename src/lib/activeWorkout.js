@@ -50,3 +50,12 @@ export function dismissActiveWorkout(userName, targetDate="today"){
     localStorage.removeItem(key);
   }catch{}
 }
+
+// Overwrite the stored active workout (set-log edits, duration edits)
+export function updateActiveWorkout(userName, targetDate, data){
+  try{
+    const date=targetDate==="tomorrow"?centralDateStr(1):centralDateStr(0);
+    localStorage.setItem(`wp_active_${userName}_${date}`,JSON.stringify(data));
+    return true;
+  }catch{return false;}
+}

@@ -6,7 +6,7 @@ import { findExercise } from "../lib/coachPicker";
 import { MUSCLES } from "../lib/exerciseLibrary";
 
 // ── AI TRAINER — exercise card (form cues + GIF) ─────────────────────────────
-export function ExerciseCard({exercise, userName, experience, injuries, idx, onSwap, swapping}){
+export function ExerciseCard({exercise, userName, experience, injuries, idx, onSwap, swapping, children}){
   const [expanded,setExpanded]=useState(false);
   const [cues,setCues]=useState(null);
   const [cuesLoading,setCuesLoading]=useState(false);
@@ -78,6 +78,9 @@ export function ExerciseCard({exercise, userName, experience, injuries, idx, onS
           <div onClick={handleExpand} style={{fontSize:18,color:"var(--muted)",cursor:"pointer",transition:"transform .2s",transform:expanded?"rotate(180deg)":"rotate(0)"}}>▾</div>
         </div>
       </div>
+
+      {/* Set tracker (active workout) */}
+      {children}
 
       {/* Expanded content */}
       {expanded&&(

@@ -206,6 +206,14 @@ const RAW = [
   ["Machine Calf Raise", "calves", "calf-raise", ["machine"], { avoid: ["ankle"] }],
   ["Barbell Calf Raise", "calves", "calf-raise", ["bb"], { needs: ["rack"], avoid: ["ankle"] }],
   ["Pogo Hops", "calves", "pogo", ["bw"], { avoid: ["ankle", "jump", "knee"] }],
+  ["Seated Machine Calf Raise", "calves", "calf-raise-seated", ["machine"], { avoid: ["ankle"] }],
+  ["Leg Press Calf Press", "calves", "calf-press", ["machine"], { avoid: ["ankle"] }],
+  ["Donkey Calf Raise", "calves", "calf-raise-donkey", ["bw", "machine"], { avoid: ["ankle"] }],
+  ["Eccentric Calf Lowers", "calves", "calf-eccentric", ["bw", "db"], { avoid: ["ankle"] }],
+  ["Calf Raise Isometric Hold", "calves", "calf-iso", ["bw", "db"], {}],
+  ["Banded Calf Press", "calves", "calf-band", ["band"], {}],
+  ["Tibialis Raise", "calves", "tib-raise", ["bw", "db"], {}],
+  ["Farmer's Walk on Toes", "calves", "carry-toes", ["db", "kb"], { avoid: ["ankle"] }],
 
   // ── CORE ──
   ["Plank", "core", "anti-extension", ["bw"], { avoid: ["wrist"] }],

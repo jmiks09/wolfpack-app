@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { ExerciseCard } from "../ai/ExerciseCard";
-import { getActiveWorkout } from "../lib/activeWorkout";
+import { getActiveWorkout, updateActiveWorkout } from "../lib/activeWorkout";
+import { setProgress } from "../lib/setLog";
+import { SetTracker } from "./SetTracker";
 import { muscleKeyLabel } from "../lib/exerciseLibrary";
-import { centralDateStr } from "../lib/dates";
 import { removeFavoriteFS, saveFavoriteFS } from "../lib/favorites";
 
 export function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismiss, userName, experience, injuries, userFavorites, onFavoritesChange}){
@@ -32,13 +33,20 @@ export function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismis
   const saveDuration=(newMins)=>{
     if(!newMins||Number(newMins)<1)return;
     const updated={...data,workout:{...workout,estimatedMinutes:Number(newMins)}};
-    const date=targetDate==="tomorrow"?centralDateStr(1):centralDateStr(0);
-    const key=`wp_active_${currentUser}_${date}`;
-    try{localStorage.setItem(key,JSON.stringify(updated));}catch{}
+    updateActiveWorkout(currentUser,targetDate,updated);
     setLocalDuration(Number(newMins));
     setData(updated);
     setEditingDuration(false);
   };
+
+  // Set-by-set log — saved on every change so a refresh mid-workout keeps it
+  const saveSets=(i,log)=>{
+    const exercises=workout.exercises.map((e,j)=>j===i?{...e,log}:e);
+    const updated={...data,workout:{...workout,exercises}};
+    updateActiveWorkout(currentUser,targetDate,updated);
+    setData(updated);
+  };
+  const progress=setProgress(workout.exercises);
 
   const toggleFavorite=async(e)=>{
     e.stopPropagation();
@@ -96,6 +104,7 @@ export function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismis
               </span>
             )}
             <span>min · {workout.exercises?.length} exercises{mgObj?` · ${mgObj.label}`:""}</span>
+            {isToday&&progress.done>0&&<span style={{color:"var(--green)"}}>· {progress.done}/{progress.total} sets</span>}
           </div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
@@ -137,6 +146,11 @@ export function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismis
             💭 {workout.reasoning}
           </div>
 
+          {isToday&&!completed&&(
+            <div style={{fontSize:11,color:"var(--muted)",marginBottom:8,textAlign:"center"}}>
+              Tap ✓ after each set · tap a number to change it
+            </div>
+          )}
           {workout.exercises?.map((ex,i)=>(
             <ExerciseCard
               key={i}
@@ -145,9 +159,16 @@ export function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismis
               experience={experience}
               injuries={injuries}
               idx={i}
-            />
+            >
+              {isToday&&<SetTracker exercise={ex} readOnly={completed} onChange={log=>saveSets(i,log)}/>}
+            </ExerciseCard>
           ))}
 
+          {isToday&&!completed&&progress.done>0&&progress.done<progress.total&&(
+            <div style={{fontSize:11,color:"var(--muted)",textAlign:"center",marginTop:4}}>
+              {progress.done}/{progress.total} sets checked — unchecked sets won't be logged
+            </div>
+          )}
           {/* Mark complete button — only for today, only if not done */}
           {isToday&&!completed&&(
             <button className="btn-primary" onClick={()=>{onComplete(data);setData({...data,completed:true});}}

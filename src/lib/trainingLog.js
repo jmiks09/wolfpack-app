@@ -42,7 +42,7 @@ export function buildPriorPerformanceString(trainingLog, muscleGroup){
     .map(([name,v])=>{
       const effort=EFFORT_RATINGS.find(r=>r.id===v.lastEffort);
       const effortNote=effort?` — rated ${effort.label} (${effort.advice})`:"";
-      const weightNote=v.lastWeight?` @ ${v.lastWeight} lbs`:"";
+      const weightNote=v.lastWeight?` @ ${/lbs|bodyweight/i.test(v.lastWeight)?v.lastWeight:`${v.lastWeight} lbs`}`:"";
       return `${name}${weightNote}${v.lastReps?` × ${v.lastReps}`:""}${effortNote}`;
     });
   return entries.length>0?entries.join("\n"):"No prior weight data yet.";
