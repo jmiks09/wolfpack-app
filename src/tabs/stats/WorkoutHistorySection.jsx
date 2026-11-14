@@ -4,7 +4,7 @@ import { stepDayOn } from "../../lib/dates";
 
 const fmtSteps=n=>Number(n).toLocaleString("en-US");
 
-export function WorkoutHistorySection({currentUser, history, onEditExercises, profile}){
+export function WorkoutHistorySection({currentUser, history, onEditExercises, onRepeatWorkout, profile}){
   const now=new Date();
   const [viewYear,setViewYear]=useState(now.getFullYear());
   const [viewMonth,setViewMonth]=useState(now.getMonth()); // 0-indexed
@@ -123,6 +123,11 @@ export function WorkoutHistorySection({currentUser, history, onEditExercises, pr
                         );
                       })}
                     </div>
+                    {onRepeatWorkout&&(
+                      <button onClick={()=>onRepeatWorkout(date,entry)} style={{marginTop:10,width:"100%",padding:"10px",borderRadius:10,cursor:"pointer",background:"linear-gradient(135deg,rgba(255,107,53,0.18),rgba(155,89,182,0.18))",border:"1px solid rgba(255,107,53,0.45)",color:"#ff6b35",fontSize:13,fontFamily:"'Bebas Neue',cursive",letterSpacing:2}}>
+                        🔁 DO IT AGAIN
+                      </button>
+                    )}
                     {onEditExercises&&(
                       <button onClick={()=>onEditExercises(date,entry)} style={{marginTop:10,width:"100%",padding:"7px",borderRadius:8,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",color:"var(--muted)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
                         ✏️ EDIT EXERCISES & WEIGHTS

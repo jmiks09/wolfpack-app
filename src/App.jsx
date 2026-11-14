@@ -39,6 +39,7 @@ import { EditCompletedWorkoutModal } from "./workouts/EditCompletedWorkoutModal"
 import { EditWorkoutModal } from "./workouts/EditWorkoutModal";
 import { EffortRatingModal } from "./workouts/EffortRatingModal";
 import { anySetDone, buildPrelogged, workoutSummary } from "./lib/setLog";
+import { workoutFromHistory } from "./lib/repeatWorkout";
 import { WorkoutModal } from "./workouts/WorkoutModal";
 
 const NO_MEMBERS=[];
@@ -900,7 +901,7 @@ useEffect(()=>{
           <button className="btn-ghost" style={{width:"100%",padding:12}} onClick={()=>setHabitBuilder("new")}>+ New habit challenge (like Winter Arc)</button>
         </div>}
         {view==="challenges"&&<ChallengesTab currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)} onMarkPaid={handleMarkPaid} onLogPayment={handleLogPayment}/>}
-        {view==="stats"&&<StatsTab sinceFor={sinceFor} currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed} onEditExercises={(date,entry)=>setEditCompletedWorkout({date,entry})}/>}
+        {view==="stats"&&<StatsTab sinceFor={sinceFor} currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed} onEditExercises={(date,entry)=>setEditCompletedWorkout({date,entry})} onRepeatWorkout={(date,entry)=>setAiTrainerOpen(workoutFromHistory(entry,date))}/>}
       </div>
       <nav className="nav">
         {NAV.filter(n=>n.id!=="gym"||group.gym).map(n=>{
@@ -937,7 +938,7 @@ useEffect(()=>{
         })}
       </nav>
       {workoutOpen&&<WorkoutModal onClose={closeWorkout} onSubmit={handleLogWorkout} loading={loggingWorkout} today={todayStr()} initialDate={workoutDate}/>}
-      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} userFavorites={userFavorites} onFavoritesChange={setUserFavorites} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);}} showToast={showToast}/>}
+      {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} userFavorites={userFavorites} onFavoritesChange={setUserFavorites} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);setView("pack");}} showToast={showToast} initial={typeof aiTrainerOpen==="object"?aiTrainerOpen:null}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onDeletePlan={async()=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:null}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});setNutritionOpen(false);}} onClose={()=>setNutritionOpen(false)} onOpenScanner={()=>{setNutritionOpen(false);setMealScannerOpen(true);}}/>}
       {mealScannerOpen&&<MealScannerModal currentUser={currentUser} onClose={()=>setMealScannerOpen(false)}/>}
       {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} prelogged={pendingEffortRating.prelogged} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={async(effortId,logged)=>{

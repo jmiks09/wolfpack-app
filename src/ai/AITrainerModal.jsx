@@ -12,15 +12,16 @@ import { INTENSITIES, buildPlan, estimateMinutes, exerciseFromLibrary, intensity
 
 // ── AI TRAINER MODAL ────────────────────────────────────────────────────────
 
-export function AITrainerModal({currentUser, profile, history, packHomeGym, userFavorites, onFavoritesChange, onClose, onUseWorkout, showToast}){
-  const [step,setStep]=useState("home"); // home | setup | loading | result
+export function AITrainerModal({currentUser, profile, history, packHomeGym, userFavorites, onFavoritesChange, onClose, onUseWorkout, showToast, initial}){
+  // initial = {workout, muscleGroup} — e.g. a past workout from history to do again
+  const [step,setStep]=useState(initial?.workout?"result":"home"); // home | setup | loading | result
   const [selectedPreset,setSelectedPreset]=useState(profile?.aiTrainer?.usualSetup||"home");
   const [customEquip,setCustomEquip]=useState("");
   const [savedPresets,setSavedPresets]=useState(profile?.aiTrainer?.savedPresets||[]);
-  const [workout,setWorkout]=useState(null);
+  const [workout,setWorkout]=useState(initial?.workout||null);
   const [error,setError]=useState(null);
   const [regenCount,setRegenCount]=useState(getRegenCount(currentUser));
-  const [targets,setTargets]=useState([]); // picker ids, several allowed
+  const [targets,setTargets]=useState(()=>initial?.muscleGroup?targetsFromKey(initial.muscleGroup):[]); // picker ids, several allowed
   const muscleGroup=muscleKey(targets);     // saved id, e.g. "upper" or "biceps+shoulders"
   const setMuscleGroup=key=>setTargets(targetsFromKey(key));
   const [equipStyle,setEquipStyle]=useState(()=>{try{return localStorage.getItem(`wp_coach_style_${currentUser}`)||"any";}catch{return "any";}});
@@ -38,7 +39,7 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
   const [numExercises,setNumExercises]=useState(5);
   const [setsPerExercise,setSetsPerExercise]=useState(4);
   const swappingIdx=null; // swaps happen instantly now
-  const [customDuration,setCustomDuration]=useState(null);
+  const [customDuration,setCustomDuration]=useState(initial?.workout?.estimatedMinutes??null);
   const [expandedFavGroup,setExpandedFavGroup]=useState(null);
   const [repeatMode,setRepeatMode]=useState(false); // true = repeat last workout
 
