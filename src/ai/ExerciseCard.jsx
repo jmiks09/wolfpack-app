@@ -79,8 +79,17 @@ export function ExerciseCard({exercise, userName, experience, injuries, idx, onS
         </div>
       </div>
 
-      {/* Set tracker (active workout) */}
-      {children}
+      {/* During a workout: a clear way into the how-to, shown above the sets */}
+      {children&&(
+        <button onClick={handleExpand} aria-expanded={expanded} style={{
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"calc(100% - 28px)",margin:"0 14px 8px",padding:"8px 10px",
+          borderRadius:10,cursor:"pointer",fontSize:12,
+          background:expanded?"rgba(155,89,182,0.15)":"rgba(255,255,255,0.04)",
+          border:`1px solid ${expanded?"rgba(155,89,182,0.4)":"var(--border)"}`,color:"rgba(255,255,255,0.85)",
+        }}>
+          📖 How to do it · ▶️ Video <span style={{color:"var(--muted)"}}>{expanded?"▲ hide":"▼"}</span>
+        </button>
+      )}
 
       {/* Expanded content */}
       {expanded&&(
@@ -161,6 +170,9 @@ export function ExerciseCard({exercise, userName, experience, injuries, idx, onS
           </div>
         </div>
       )}
+
+      {/* Set tracker (active workout) */}
+      {children}
     </div>
   );
 }
