@@ -5,7 +5,7 @@ import { MemberCard } from "./MemberCard";
 import { MyWeekStrip } from "./MyWeekStrip";
 import { PackGoals } from "./PackGoals";
 
-export function PackTab({sinceFor,currentUser,members,profiles,history,sharedData,onLogWorkout,onOpenAITrainer,onOpenNutrition,onOpenMealScanner,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,reactions,onReact,weeklyRecap,onDismissRecap}){
+export function PackTab({sinceFor,currentUser,members,profiles,history,sharedData,onLogWorkout,onOpenAITrainer,onOpenNutrition,onOpenMealScanner,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,onOpenMember,reactions,onReact,weeklyRecap,onDismissRecap}){
   const key=todayStr(),td=sharedData[key]||{},my=td[currentUser],str=getStreak(history,currentUser,profiles[currentUser]),tot=getTotalWorkouts(history,currentUser,sinceFor?.(currentUser)),we=isRestDay(key,profiles[currentUser]);
   const sorted=[...members].sort((a,b)=>{const sa=getStreak(history,a,profiles[a]),sb=getStreak(history,b,profiles[b]);if(sb!==sa)return sb-sa;return b===currentUser?1:a===currentUser?-1:0;});
 
@@ -131,6 +131,7 @@ export function PackTab({sinceFor,currentUser,members,profiles,history,sharedDat
               sessionExercises={sessionExercises}
               sessionMuscles={sessionMuscles}
               onOpenProfile={onOpenProfile}
+              onOpenMember={onOpenMember}
               history={history}
             />
           );

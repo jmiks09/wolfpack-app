@@ -13,7 +13,7 @@ import { dismissActiveWorkout } from "./lib/activeWorkout";
 import { EFFORT_RATINGS, HOME_GYM_DEFAULT } from "./lib/aiConfig";
 import { muscleKeyLabel } from "./lib/exerciseLibrary";
 import { MILESTONES, NAV, SESSION_MILESTONES, WHATS_NEW_FALLBACK } from "./lib/constants";
-import { getDateRange, localDateStr, todayStr } from "./lib/dates";
+import { fmtDate, getDateRange, localDateStr, todayStr } from "./lib/dates";
 import { getFavorites, getFavoritesFS } from "./lib/favorites";
 import { slotOverlaps } from "./lib/gym";
 import { getStreak, getTotalWorkouts } from "./lib/stats";
@@ -40,6 +40,8 @@ import { EditWorkoutModal } from "./workouts/EditWorkoutModal";
 import { EffortRatingModal } from "./workouts/EffortRatingModal";
 import { anySetDone, buildPrelogged, workoutSummary } from "./lib/setLog";
 import { workoutFromHistory } from "./lib/repeatWorkout";
+import { getTrainingLog } from "./lib/trainingLog";
+import { TeammateProfile } from "./tabs/pack/TeammateProfile";
 import { WorkoutModal } from "./workouts/WorkoutModal";
 
 const NO_MEMBERS=[];
@@ -118,6 +120,7 @@ useEffect(()=>{
   const [editCompletedWorkout,setEditCompletedWorkout]=useState(null); // {date, entry}
   const [weeklyRecap,setWeeklyRecap]=useState(null);
   const [aiTrainerOpen,setAiTrainerOpen]=useState(false);
+  const [teammateOpen,setTeammateOpen]=useState(null); // name of the teammate whose profile is open
   const [nutritionOpen,setNutritionOpen]=useState(false);
   const [mealScannerOpen,setMealScannerOpen]=useState(false);
   const [pendingEffortRating,setPendingEffortRating]=useState(null);
@@ -563,7 +566,7 @@ useEffect(()=>{
   };
 
   // ── AI Trainer: log the AI-generated workout as a lift entry ──────────────
-  const handleLogAIWorkout=async({summary,note,minutes,exercises,muscleGroup})=>{
+  const handleLogAIWorkout=async({summary,note,minutes,exercises,muscleGroup,copiedFrom})=>{
     if(loggingWorkout)return;
     setLoggingWorkout(true);
     const key=todayStr(),time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
@@ -596,6 +599,7 @@ useEffect(()=>{
       muscleGroup:muscleGroup||"fullbody",
       estimatedMinutes:minutes||45,
       generatedAt:Date.now(),
+      ...(copiedFrom?{copiedFrom}:{}),
       exercises:(exercises||[]).map(e=>({
         name:e.name,sets:e.sets,reps:e.reps,
         suggestedWeight:e.suggestedWeight??e.weight??null,weightUsed:e.weightUsed||null,effortRating:null,
@@ -611,6 +615,17 @@ useEffect(()=>{
     launchConfetti();
     showToast(`🔥 WOLFMODE logged! 🐺`);
     await checkMilestones(newData);
+    if(copiedFrom?.user&&copiedFrom.user!==currentUser){
+      // Shout-out in the chat: "did Jake's Full Body"
+      const safe=currentUser.replace(/[^\w]/g,"_");
+      const card={id:`try_${safe}_${key}_${Date.now().toString(36)}`,kind:"activity",author:currentUser,
+        text:`tried ${copiedFrom.user}'s workout: ${copiedFrom.title||"Workout"} 🐺`,
+        detail:`From ${copiedFrom.user}'s ${fmtDate(copiedFrom.date)} session. Tap their picture on the Pack tab to try it too.`,ts:Date.now()+3};
+      const chats=myGroups.filter(g=>g.chatSystem!==false);
+      const shared=chats.filter(g=>(g.members||[]).includes(copiedFrom.user));
+      const targets=shared.length?shared:chats;
+      await Promise.all(targets.map(g=>postMessage(g.id,card).catch(e=>console.warn("chat post failed",e))));
+    }
   };
 
   const handlePost=async(t,photo)=>{
@@ -857,6 +872,7 @@ useEffect(()=>{
                   minutes:logMinutes,
                   exercises:prelogged||data.workout.exercises,
                   muscleGroup:data.muscleGroup,
+                  copiedFrom:data.workout.copiedFrom,
                 });
                 setPendingEffortRating({exercises:data.workout.exercises,muscleGroup:data.muscleGroup,prelogged});
                 dismissActiveWorkout(currentUser,"today");
@@ -886,7 +902,7 @@ useEffect(()=>{
             {habitList.filter(c=>c.participants?.[currentUser]&&!c.participants[currentUser].leftAt&&c.start<=todayStr()&&todayStr()<=c.end).map(c=>(
               <HabitTodayCard key={c.id} challenge={c} log={habitLogs[c.id]} history={history} currentUser={currentUser} today={todayStr()} onLog={handleHabitLog} onSetGoalWeight={handleGoalWeight} onLogWorkout={d=>{setWorkoutDate(d&&d!==todayStr()?d:null);setWorkoutOpen(true);}} onSavePersonal={handleSavePersonal} onDeletePersonal={handleDeletePersonal} onUsePass={handleUsePass}/>
             ))}
-            <PackTab sinceFor={sinceFor} currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onOpenMealScanner={()=>setMealScannerOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
+            <PackTab sinceFor={sinceFor} currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onOpenMealScanner={()=>setMealScannerOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} onOpenMember={setTeammateOpen} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
           </>
         )}
         {view==="feed"&&<ChatTab groupName={group.name} messages={chatMessages} currentUser={currentUser} profiles={profiles} today={todayStr()} dividerTs={chatDivider}
@@ -938,6 +954,11 @@ useEffect(()=>{
         })}
       </nav>
       {workoutOpen&&<WorkoutModal onClose={closeWorkout} onSubmit={handleLogWorkout} loading={loggingWorkout} today={todayStr()} initialDate={workoutDate}/>}
+      {teammateOpen&&<TeammateProfile member={teammateOpen} currentUser={currentUser} profiles={profiles} history={history} since={sinceFor?.(teammateOpen)} onClose={()=>setTeammateOpen(null)} onTry={async(date,entry)=>{
+        const myLog=await getTrainingLog(currentUser);
+        setTeammateOpen(null);
+        setAiTrainerOpen(workoutFromHistory(entry,date,{from:teammateOpen,myLog}));
+      }}/>}
       {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} userFavorites={userFavorites} onFavoritesChange={setUserFavorites} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);setView("pack");}} showToast={showToast} initial={typeof aiTrainerOpen==="object"?aiTrainerOpen:null}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onDeletePlan={async()=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:null}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});setNutritionOpen(false);}} onClose={()=>setNutritionOpen(false)} onOpenScanner={()=>{setNutritionOpen(false);setMealScannerOpen(true);}}/>}
       {mealScannerOpen&&<MealScannerModal currentUser={currentUser} onClose={()=>setMealScannerOpen(false)}/>}

@@ -3,7 +3,7 @@ import { AvatarDisplay } from "../../components/AvatarDisplay";
 import { getTotalWorkouts } from "../../lib/stats";
 
 // ── MEMBER CARD ──────────────────────────────────────────────────────────────
-export function MemberCard({m,i,done,isMe,ms,restToday,td,profiles,sessionExercises,sessionMuscles,onOpenProfile,history,since}){
+export function MemberCard({m,i,done,isMe,ms,restToday,td,profiles,sessionExercises,sessionMuscles,onOpenProfile,onOpenMember,history,since}){
   const [expanded,setExpanded]=useState(false);
   const hasExercises=sessionExercises?.length>0;
 
@@ -34,7 +34,10 @@ export function MemberCard({m,i,done,isMe,ms,restToday,td,profiles,sessionExerci
         {/* Rank */}
         <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,color:"var(--muted)",width:20,textAlign:"center",flexShrink:0}}>{i+1}</div>
         {/* Avatar */}
-        <AvatarDisplay profile={profiles[m]} size={44}/>
+        <div role="button" aria-label={isMe?"Your profile":`${m}'s profile`} onClick={e=>{e.stopPropagation();if(isMe)onOpenProfile();else onOpenMember?.(m);}} style={{cursor:"pointer",position:"relative",flexShrink:0}}>
+          <AvatarDisplay profile={profiles[m]} size={44}/>
+          {!isMe&&<span style={{position:"absolute",right:-3,bottom:-3,fontSize:10,background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center"}}>👀</span>}
+        </div>
         {/* Info */}
         <div style={{flex:1,minWidth:0,overflow:"hidden"}}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
