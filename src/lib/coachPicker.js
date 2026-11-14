@@ -7,13 +7,13 @@
 //     and never the exact same movement twice
 //   • a different set of exercises each time (recently seen ones go last)
 // The AI is then only asked for sets, reps, weights and notes for these exercises.
-import { EQUIPMENT_STYLES, EXERCISES, INJURY_FLAGS, MUSCLES, TARGETS, injuryFlags } from "./exerciseLibrary";
+import { EQUIPMENT_STYLES, EXERCISES, INJURY_FLAGS, MUSCLES, injuryFlags, targetsFromKey } from "./exerciseLibrary";
 
 const PRIORITY = ["quads", "back", "chest", "glutes", "hamstrings", "shoulders", "biceps", "triceps", "core", "calves"];
 const LAST = new Set(["core", "calves"]); // finish the workout with these
 
-export const musclesFor = targets =>
-  [...new Set(targets.flatMap(t => TARGETS.find(x => x.id === t)?.muscles || []))];
+// Picked targets → library muscles (also understands older saved names like "legs").
+export const musclesFor = targets => targetsFromKey([...targets].join("+"));
 
 export const findExercise = name => {
   const n = norm(name);
@@ -145,6 +145,27 @@ export function pickSwap({ workoutNames, replace, targets, gear, style = "any", 
 }
 
 // ── programming ──────────────────────────────────────────────────────────────
+export const INTENSITIES = [
+  { id: "light",  label: "Light",  icon: "🌙", desc: "Lighter weight, more reps, shorter rest. Good for low energy, soreness, or your period." },
+  { id: "normal", label: "Normal", icon: "⚡", desc: "Your usual training." },
+  { id: "heavy",  label: "Heavy",  icon: "🔥", desc: "Heavier weight, fewer reps, longer rest." },
+];
+// Reps and rest the app sets for light/heavy days (normal follows the goal).
+const SCHEMES = {
+  light: { compound: ["12-15", 60], accessory: ["15-20", 45] },
+  heavy: { compound: ["4-6", 150], accessory: ["6-8", 90] },
+};
+export function intensityScheme(intensity, compound) {
+  const s = SCHEMES[intensity];
+  if (!s) return null;
+  const [reps, restSeconds] = compound ? s.compound : s.accessory;
+  return { reps, restSeconds };
+}
+export function intensityPrompt(intensity) {
+  if (intensity === "light") return "INTENSITY: LIGHT day. The athlete wants an easier session (low energy, recovering, or on their period). Suggest weights about 60-65% of their usual working weights, 12-20 reps, and stop each set with 3-4 reps left in the tank. Never train to failure.";
+  if (intensity === "heavy") return "INTENSITY: HEAVY day. Suggest heavier weights than their usual working weights: 4-6 reps on compound lifts and 6-8 on accessories, about 1-2 reps left in the tank, with longer rest.";
+  return "";
+}
 export function defaultReps(goal, compound) {
   const g = String(goal || "").toLowerCase();
   if (g.includes("strong")) return compound ? "5-6" : "8-10";
@@ -158,7 +179,7 @@ export const defaultRest = compound => (compound ? 90 : 60);
  * choices. If the AI renamed or replaced an exercise, the app's exercise is
  * used and the AI's weight and notes for that slot are dropped.
  */
-export function mergeWithAI(plan, aiWorkout, { sets, goal, trainingLog = {} } = {}) {
+export function mergeWithAI(plan, aiWorkout, { sets, goal, intensity, trainingLog = {} } = {}) {
   const ai = Array.isArray(aiWorkout?.exercises) ? aiWorkout.exercises : [];
   const usedAi = new Set();
   let replaced = 0;
@@ -170,13 +191,14 @@ export function mergeWithAI(plan, aiWorkout, { sets, goal, trainingLog = {} } = 
     const a = ai_i >= 0 ? ai[ai_i] : null;
     if (!matched) replaced++;
     const last = trainingLog[p.name];
+    const scheme = intensityScheme(intensity, p.compound);
     return {
       name: p.name,
       primaryMuscle: MUSCLES[p.muscle],
       sets: Number(a?.sets) || sets || 3,
-      reps: (a?.reps && String(a.reps)) || defaultReps(goal, p.compound),
-      weight: matched && a?.weight ? String(a.weight) : last?.lastWeight ? `${last.lastWeight} (last time)` : "",
-      restSeconds: Number(a?.restSeconds) || defaultRest(p.compound),
+      reps: scheme?.reps || (a?.reps && String(a.reps)) || defaultReps(goal, p.compound),
+      weight: matched && a?.weight ? String(a.weight) : lastWeightHint(last, intensity),
+      restSeconds: scheme?.restSeconds || Number(a?.restSeconds) || defaultRest(p.compound),
       notes: matched ? a?.notes || "" : "",
       isCoreLift: false,
     };
@@ -184,13 +206,20 @@ export function mergeWithAI(plan, aiWorkout, { sets, goal, trainingLog = {} } = 
   return { exercises, replaced };
 }
 
-export function exerciseFromLibrary(ex, { sets, goal, trainingLog = {} } = {}) {
+export function exerciseFromLibrary(ex, { sets, goal, intensity, trainingLog = {} } = {}) {
   const last = trainingLog[ex.name];
+  const scheme = intensityScheme(intensity, ex.compound);
   return {
     name: ex.name, primaryMuscle: MUSCLES[ex.muscle], sets: sets || 3,
-    reps: defaultReps(goal, ex.compound), weight: last?.lastWeight ? `${last.lastWeight} (last time)` : "",
-    restSeconds: defaultRest(ex.compound), notes: "", isCoreLift: false,
+    reps: scheme?.reps || defaultReps(goal, ex.compound), weight: lastWeightHint(last, intensity),
+    restSeconds: scheme?.restSeconds || defaultRest(ex.compound), notes: "", isCoreLift: false,
   };
+}
+function lastWeightHint(last, intensity) {
+  if (!last?.lastWeight) return "";
+  if (intensity === "light") return `lighter than ${last.lastWeight} (last time)`;
+  if (intensity === "heavy") return `heavier than ${last.lastWeight} (last time)`;
+  return `${last.lastWeight} (last time)`;
 }
 
 export function estimateMinutes(exercises) {
@@ -199,8 +228,10 @@ export function estimateMinutes(exercises) {
 }
 
 // Plain-language summary of what the app enforced, for the result screen.
-export function rulesSummary({ flags, style }) {
+export function rulesSummary({ flags, style, intensity }) {
   const out = [];
+  const it = INTENSITIES.find(x => x.id === intensity);
+  if (it && it.id !== "normal") out.push(`${it.icon} ${it.label} day`);
   const st = EQUIPMENT_STYLES.find(s => s.id === style);
   if (st && st.id !== "any") out.push(`${st.icon} ${st.label} only`);
   // Don't list what another injury already implies (shoulder → overhead, knee/ankle → jumping).

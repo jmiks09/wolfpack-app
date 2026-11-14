@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { aiGenerateFormCues } from "../firebase";
-import { AnatomyDiagram } from "./AnatomyDiagram";
+import { BodyMap } from "../components/BodyMap";
+import { musclesFromLabel } from "../lib/bodyParts";
+import { findExercise } from "../lib/coachPicker";
+import { MUSCLES } from "../lib/exerciseLibrary";
 
 // ── AI TRAINER — exercise card (form cues + GIF) ─────────────────────────────
 export function ExerciseCard({exercise, userName, experience, injuries, idx, onSwap, swapping}){
@@ -85,8 +88,19 @@ export function ExerciseCard({exercise, userName, experience, injuries, idx, onS
             </div>
           )}
 
-          {/* Anatomy diagram — shows which muscles light up */}
-          <AnatomyDiagram primaryMuscle={exercise.primaryMuscle}/>
+          {/* Body diagram: the muscles this exercise works */}
+          {(()=>{
+            const lib=findExercise(exercise.name);
+            const ms=lib?[lib.muscle]:musclesFromLabel(exercise.primaryMuscle);
+            if(!ms.length)return null;
+            let g="male";try{g=localStorage.getItem(`wp_body_${userName}`)||"male";}catch{/* ignore */}
+            return(
+              <div style={{marginTop:12,padding:"10px 0 6px",background:"rgba(255,255,255,0.02)",border:"1px solid var(--border)",borderRadius:12}}>
+                <div style={{textAlign:"center",fontSize:11,letterSpacing:2,fontFamily:"'Bebas Neue',cursive",color:"var(--accent2)",marginBottom:4}}>WORKS: {ms.map(m=>MUSCLES[m]).join(" · ").toUpperCase()}</div>
+                <BodyMap muscles={ms} gender={g} scale={0.55}/>
+              </div>
+            );
+          })()}
 
           {/* YouTube form guide — opens in external browser so music keeps playing */}
           <a

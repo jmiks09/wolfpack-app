@@ -336,28 +336,22 @@ export const EQUIPMENT_STYLES = [
 export const stylesFor = gear => EQUIPMENT_STYLES.filter(s => !s.gear || s.gear.some(g => gear.has(g)));
 
 // ── TARGETS ──────────────────────────────────────────────────────────────────
-// What people pick in the coach (several allowed), and what each covers.
-export const TARGETS = [
-  { id: "chest",     label: "Chest",     icon: "🫁", muscles: ["chest"] },
-  { id: "back",      label: "Back",      icon: "🔺", muscles: ["back"] },
-  { id: "shoulders", label: "Shoulders", icon: "🏹", muscles: ["shoulders"] },
-  { id: "biceps",    label: "Biceps",    icon: "💪", muscles: ["biceps"] },
-  { id: "triceps",   label: "Triceps",   icon: "🦾", muscles: ["triceps"] },
-  { id: "legs",      label: "Legs",      icon: "🦵", muscles: ["quads", "hamstrings", "calves"] },
-  { id: "glutes",    label: "Glutes",    icon: "🍑", muscles: ["glutes"] },
-  { id: "core",      label: "Core",      icon: "🎯", muscles: ["core"] },
-];
+// What people pick in the coach (tap muscles on the body map, several allowed).
+export const TARGETS = Object.entries(MUSCLES).map(([id, label]) => ({ id, label, muscles: [id] }));
 const ALL_TARGETS = TARGETS.map(t => t.id);
+// Older saved workouts used "legs" for quads + hamstrings + calves.
+const ALIASES = { legs: ["quads", "hamstrings", "calves"] };
 export const QUICK_PICKS = [
   { id: "upper",    label: "Upper body", targets: ["chest", "back", "shoulders", "biceps", "triceps"] },
-  { id: "lower",    label: "Lower body", targets: ["legs", "glutes"] },
+  { id: "lower",    label: "Lower body", targets: ["quads", "hamstrings", "glutes", "calves"] },
   { id: "push",     label: "Push",       targets: ["chest", "shoulders", "triceps"] },
   { id: "pull",     label: "Pull",       targets: ["back", "biceps"] },
   { id: "arms",     label: "Arms",       targets: ["biceps", "triceps"] },
+  { id: "legs",     label: "Legs",       targets: ALIASES.legs },
   { id: "fullbody", label: "Full body",  targets: ALL_TARGETS },
 ];
 const NAMED = {
-  upper: "Upper Body", lower: "Lower Body", push: "Push", pull: "Pull", arms: "Arms", fullbody: "Full Body",
+  upper: "Upper Body", lower: "Lower Body", push: "Push", pull: "Pull", arms: "Arms", legs: "Legs", fullbody: "Full Body",
 };
 
 // The id saved with a workout: a quick-pick id when the selection matches one,
@@ -374,20 +368,21 @@ export function targetsFromKey(key) {
   if (!key) return [];
   const qp = QUICK_PICKS.find(q => q.id === key);
   if (qp) return [...qp.targets];
-  return String(key).split("+").filter(t => ALL_TARGETS.includes(t));
+  return [...new Set(String(key).split("+").flatMap(t => ALIASES[t] || (ALL_TARGETS.includes(t) ? [t] : [])))];
 }
 export function muscleKeyLabel(key) {
   if (!key) return null;
   if (NAMED[key]) return NAMED[key];
   const ts = targetsFromKey(key);
   if (!ts.length) return String(key).charAt(0).toUpperCase() + String(key).slice(1);
-  const labels = ts.map(t => TARGETS.find(x => x.id === t).label);
+  const order = Object.keys(MUSCLES);
+  const labels = [...ts].sort((a, b) => order.indexOf(a) - order.indexOf(b)).map(t => MUSCLES[t]);
   return labels.length <= 2 ? labels.join(" & ") : `${labels.slice(0, -1).join(", ")} & ${labels.at(-1)}`;
 }
+const ICONS = { chest: "🫁", back: "🔺", shoulders: "🏹", biceps: "💪", triceps: "💪", quads: "🦵", hamstrings: "🦵", glutes: "🍑", calves: "🦵", core: "🎯" };
 export function muscleKeyIcon(key) {
   if (key === "fullbody") return "⚡";
-  if (key === "upper" || key === "push" || key === "pull" || key === "arms") return "💪";
-  if (key === "lower") return "🦵";
+  if (key === "lower" || key === "legs") return "🦵";
   const ts = targetsFromKey(key);
-  return ts.length === 1 ? TARGETS.find(x => x.id === ts[0]).icon : "💪";
+  return ts.length === 1 ? ICONS[ts[0]] : "💪";
 }

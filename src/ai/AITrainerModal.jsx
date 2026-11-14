@@ -6,8 +6,9 @@ import { buildEquipmentString, bumpRegenCount, getLastWorkoutForMuscle, getRecen
 import { removeFavoriteFS } from "../lib/favorites";
 import { buildPriorPerformanceString, getTrainingLog } from "../lib/trainingLog";
 import { ExerciseCard } from "./ExerciseCard";
-import { MUSCLES, QUICK_PICKS, TARGETS, availableGear, muscleKey, muscleKeyIcon, muscleKeyLabel, stylesFor, targetsFromKey } from "../lib/exerciseLibrary";
-import { buildPlan, estimateMinutes, exerciseFromLibrary, loadSeen, mergeWithAI, musclesFor, pickSwap, recentLogged, rememberSeen, rulesSummary } from "../lib/coachPicker";
+import { BodyMap } from "../components/BodyMap";
+import { MUSCLES, QUICK_PICKS, availableGear, muscleKey, muscleKeyIcon, muscleKeyLabel, stylesFor, targetsFromKey } from "../lib/exerciseLibrary";
+import { INTENSITIES, buildPlan, estimateMinutes, exerciseFromLibrary, intensityPrompt, loadSeen, mergeWithAI, musclesFor, pickSwap, recentLogged, rememberSeen, rulesSummary } from "../lib/coachPicker";
 
 // ── AI TRAINER MODAL ────────────────────────────────────────────────────────
 
@@ -26,6 +27,13 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
   const [shown,setShown]=useState(()=>new Set()); // everything shown this visit, so swaps keep finding new ones
   const [rules,setRules]=useState([]);
   const [planNote,setPlanNote]=useState("");
+  const [intensity,setIntensity]=useState("normal");
+  const [bodyGender,setBodyGender]=useState(()=>{
+    try{const saved=localStorage.getItem(`wp_body_${currentUser}`);if(saved)return saved;}catch{/* ignore */}
+    return profile?.aiTrainer?.coach?.stats?.gender==="female"?"female":"male";
+  });
+  const flipBody=()=>{const g=bodyGender==="female"?"male":"female";setBodyGender(g);try{localStorage.setItem(`wp_body_${currentUser}`,g);}catch{/* ignore */}};
+  const toggleMuscle=m=>{setTargets(x=>x.includes(m)?x.filter(y=>y!==m):[...x,m]);setAiMuscleReason("");setRepeatMode(false);};
   const [aiMuscleReason,setAiMuscleReason]=useState("");
   const [numExercises,setNumExercises]=useState(5);
   const [setsPerExercise,setSetsPerExercise]=useState(4);
@@ -155,7 +163,7 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
     const list=plan.exercises.map((e,i)=>`${i+1}. ${e.name} (${MUSCLES[e.muscle]})`).join("; ");
     const result=await aiGenerateWorkout({
       userName:currentUser,
-      goal:fullGoal,
+      goal:[fullGoal,intensityPrompt(intensity)].filter(Boolean).join(". "),
       experience:experience||"intermediate",
       injuries:injuries||"None",
       equipment:`${equipment} Today: ${styleLabel==="Everything"?"any of this equipment":`${styleLabel.toLowerCase()} only`}. The app has already chosen the exercises to fit the athlete's injuries and equipment. Use EXACTLY these ${plan.exercises.length} exercises, in this order, with these exact names, one entry each: ${list}. Do not add, remove, rename or replace any exercise. Your job is the sets, reps, weight, rest and a short coaching note for each.`,
@@ -171,20 +179,21 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
     });
     let built;
     if(result.ok){
-      const merged=mergeWithAI(plan.exercises,result.workout,{sets:setsPerExercise,goal:fullGoal,trainingLog});
+      const merged=mergeWithAI(plan.exercises,result.workout,{sets:setsPerExercise,goal:fullGoal,intensity,trainingLog});
       built={...result.workout,title:result.workout?.title||`${label} Workout`,exercises:merged.exercises,
         reasoning:merged.replaced>=2?`${label} session: ${plan.exercises.length} different movements chosen for your goal and equipment.`:result.workout?.reasoning,
         estimatedMinutes:Number(result.workout?.estimatedMinutes)||estimateMinutes(merged.exercises)};
     }else{
       // The AI couldn't be reached: still give a full workout, just without its weight suggestions.
-      const exercises=plan.exercises.map(e=>exerciseFromLibrary(e,{sets:setsPerExercise,goal:fullGoal,trainingLog}));
+      const exercises=plan.exercises.map(e=>exerciseFromLibrary(e,{sets:setsPerExercise,goal:fullGoal,intensity,trainingLog}));
       built={title:`${label} Workout`,reasoning:"",exercises,estimatedMinutes:estimateMinutes(exercises)};
       notes.push(`The coach couldn't add weight suggestions right now (${result.error||"connection problem"}), so pick a weight you can do for the reps shown.`);
     }
     const names=built.exercises.map(e=>e.name);
     rememberSeen(currentUser,names);
     setShown(s=>new Set([...s,...names]));
-    setRules(rulesSummary({flags:plan.flags,style:activeStyle}));
+    setRules(rulesSummary({flags:plan.flags,style:activeStyle,intensity}));
+    built.intensity=intensity;
     setPlanNote(notes.join(" "));
     setWorkout(built);
     setCustomDuration(built.estimatedMinutes||45);
@@ -197,7 +206,7 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
     const seen=new Set([...shown,...loadSeen(currentUser)]);
     const pick=pickSwap({workoutNames:workout.exercises.map(e=>e.name),replace:exercise,targets:targets.length?targets:targetsFromKey(muscleGroup),gear,style:activeStyle,injuries:profile?.aiTrainer?.injuries||[],seen});
     if(!pick){showToast(`No other ${String(exercise.primaryMuscle||"").toLowerCase()||"matching"} exercises fit your equipment and injuries.`);return;}
-    const replacement={...exerciseFromLibrary(pick,{sets:exercise.sets,goal:fullGoal}),sets:exercise.sets};
+    const replacement={...exerciseFromLibrary(pick,{sets:exercise.sets,goal:fullGoal,intensity:workout.intensity||intensity}),sets:exercise.sets};
     const newExercises=[...workout.exercises];
     newExercises[idx]=replacement;
     setWorkout({...workout,exercises:newExercises});
@@ -280,35 +289,35 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
               <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,color:"#fff"}}>⚡ GENERATE WORKOUT</div>
             </div>
 
-            {/* Muscle picker: quick picks, or tap as many muscles as you like */}
+            {/* Muscle picker: one row of quick picks, then tap muscles on the body */}
             <div style={{marginBottom:14}}>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>🎯 WHAT ARE WE TRAINING?</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)"}}>🎯 WHAT ARE WE TRAINING?</div>
+                <button onClick={flipBody} aria-label={`Show ${bodyGender==="female"?"men's":"women's"} body`} style={{background:"none",border:"1px solid var(--border)",borderRadius:12,padding:"3px 10px",fontSize:11,color:"var(--muted)",cursor:"pointer"}}>{bodyGender==="female"?"♀":"♂"} body</button>
+              </div>
+              <div style={{position:"relative",marginBottom:6}}>
+              <div role="group" aria-label="Quick picks" style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,paddingRight:28,scrollbarWidth:"none",WebkitOverflowScrolling:"touch"}}>
                 {QUICK_PICKS.map(q=>{const sel=muscleGroup===q.id;return(
                   <button key={q.id} aria-pressed={sel} onClick={()=>{setTargets(sel?[]:[...q.targets]);setAiMuscleReason("");setRepeatMode(false);}}
-                    style={{padding:"7px 12px",borderRadius:20,cursor:"pointer",fontSize:12,background:sel?"rgba(255,107,53,0.2)":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",color:sel?"#ff6b35":"var(--muted)"}}>{q.label}</button>
+                    style={{flexShrink:0,padding:"6px 12px",borderRadius:16,cursor:"pointer",fontSize:12,whiteSpace:"nowrap",background:sel?"rgba(255,107,53,0.2)":"transparent",border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",color:sel?"#ff6b35":"var(--muted)"}}>{q.label}</button>
                 );})}
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:6}}>
-                {TARGETS.map(t=>{const sel=targets.includes(t.id);return(
-                  <button key={t.id} aria-pressed={sel} onClick={()=>{setTargets(x=>sel?x.filter(y=>y!==t.id):[...x,t.id]);setAiMuscleReason("");setRepeatMode(false);}}
-                    style={{padding:"8px 4px",borderRadius:10,cursor:"pointer",textAlign:"center",background:sel?"rgba(255,107,53,0.2)":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)"}}>
-                    <div style={{fontSize:16,marginBottom:2}}>{t.icon}</div>
-                    <div style={{fontSize:10,color:sel?"#ff6b35":"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{t.label}</div>
-                  </button>
-                );})}
+              <div aria-hidden="true" style={{position:"absolute",top:0,right:0,bottom:4,width:36,pointerEvents:"none",background:"linear-gradient(to right, rgba(20,20,30,0), var(--bg2, #16161f))"}}/>
               </div>
-              <div style={{fontSize:11,color:targets.length?"var(--text)":"var(--muted)",marginBottom:8,minHeight:15}}>
-                {targets.length?<>Training: <b>{muscleKeyLabel(muscleGroup)}</b></>:"Pick as many as you like, or let the coach choose."}
+              <div style={{padding:"8px 0 4px",background:"rgba(255,255,255,0.02)",border:"1px solid var(--border)",borderRadius:14}}>
+                <BodyMap muscles={musclesFor(targets)} onToggle={toggleMuscle} gender={bodyGender} scale={0.78}/>
+                <div style={{textAlign:"center",fontSize:10,color:"var(--muted)",marginTop:2}}>Tap muscles to add or remove them</div>
               </div>
-              <button onClick={()=>{const a=autoPick();setTargets(a.targets);setAiMuscleReason(`You haven't trained ${muscleKeyLabel(a.key).toLowerCase()} much recently.`);setRepeatMode(false);}}
-                style={{width:"100%",padding:"10px 12px",borderRadius:10,cursor:"pointer",background:"var(--bg3)",border:"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:16}}>🤖</span>
-                <div style={{textAlign:"left",flex:1}}>
-                  <div style={{fontSize:12,color:"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1.5}}>AI PICK FOR ME</div>
-                  {aiMuscleReason&&<div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>{aiMuscleReason}</div>}
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,minHeight:24}}>
+                <div style={{flex:1,fontSize:12,color:targets.length?"var(--text)":"var(--muted)"}}>
+                  {targets.length?<>Training: <b>{muscleKeyLabel(muscleGroup)}</b></>:aiMuscleReason||"Pick a quick pick or tap the body."}
                 </div>
-              </button>
+                {targets.length>0
+                  ?<button onClick={()=>{setTargets([]);setAiMuscleReason("");}} style={{background:"none",border:"none",color:"var(--muted)",fontSize:12,cursor:"pointer",textDecoration:"underline"}}>Clear</button>
+                  :<button onClick={()=>{const a=autoPick();setTargets(a.targets);setAiMuscleReason(`You haven't trained ${muscleKeyLabel(a.key).toLowerCase()} much recently.`);setRepeatMode(false);}}
+                    style={{background:"none",border:"1px solid var(--border)",borderRadius:12,padding:"4px 10px",color:"var(--accent2)",fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>🤖 Coach picks</button>}
+              </div>
+              {targets.length>0&&aiMuscleReason&&<div style={{fontSize:10,color:"var(--muted)"}}>{aiMuscleReason}</div>}
             </div>
 
             {/* Repeat last workout suggestion — shows when muscle group selected */}
@@ -346,7 +355,7 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
 
             {/* Volume */}
             <div style={{marginBottom:14}}>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⚙️ VOLUME</div>
+              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:2,color:"var(--accent2)",marginBottom:8}}>⚙️ VOLUME & INTENSITY</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 <div>
                   <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Exercises</div>
@@ -365,6 +374,14 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
                   </div>
                 </div>
               </div>
+              <div style={{fontSize:11,color:"var(--muted)",margin:"12px 0 6px"}}>Intensity</div>
+              <div role="radiogroup" aria-label="Intensity" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                {INTENSITIES.map(it=>{const sel=intensity===it.id;return(
+                  <button key={it.id} role="radio" aria-checked={sel} onClick={()=>setIntensity(it.id)}
+                    style={{padding:"8px 4px",borderRadius:10,cursor:"pointer",background:sel?"rgba(255,107,53,0.2)":"var(--bg3)",border:sel?"1px solid rgba(255,107,53,0.6)":"1px solid var(--border)",color:sel?"#ff6b35":"var(--muted)",fontSize:13}}>{it.icon} {it.label}</button>
+                );})}
+              </div>
+              <div style={{fontSize:11,color:"var(--muted)",marginTop:6,lineHeight:1.5}}>{INTENSITIES.find(x=>x.id===intensity)?.desc}</div>
             </div>
 
             {/* Equipment */}
