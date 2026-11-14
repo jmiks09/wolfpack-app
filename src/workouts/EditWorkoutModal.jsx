@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AI_MUSCLE_GROUPS } from "../lib/aiConfig";
+import { muscleKeyLabel } from "../lib/exerciseLibrary";
 import { WORKOUT_TYPES } from "../lib/constants";
 import { fmtDate } from "../lib/dates";
 
@@ -33,19 +33,21 @@ export function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onD
     if(selected.length===0)return;
     const icons=selected.map(w=>w.icon).join("");
     const updatedDetails={...(entry.details||{})};
-    selected.forEach(w=>{if(duration[w.id])updatedDetails[w.id]={...(updatedDetails[w.id]||{}),duration:duration[w.id]};});
+    // Keep each workout's original key (WOLFMODE stores its details under lift_<time>)
+    const keyOf=w=>entry.workouts?.filter(x=>x.id===w.id).at(-1)?.key;
+    selected.forEach(w=>{const k=keyOf(w)||w.id;if(duration[w.id])updatedDetails[k]={...(updatedDetails[k]||{}),duration:duration[w.id]};});
     const totalDur=selected.reduce((s,w)=>s+(Number(duration[w.id])||0),0)||null;
     const summaryLines=selected.map(w=>{
       // If this is a WOLFMODE lift, preserve the full WOLFMODE label
       if(w.id==="lift"&&entry.wolfmodeSession){
         const ms=entry.wolfmodeSession;
-        const mgLabel=AI_MUSCLE_GROUPS.find(m=>m.id===ms.muscleGroup)?.label||ms.muscleGroup||"";
+        const mgLabel=ms.muscleGroup?muscleKeyLabel(ms.muscleGroup):"";
         const exCount=ms.exercises?.filter(e=>!e.skipped||e.substitutedWith).length||ms.exercises?.length||0;
         const mins=duration[w.id]||ms.estimatedMinutes||"";
         return [`WOLFMODE · Weight Training`,mgLabel,exCount?`${exCount} exercises`:null,mins?`${mins} min`:null].filter(Boolean).join(" · ");
       }
       // Find details by id or any lift_ key
-      const d=updatedDetails[w.id]||Object.entries(updatedDetails).find(([k,v])=>k.startsWith("lift_")&&w.id==="lift")?.[1]||{};
+      const d=updatedDetails[keyOf(w)]||updatedDetails[w.id]||Object.entries(updatedDetails).find(([k,v])=>k.startsWith("lift_")&&w.id==="lift")?.[1]||{};
       const parts=[];
       if(d.focus)parts.push(d.focus);
       if(d.distance)parts.push(`${d.distance} mi`);
@@ -53,7 +55,8 @@ export function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onD
       if(d.duration)parts.push(`${d.duration} min`);
       return parts.length>0?`${w.label}: ${parts.join(" · ")}`:w.label;
     });
-    onSave(date,{...entry,workouts:selected.map(w=>({id:w.id,icon:w.icon,label:w.label})),workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:updatedDetails});
+    const wm=selected.some(w=>w.id==="lift")&&entry.wolfmodeSession&&Number(duration.lift)?{wolfmodeSession:{...entry.wolfmodeSession,estimatedMinutes:Number(duration.lift)}}:{};
+    onSave(date,{...entry,...wm,workouts:selected.map(w=>({id:w.id,icon:w.icon,label:w.label,...(keyOf(w)?{key:keyOf(w)}:{})})),workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:updatedDetails});
     onClose();
   };
 

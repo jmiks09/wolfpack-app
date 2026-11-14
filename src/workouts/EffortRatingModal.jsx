@@ -2,7 +2,8 @@ import { useState } from "react";
 import { EFFORT_RATINGS } from "../lib/aiConfig";
 import { saveTrainingLog } from "../lib/trainingLog";
 
-export function EffortRatingModal({exercises, prelogged, muscleGroup, currentUser, onRate, onClose}){
+export function EffortRatingModal({exercises, prelogged, muscleGroup, minutes, currentUser, onRate, onClose}){
+  const [mins,setMins]=useState(minutes?String(minutes):"");
   // prelogged = sets checked off during the workout → only the rating is left to ask
   const [step,setStep]=useState(prelogged?"effort":"checklist");
   const [done,setDone]=useState(()=>Object.fromEntries((exercises||[]).map(e=>[e.name,true])));
@@ -52,7 +53,7 @@ export function EffortRatingModal({exercises, prelogged, muscleGroup, currentUse
       const eid=(typeof forced==="string"&&forced)||effortId||"normal";
       await saveTrainingLog(currentUser, prelogged.filter(e=>!e.skipped), eid);
       setSaving(false);
-      onRate(eid, prelogged);
+      onRate(eid, prelogged, mins);
       return;
     }
     const logged=doneExercises.map(e=>({
@@ -81,7 +82,7 @@ export function EffortRatingModal({exercises, prelogged, muscleGroup, currentUse
     });
     await saveTrainingLog(currentUser, logged, effortId||"normal");
     setSaving(false);
-    onRate(effortId||"normal", logged);
+    onRate(effortId||"normal", logged, mins);
   };
 
   // ── STEP 1: Checklist ──────────────────────────────────────────────────────
@@ -141,6 +142,12 @@ export function EffortRatingModal({exercises, prelogged, muscleGroup, currentUse
             {/* Fix 5: Clarify rating is based on what they actually lifted */}
             <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>HOW HARD WAS YOUR SESSION?</div>
             <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>Rate based on the weights YOU actually lifted — WOLFMODE adjusts next time</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:14,padding:"8px 10px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12}}>
+            <span style={{fontSize:13,color:"rgba(255,255,255,0.85)"}}>⏱️ How long did it take?</span>
+            <input aria-label="Workout minutes" inputMode="numeric" value={mins} onChange={e=>setMins(e.target.value.replace(/[^0-9]/g,"").slice(0,3))}
+              style={{width:56,padding:"6px 4px",borderRadius:8,textAlign:"center",fontSize:15,fontWeight:600,background:"rgba(255,255,255,0.06)",border:"1px solid var(--border)",color:"#fff"}}/>
+            <span style={{fontSize:12,color:"var(--muted)"}}>min</span>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
             {EFFORT_RATINGS.map(r=>{

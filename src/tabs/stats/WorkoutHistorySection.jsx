@@ -130,7 +130,7 @@ export function WorkoutHistorySection({currentUser, history, onEditExercises, on
                     )}
                     {onEditExercises&&(
                       <button onClick={()=>onEditExercises(date,entry)} style={{marginTop:10,width:"100%",padding:"7px",borderRadius:8,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",color:"var(--muted)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
-                        ✏️ EDIT EXERCISES & WEIGHTS
+                        ✏️ EDIT TIME, EXERCISES & WEIGHTS
                       </button>
                     )}
                   </div>

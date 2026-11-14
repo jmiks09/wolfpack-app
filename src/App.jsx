@@ -40,6 +40,7 @@ import { EditWorkoutModal } from "./workouts/EditWorkoutModal";
 import { EffortRatingModal } from "./workouts/EffortRatingModal";
 import { anySetDone, buildPrelogged, workoutSummary } from "./lib/setLog";
 import { workoutFromHistory } from "./lib/repeatWorkout";
+import { withWolfmodeMinutes } from "./lib/workoutEntry";
 import { getTrainingLog } from "./lib/trainingLog";
 import { TeammateProfile } from "./tabs/pack/TeammateProfile";
 import { WorkoutModal } from "./workouts/WorkoutModal";
@@ -392,9 +393,10 @@ useEffect(()=>{
     setEditWorkout(null);showToast("Workout updated!");
   };
 
-  const handleSaveEditedExercises=async(date,editedExercises)=>{
-    const existing=history[date]?.[currentUser];
-    if(!existing)return;
+  const handleSaveEditedExercises=async(date,editedExercises,mins)=>{
+    const raw=history[date]?.[currentUser];
+    if(!raw)return;
+    const existing=mins?withWolfmodeMinutes(raw,mins):raw;
     let updatedEntry={...existing};
     if(existing.wolfmodeSession?.exercises){
       updatedEntry={...existing,wolfmodeSession:{...existing.wolfmodeSession,exercises:editedExercises}};
@@ -404,7 +406,7 @@ useEffect(()=>{
     const newHistory={...history,[date]:{...(history[date]||{}),[currentUser]:updatedEntry}};
     await fsSet("wolfpack/workouts",{byDate:newHistory});
     setHistory(newHistory);setSharedData(newHistory);
-    showToast("✅ Exercises updated!");
+    showToast("✅ Workout updated!");
   };
   const handleDeleteWorkout=async(date)=>{
     const newDay={...(history[date]||{})};
@@ -877,7 +879,7 @@ useEffect(()=>{
                   muscleGroup:data.muscleGroup,
                   copiedFrom:data.workout.copiedFrom,
                 });
-                setPendingEffortRating({exercises:data.workout.exercises,muscleGroup:data.muscleGroup,prelogged});
+                setPendingEffortRating({exercises:data.workout.exercises,muscleGroup:data.muscleGroup,prelogged,minutes:logMinutes});
                 dismissActiveWorkout(currentUser,"today");
                 setActiveWorkoutRefresh(r=>r+1);
               }}
@@ -965,14 +967,18 @@ useEffect(()=>{
       {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} userFavorites={userFavorites} onFavoritesChange={setUserFavorites} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);setView("pack");}} showToast={showToast} initial={typeof aiTrainerOpen==="object"?aiTrainerOpen:null}/>}
       {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onDeletePlan={async()=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:null}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});setNutritionOpen(false);}} onClose={()=>setNutritionOpen(false)} onOpenScanner={()=>{setNutritionOpen(false);setMealScannerOpen(true);}}/>}
       {mealScannerOpen&&<MealScannerModal currentUser={currentUser} onClose={()=>setMealScannerOpen(false)}/>}
-      {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} prelogged={pendingEffortRating.prelogged} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={async(effortId,logged)=>{
+      {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} prelogged={pendingEffortRating.prelogged} minutes={pendingEffortRating.minutes} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={async(effortId,logged,mins)=>{
         setPendingEffortRating(null);
         const effort=EFFORT_RATINGS.find(r=>r.id===effortId);
         showToast((effort?.emoji||"") + " Logged! " + (effort?.advice||"Keep it up") + "! 🐺");
-        if(logged?.length){try{
+        const minsChanged=Number(mins)&&Number(mins)!==Number(pendingEffortRating.minutes);
+        if(logged?.length||minsChanged){try{
           const key=todayStr();
-          const existing=history[key]?.[currentUser];
-          if(existing?.wolfmodeSession){
+          const raw=history[key]?.[currentUser];
+          const existing=minsChanged?withWolfmodeMinutes(raw,mins):raw;
+          if(existing?.wolfmodeSession&&!logged?.length){
+            await fsSet("wolfpack/workouts",{byDate:{...history,[key]:{...(history[key]||{}),[currentUser]:{...existing,wolfmodeSession:{...existing.wolfmodeSession,effortRating:effortId}}}}});
+          }else if(existing?.wolfmodeSession){
             const updatedEx=existing.wolfmodeSession.exercises.map(ex=>{const l=logged.find(x=>x.name===ex.name);if(l)return{...ex,sets:l.sets??ex.sets,weightUsed:l.weightUsed||ex.weightUsed,actualReps:l.actualReps||null,skipped:l.skipped||false,substitutedWith:l.substitutedWith||null,...(l.setLog?{setLog:l.setLog}:{})};return{...ex,skipped:true};});
             await fsSet("wolfpack/workouts",{byDate:{...history,[key]:{...(history[key]||{}),[currentUser]:{...existing,wolfmodeSession:{...existing.wolfmodeSession,exercises:updatedEx,effortRating:effortId}}}}});
           }

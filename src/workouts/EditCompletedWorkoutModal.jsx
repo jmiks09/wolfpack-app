@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { wolfmodeMinutes } from "../lib/workoutEntry";
 
 // ── WEIGHT LOG MODAL ─────────────────────────────────────────────────────────
 // ── EDIT COMPLETED WORKOUT MODAL ─────────────────────────────────────────────
@@ -6,6 +7,8 @@ export function EditCompletedWorkoutModal({date, entry, currentUser, onSave, onC
   const exercises=entry?.wolfmodeSession?.exercises||entry?.details?.lift?.exercises||[];
   const [editedExercises,setEditedExercises]=useState(()=>exercises.map(ex=>({...ex})));
   const [saving,setSaving]=useState(false);
+  const startMins=wolfmodeMinutes(entry);
+  const [mins,setMins]=useState(startMins?String(startMins):"");
 
   const updateField=(idx,field,val)=>{
     setEditedExercises(exs=>exs.map((ex,i)=>i===idx?{...ex,[field]:val}:ex));
@@ -13,7 +16,7 @@ export function EditCompletedWorkoutModal({date, entry, currentUser, onSave, onC
 
   const save=async()=>{
     setSaving(true);
-    await onSave(date,editedExercises);
+    await onSave(date,editedExercises,entry?.wolfmodeSession&&Number(mins)&&Number(mins)!==startMins?mins:null);
     setSaving(false);
     onClose();
   };
@@ -37,6 +40,14 @@ export function EditCompletedWorkoutModal({date, entry, currentUser, onSave, onC
         <div className="modal-handle"/>
         <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:18,letterSpacing:3,marginBottom:2}}>EDIT EXERCISES</div>
         <div style={{fontSize:11,color:"var(--muted)",marginBottom:14}}>Update weights, reps, or sets for any exercise.</div>
+        {entry?.wolfmodeSession&&(
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12}}>
+            <span style={{fontSize:13,color:"rgba(255,255,255,0.85)",flex:1}}>⏱️ Workout length</span>
+            <input aria-label="Workout minutes" inputMode="numeric" value={mins} onChange={e=>setMins(e.target.value.replace(/[^0-9]/g,"").slice(0,3))}
+              style={{width:56,padding:"6px 4px",borderRadius:8,textAlign:"center",fontSize:14,fontWeight:600,background:"var(--bg2)",border:"1px solid var(--border)",color:"#fff"}}/>
+            <span style={{fontSize:12,color:"var(--muted)"}}>min</span>
+          </div>
+        )}
 
         <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
           {editedExercises.map((ex,idx)=>{

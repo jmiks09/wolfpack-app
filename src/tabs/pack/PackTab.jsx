@@ -44,7 +44,8 @@ export function PackTab({sinceFor,currentUser,members,profiles,history,sharedDat
 
       {/* ── LOG WORKOUT / REST DAY ── */}
       <div style={{padding:"4px 16px 8px"}}>
-        {we?(
+        {/* Weekend: show "rest day" unless you trained anyway — then show it (and Edit) */}
+        {we&&!my?.done?(
           <div style={{padding:"12px 16px",background:"var(--bg3)",borderRadius:14,textAlign:"center"}}>
             <div style={{fontSize:22,marginBottom:4}}>😴</div>
             <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:2,color:"var(--muted)"}}>REST DAY — YOU EARNED IT</div>
