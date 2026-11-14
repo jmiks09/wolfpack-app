@@ -162,4 +162,20 @@ export const WHATS_NEW_FALLBACK = {
   ],
 };
 
+// Release notes built into the app. Shown once to everyone after an update,
+// separately from the admin's What's New (so neither hides the other).
+// Change the version to show a new set of notes.
+export const APP_RELEASE = {
+  version:"2026-11-coach",
+  items:[
+    {icon:"🧠", title:"A smarter coach", desc:"WOLFMODE now always respects your injuries, never gives you two near-identical exercises, and swaps actually give you something new."},
+    {icon:"🎯", title:"Train any mix of muscles", desc:"Tap muscles on the body map, or pick Upper, Lower, Push, Pull or Arms. Want calves only? Tap Clear, then calves."},
+    {icon:"🧰", title:"Choose your equipment", desc:"Pick any combination: dumbbells + barbell, bodyweight only, machines, bands… the coach only uses what you pick."},
+    {icon:"🔥", title:"Workout intensity", desc:"Light for low-energy days, Normal, or Heavy for fewer reps with more weight."},
+    {icon:"✅", title:"Set-by-set checklist", desc:"Tick off each set as you go. Change the weight or reps, add or remove sets. The coach learns what you really lifted."},
+    {icon:"🔁", title:"Do it again", desc:"Stats → your history → tap a workout → Do it again. Last time's weights and reps come pre-filled."},
+    {icon:"👀", title:"Try a teammate's workout", desc:"Tap a teammate's picture on the Pack tab to see their last 7 days and try any workout with your own weights."},
+  ],
+};
+
 export const NAV=[{id:"pack",icon:null,label:"PACK"},{id:"feed",icon:"💬",label:"CHAT"},{id:"gym",icon:"🏋️",label:"GYM"},{id:"challenges",icon:"⚔️",label:"CHALLENGES"},{id:"stats",icon:"📊",label:"STATS"}];
