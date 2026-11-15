@@ -9,7 +9,7 @@
 // The AI is then only asked for sets, reps, weights and notes for these exercises.
 import { EQUIPMENT_STYLES, EXERCISES, INJURY_FLAGS, MUSCLES, injuryFlags, styleGearOf, styleIds, styleLabelOf, targetsFromKey } from "./exerciseLibrary";
 
-const PRIORITY = ["quads", "back", "chest", "glutes", "hamstrings", "shoulders", "biceps", "triceps", "core", "calves"];
+const PRIORITY = ["quads", "back", "chest", "glutes", "hamstrings", "shoulders", "biceps", "triceps", "core", "calves", "forearms"];
 const LAST = new Set(["core", "calves"]); // finish the workout with these
 
 // Picked targets → library muscles (also understands older saved names like "legs").
@@ -250,7 +250,10 @@ export function altVersions(name, { gear = null } = {}) {
 // Switch an exercise to its other version; weight re-fit to what you own.
 export function switchVersion(ex, altName, { loads = {} } = {}) {
   const n = parseFloat(String(ex.weight || "").match(/\d+(?:\.\d+)?/)?.[0]);
-  const r = fitWeight(isNaN(n) ? "" : `${n} lbs`, ex.reps, implementOf(altName), loads);
+  const imp = implementOf(altName);
+  // No weight yet but only one choice (e.g. a single 25 lb kettlebell) → use it
+  const only = loads[imp]?.length === 1 ? loads[imp][0] : null;
+  const r = fitWeight(isNaN(n) ? (only ? `${only} lbs` : "") : `${n} lbs`, ex.reps, imp, loads);
   return { ...ex, name: altName, weight: r.weight || ex.weight, reps: r.reps || ex.reps };
 }
 export const fitWorkout = (workout, ctx) => workout && { ...workout, exercises: (workout.exercises || []).map(e => applyFit(e, ctx)) };

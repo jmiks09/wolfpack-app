@@ -5,7 +5,7 @@ import { MemberCard } from "./MemberCard";
 import { MyWeekStrip } from "./MyWeekStrip";
 import { PackGoals } from "./PackGoals";
 
-export function PackTab({sinceFor,currentUser,members,profiles,history,sharedData,onLogWorkout,onOpenAITrainer,onOpenNutrition,onOpenMealScanner,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,onOpenMember,reactions,onReact,weeklyRecap,onDismissRecap}){
+export function PackTab({sinceFor,currentUser,members,profiles,history,sharedData,onLogWorkout,onOpenAITrainer,onOpenNutrition,onEditWorkout,adminName,onOpenAdmin,packGoals,onAddGoal,onCheer,onDeleteGoal,onOpenProfile,onOpenMember,reactions,onReact,weeklyRecap,onDismissRecap}){
   const key=todayStr(),td=sharedData[key]||{},my=td[currentUser],str=getStreak(history,currentUser,profiles[currentUser]),tot=getTotalWorkouts(history,currentUser,sinceFor?.(currentUser)),we=isRestDay(key,profiles[currentUser]);
   const sorted=[...members].sort((a,b)=>{const sa=getStreak(history,a,profiles[a]),sb=getStreak(history,b,profiles[b]);if(sb!==sa)return sb-sa;return b===currentUser?1:a===currentUser?-1:0;});
 
@@ -74,7 +74,7 @@ export function PackTab({sinceFor,currentUser,members,profiles,history,sharedDat
 
       {/* ── AI TOOLS ROW — compact icon buttons ── */}
       <div style={{padding:"0 16px 10px"}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {/* WOLFMODE */}
           <button onClick={onOpenAITrainer} style={{
             padding:"10px 8px",borderRadius:14,cursor:"pointer",textAlign:"center",
@@ -101,16 +101,6 @@ export function PackTab({sinceFor,currentUser,members,profiles,history,sharedDat
             </div>
           </button>
 
-          {/* MEAL SCANNER */}
-          <button onClick={onOpenMealScanner} style={{
-            padding:"10px 8px",borderRadius:14,cursor:"pointer",textAlign:"center",
-            background:"rgba(255,107,53,0.06)",
-            border:"1px solid rgba(255,107,53,0.15)",
-          }}>
-            <div style={{fontSize:22,marginBottom:3}}>📷</div>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:11,letterSpacing:1.5,color:"#ff6b35"}}>MEAL SCAN</div>
-            <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:1}}>Snap & estimate</div>
-          </button>
         </div>
       </div>
 

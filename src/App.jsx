@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AITrainerModal } from "./ai/AITrainerModal";
 import { CoachPlanModal } from "./ai/CoachPlanModal";
-import { MealScannerModal } from "./ai/MealScannerModal";
 import { AvatarDisplay } from "./components/AvatarDisplay";
 import { NotifBanner } from "./components/NotifBanner";
 import { Toast } from "./components/Toast";
@@ -127,7 +126,6 @@ useEffect(()=>{
   const [aiTrainerOpen,setAiTrainerOpen]=useState(false);
   const [teammateOpen,setTeammateOpen]=useState(null); // name of the teammate whose profile is open
   const [nutritionOpen,setNutritionOpen]=useState(false);
-  const [mealScannerOpen,setMealScannerOpen]=useState(false);
   const [pendingEffortRating,setPendingEffortRating]=useState(null);
   const [activeWorkoutRefresh,setActiveWorkoutRefresh]=useState(0);
   const [toast,setToast]=useState("");
@@ -908,7 +906,7 @@ useEffect(()=>{
             {habitList.filter(c=>c.participants?.[currentUser]&&!c.participants[currentUser].leftAt&&c.start<=todayStr()&&todayStr()<=c.end).map(c=>(
               <HabitTodayCard key={c.id} challenge={c} log={habitLogs[c.id]} history={history} currentUser={currentUser} today={todayStr()} onLog={handleHabitLog} onSetGoalWeight={handleGoalWeight} onLogWorkout={d=>{setWorkoutDate(d&&d!==todayStr()?d:null);setWorkoutOpen(true);}} onSavePersonal={handleSavePersonal} onDeletePersonal={handleDeletePersonal} onUsePass={handleUsePass}/>
             ))}
-            <PackTab sinceFor={sinceFor} currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onOpenMealScanner={()=>setMealScannerOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} onOpenMember={setTeammateOpen} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
+            <PackTab sinceFor={sinceFor} currentUser={currentUser} members={members} profiles={profiles} history={history} sharedData={sharedData} onLogWorkout={()=>setWorkoutOpen(true)} onOpenAITrainer={()=>setAiTrainerOpen(true)} onOpenNutrition={()=>setNutritionOpen(true)} onEditWorkout={()=>setEditWorkout({date:todayStr(),entry:sharedData[todayStr()]?.[currentUser]||{}})} adminName={adminName} onOpenAdmin={()=>setAdminOpen(true)} packGoals={packGoals} onAddGoal={handleAddPackGoal} onCheer={handleCheerGoal} onDeleteGoal={handleDeletePackGoal} onOpenProfile={()=>setProfileOpen(true)} onOpenMember={setTeammateOpen} reactions={reactions} onReact={handleReact} weeklyRecap={weeklyRecap} onDismissRecap={()=>setWeeklyRecap(r=>r?{...r,dismissed:true}:null)}/>
           </>
         )}
         {view==="feed"&&<ChatTab groupName={group.name} messages={chatMessages} currentUser={currentUser} profiles={profiles} today={todayStr()} dividerTs={chatDivider}
@@ -966,8 +964,7 @@ useEffect(()=>{
         setAiTrainerOpen(workoutFromHistory(entry,date,{from:teammateOpen,myLog}));
       }}/>}
       {aiTrainerOpen&&<AITrainerModal currentUser={currentUser} profile={profiles[currentUser]} history={history} packHomeGym={garageEquipment} userFavorites={userFavorites} onFavoritesChange={setUserFavorites} onClose={()=>{setAiTrainerOpen(false);setActiveWorkoutRefresh(r=>r+1);if(!profiles[currentUser]?.aiTrainer?.goal||!profiles[currentUser]?.aiTrainer?.experience){setProfileOpen(true);}}} onUseWorkout={()=>{setActiveWorkoutRefresh(r=>r+1);setView("pack");}} showToast={showToast} initial={typeof aiTrainerOpen==="object"?aiTrainerOpen:null}/>}
-      {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onDeletePlan={async()=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:null}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});setNutritionOpen(false);}} onClose={()=>setNutritionOpen(false)} onOpenScanner={()=>{setNutritionOpen(false);setMealScannerOpen(true);}}/>}
-      {mealScannerOpen&&<MealScannerModal currentUser={currentUser} onClose={()=>setMealScannerOpen(false)}/>}
+      {nutritionOpen&&<CoachPlanModal currentUser={currentUser} profile={profiles[currentUser]} coach={profiles[currentUser]?.aiTrainer?.coach||{}} onPlanGenerated={async(plan)=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:{...plan,generatedAt:Date.now()}}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});}} onDeletePlan={async()=>{const p=profiles[currentUser];const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),lastPlan:null}}};await fsSet("wolfpack/profiles",{users:{...profiles,[currentUser]:updated}});setNutritionOpen(false);}} onClose={()=>setNutritionOpen(false)}/>}
       {pendingEffortRating&&<EffortRatingModal exercises={pendingEffortRating.exercises} prelogged={pendingEffortRating.prelogged} minutes={pendingEffortRating.minutes} muscleGroup={pendingEffortRating.muscleGroup} currentUser={currentUser} onRate={async(effortId,logged,mins)=>{
         setPendingEffortRating(null);
         const effort=EFFORT_RATINGS.find(r=>r.id===effortId);

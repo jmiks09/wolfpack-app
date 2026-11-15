@@ -17,9 +17,25 @@
 export const MUSCLES = {
   chest: "Chest", back: "Back", shoulders: "Shoulders", biceps: "Biceps", triceps: "Triceps",
   quads: "Quads", hamstrings: "Hamstrings", glutes: "Glutes", calves: "Calves", core: "Core",
+  forearms: "Forearms",
 };
 
 const RAW = [
+  // ── FOREARMS & GRIP ──
+  ["Dumbbell Wrist Curl", "forearms", "wrist-flexion", ["db"], { needs: ["bench"], avoid: ["wrist"] }],
+  ["Barbell Wrist Curl", "forearms", "wrist-flexion-bb", ["bb"], { needs: ["bench"], avoid: ["wrist"] }],
+  ["Behind-the-Back Barbell Wrist Curl", "forearms", "wrist-flexion-btb", ["bb"], { avoid: ["wrist"] }],
+  ["Dumbbell Reverse Wrist Curl", "forearms", "wrist-extension", ["db"], { needs: ["bench"], avoid: ["wrist"] }],
+  ["Band Wrist Extension", "forearms", "wrist-extension-band", ["band"], { avoid: ["wrist"] }],
+  ["Reverse Barbell Curl", "forearms", "reverse-curl", ["bb"], { avoid: ["wrist", "elbow"] }],
+  ["Reverse Dumbbell Curl", "forearms", "reverse-curl-db", ["db"], { avoid: ["wrist", "elbow"] }],
+  ["Dumbbell Wrist Rotations", "forearms", "wrist-rotation", ["db"], { avoid: ["wrist"] }],
+  ["Plate Pinch Hold", "forearms", "pinch", ["bb"], {}],
+  ["Farmer's Hold", "forearms", "grip-hold", ["db", "kb", "bb"], { pair: true }],
+  ["Dead Hang", "forearms", "hang", ["bw"], { needs: ["pullupbar"], avoid: ["shoulder"] }],
+  ["Towel Dead Hang", "forearms", "hang-towel", ["bw"], { needs: ["pullupbar"], avoid: ["shoulder", "elbow"] }],
+  ["Fingertip Squeeze Hold (Band)", "forearms", "finger-extension", ["band"], {}],
+
   // ── CHEST ──
   ["Barbell Bench Press", "chest", "press-flat", ["bb"], { needs: ["bench"], avoid: ["shoulder", "wrist"], c: true }],
   ["Incline Barbell Bench Press", "chest", "press-incline", ["bb"], { needs: ["bench"], avoid: ["shoulder", "wrist"], c: true }],
@@ -116,7 +132,6 @@ const RAW = [
   ["Cable Curl", "biceps", "curl", ["cable"], { avoid: ["elbow"] }],
   ["Rope Hammer Curl", "biceps", "hammer-curl", ["cable"], {}],
   ["Bayesian Cable Curl", "biceps", "curl-stretch", ["cable"], { avoid: ["elbow", "shoulder"] }],
-  ["Reverse Barbell Curl", "biceps", "reverse-curl", ["bb"], { avoid: ["wrist", "elbow"] }],
   ["Zottman Curl", "biceps", "reverse-curl", ["db"], { avoid: ["wrist", "elbow"] }],
   ["Band Curl", "biceps", "curl", ["band"], {}],
   ["Cross-Body Hammer Curl", "biceps", "hammer-curl-cross", ["db"], {}],
@@ -246,6 +261,7 @@ const RAW = [
 // hinge, every curl...). A workout uses one per family whenever it can.
 const FAMILIES = [
   [/^press-(flat|squeeze|decline)$/, "press-flat"], [/^press-incline$/, "press-incline"],
+  [/^wrist-flexion/, "wrist-flexion"], [/^wrist-extension/, "wrist-extension"], [/^reverse-curl/, "reverse-curl"], [/^hang/, "hang"],
   [/^fly/, "fly"], [/^pushup/, "pushup"], [/^dip/, "dip"],
   [/^vertical-pull/, "vertical-pull"], [/^row-inverted-underhand$/, "row"], [/^row/, "row"],
   [/^upper-back/, "upper-back"], [/^(back-extension|reverse-hyper)/, "back-extension"],
@@ -447,6 +463,7 @@ export const styleWithin = (style, options) => styleKey(styleIds(style).filter(i
 // What people pick in the coach (tap muscles on the body map, several allowed).
 export const TARGETS = Object.entries(MUSCLES).map(([id, label]) => ({ id, label, muscles: [id] }));
 const ALL_TARGETS = TARGETS.map(t => t.id);
+const FULL_BODY = ALL_TARGETS.filter(m => m !== "forearms"); // full body skips grip work
 // Older saved workouts used "legs" for quads + hamstrings + calves.
 const ALIASES = { legs: ["quads", "hamstrings", "calves"] };
 export const QUICK_PICKS = [
@@ -454,9 +471,9 @@ export const QUICK_PICKS = [
   { id: "lower",    label: "Lower body", targets: ["quads", "hamstrings", "glutes", "calves"] },
   { id: "push",     label: "Push",       targets: ["chest", "shoulders", "triceps"] },
   { id: "pull",     label: "Pull",       targets: ["back", "biceps"] },
-  { id: "arms",     label: "Arms",       targets: ["biceps", "triceps"] },
+  { id: "arms",     label: "Arms",       targets: ["biceps", "triceps", "forearms"] },
   { id: "legs",     label: "Legs",       targets: ALIASES.legs },
-  { id: "fullbody", label: "Full body",  targets: ALL_TARGETS },
+  { id: "fullbody", label: "Full body",  targets: FULL_BODY },
 ];
 const NAMED = {
   upper: "Upper Body", lower: "Lower Body", push: "Push", pull: "Pull", arms: "Arms", legs: "Legs", fullbody: "Full Body",

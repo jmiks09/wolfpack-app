@@ -12,17 +12,18 @@ export const MUSCLE_PARTS = {
   glutes: ["gluteal"],
   calves: ["calves", "tibialis"],
   core: ["abs", "obliques"],
+  forearms: ["forearm"],
 };
-// Drawing part → app muscle (forearms count as arms → biceps).
+// Drawing part → app muscle.
 export const PART_TO_MUSCLE = Object.fromEntries(
-  Object.entries(MUSCLE_PARTS).flatMap(([m, parts]) => parts.map(p => [p, m])).concat([["forearm", "biceps"]])
+  Object.entries(MUSCLE_PARTS).flatMap(([m, parts]) => parts.map(p => [p, m]))
 );
 export const DECOR = ["head", "hair", "neck", "hands", "feet", "knees", "ankles"];
 
 // Free-text muscle names (e.g. from older workouts: "Rear delts", "Lats") → app muscles.
 const WORDS = [
   ["chest", ["chest", "pec"]], ["back", ["back", "lat", "trap", "rhomboid"]],
-  ["shoulders", ["shoulder", "delt"]], ["biceps", ["bicep", "forearm", "brachi"]], ["triceps", ["tricep"]],
+  ["shoulders", ["shoulder", "delt"]], ["forearms", ["forearm", "grip", "wrist"]], ["biceps", ["bicep", "brachi"]], ["triceps", ["tricep"]],
   ["quads", ["quad", "thigh", "leg"]], ["hamstrings", ["hamstring"]], ["glutes", ["glute", "hip", "butt"]],
   ["calves", ["calf", "calves", "tibialis"]], ["core", ["core", "abs", "abdom", "oblique"]],
 ];
