@@ -162,10 +162,11 @@ export const WHATS_NEW_FALLBACK = {
   ],
 };
 
-// Release notes built into the app. Shown once to everyone after an update,
-// separately from the admin's What's New (so neither hides the other).
-// Change the version to show a new set of notes.
-export const APP_RELEASE = {
+// Release notes / announcements built into the app, newest first. Each person
+// sees, once, everything newer than the last one they dismissed — separately
+// from the admin's What's New (so neither hides the other). Add a new entry
+// at the top to announce something.
+export const COACH_FEATURES_RELEASE = {
   version:"2026-11-coach",
   items:[
     {icon:"🧠", title:"A smarter coach", desc:"WOLFMODE now always respects your injuries, never gives you two near-identical exercises, and swaps actually give you something new."},
@@ -177,5 +178,25 @@ export const APP_RELEASE = {
     {icon:"👀", title:"Try a teammate's workout", desc:"Tap a teammate's picture on the Pack tab to see their last 7 days and try any workout with your own weights."},
   ],
 };
+export const APP_RELEASES = [
+  {
+    version:"2026-11-coach-save-fix",
+    title:"COACH FIX",
+    subtitle:"PLEASE READ — ONE QUICK STEP",
+    items:[
+      {icon:"🐺", title:"Your WOLF settings now save", desc:"The 🔥 WOLF tab in your profile wasn't actually saving your injuries, goal and experience. You may have noticed the coach kept ignoring them. It's fixed now! Open your profile → 🔥 WOLF, re-enter your settings, and tap Save once. After that the coach will remember them."},
+    ],
+  },
+  COACH_FEATURES_RELEASE,
+];
+// What to show this person: every release newer than the last one they saw.
+export function pendingRelease(seenVersion){
+  const idx=APP_RELEASES.findIndex(r=>r.version===seenVersion);
+  const fresh=idx<0?APP_RELEASES:APP_RELEASES.slice(0,idx);
+  if(!fresh.length)return null;
+  const one=fresh.length===1; // several at once → plain "What's New" header
+  return {version:APP_RELEASES[0].version,title:one?fresh[0].title:null,subtitle:one?fresh[0].subtitle:null,items:fresh.flatMap(r=>r.items)};
+}
+
 
 export const NAV=[{id:"pack",icon:null,label:"PACK"},{id:"feed",icon:"💬",label:"CHAT"},{id:"gym",icon:"🏋️",label:"GYM"},{id:"challenges",icon:"⚔️",label:"CHALLENGES"},{id:"stats",icon:"📊",label:"STATS"}];

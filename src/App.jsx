@@ -12,7 +12,7 @@ import { LEGACY_GROUP_ID, REGISTRY_PATH, clearSession, ensureLegacyGroup, findGr
 import { dismissActiveWorkout } from "./lib/activeWorkout";
 import { EFFORT_RATINGS, HOME_GYM_DEFAULT } from "./lib/aiConfig";
 import { muscleKeyLabel } from "./lib/exerciseLibrary";
-import { APP_RELEASE, MILESTONES, NAV, SESSION_MILESTONES, WHATS_NEW_FALLBACK } from "./lib/constants";
+import { MILESTONES, pendingRelease, NAV, SESSION_MILESTONES, WHATS_NEW_FALLBACK } from "./lib/constants";
 import { fmtDate, getDateRange, localDateStr, todayStr } from "./lib/dates";
 import { getFavorites, getFavoritesFS } from "./lib/favorites";
 import { slotOverlaps } from "./lib/gym";
@@ -85,8 +85,8 @@ export default function App(){
   const [whatsNewData,setWhatsNewData]=useState(null);
   const [whatsNewOpen,setWhatsNewOpen]=useState(false);
   // Built-in release notes come first; the admin's What's New (if unseen) after.
-  const [releaseOpen,setReleaseOpen]=useState(()=>{try{return localStorage.getItem("wp_seen_release")!==APP_RELEASE.version;}catch{return false;}});
-  const dismissRelease=()=>{try{localStorage.setItem("wp_seen_release",APP_RELEASE.version);}catch{/* ignore */}setReleaseOpen(false);};
+  const [release,setRelease]=useState(()=>{try{return pendingRelease(localStorage.getItem("wp_seen_release"));}catch{return null;}});
+  const dismissRelease=()=>{try{localStorage.setItem("wp_seen_release",release.version);}catch{/* ignore */}setRelease(null);};
   const dismissWhatsNew=()=>{
     try{localStorage.setItem("wp_seen_version",(whatsNewData||WHATS_NEW_FALLBACK).version);}catch{}
     setWhatsNewOpen(false);
@@ -986,7 +986,7 @@ useEffect(()=>{
       }} onClose={()=>setPendingEffortRating(null)}/>}
       {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {editCompletedWorkout&&<EditCompletedWorkoutModal date={editCompletedWorkout.date} entry={editCompletedWorkout.entry} currentUser={currentUser} onSave={handleSaveEditedExercises} onClose={()=>setEditCompletedWorkout(null)}/>}
-      {releaseOpen?<WhatsNewModal onClose={dismissRelease} whatsNewData={APP_RELEASE}/>
+      {release?<WhatsNewModal onClose={dismissRelease} whatsNewData={release}/>
         :whatsNewOpen&&<WhatsNewModal onClose={dismissWhatsNew} whatsNewData={whatsNewData||WHATS_NEW_FALLBACK}/>}
       {profileOpen&&<ProfileModal currentUser={currentUser} profile={profiles[currentUser]} profiles={profiles} history={history} challenges={challenges} onClose={()=>setProfileOpen(false)} onSaveWeight={handleSaveWeight} onSaveGoal={handleSaveGoal} onChangePin={handleChangePin} onChangeName={handleChangeName} onSaveProfile={np=>setProfiles(np)}/>}
       {legacyFeedOpen&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setLegacyFeedOpen(false)}>

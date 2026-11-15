@@ -9,8 +9,8 @@ export function WhatsNewModal({onClose, whatsNewData}){
         <div className="modal-handle"/>
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{display:"flex",justifyContent:"center",marginBottom:6}}><WolfIcon size={48}/></div>
-          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WHAT'S NEW</div>
-          <div style={{fontSize:11,color:"var(--muted)",marginTop:2,letterSpacing:1}}>LATEST WOLFPACK UPDATES</div>
+          <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,background:"linear-gradient(90deg,#ff6b35,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>{data.title||"WHAT'S NEW"}</div>
+          <div style={{fontSize:11,color:"var(--muted)",marginTop:2,letterSpacing:1}}>{data.subtitle||"LATEST WOLFPACK UPDATES"}</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:18}}>
           {(data.items||[]).map((item,i)=>(
