@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { ExerciseCard } from "../ai/ExerciseCard";
 import { getActiveWorkout, updateActiveWorkout } from "../lib/activeWorkout";
-import { setProgress } from "../lib/setLog";
+import { altVersions, switchVersion } from "../lib/coachPicker";
+import { parseWeight, setProgress, setsOf } from "../lib/setLog";
 import { SetTracker } from "./SetTracker";
 import { muscleKeyLabel } from "../lib/exerciseLibrary";
 import { removeFavoriteFS, saveFavoriteFS } from "../lib/favorites";
@@ -47,6 +48,19 @@ export function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismis
     setData(updated);
   };
   const progress=setProgress(workout.exercises);
+  // Kettlebell ↔ dumbbell version of the same move; sets not done yet take the new weight
+  const gearSet=Array.isArray(workout.gearList)?new Set(workout.gearList):null;
+  const switchExercise=(i,altName)=>{
+    const exercises=workout.exercises.map((e,j)=>{
+      if(j!==i)return e;
+      const next=switchVersion(e,altName,{loads:workout.loads||{}});
+      const w=parseWeight(next.weight);
+      return {...next,log:setsOf(e).map(s=>s.done?s:{...s,weight:w})};
+    });
+    const updated={...data,workout:{...workout,exercises}};
+    updateActiveWorkout(currentUser,targetDate,updated);
+    setData(updated);
+  };
 
   const toggleFavorite=async(e)=>{
     e.stopPropagation();
@@ -159,6 +173,8 @@ export function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismis
               experience={experience}
               injuries={injuries}
               idx={i}
+              alts={isToday&&!completed?altVersions(ex.name,{gear:gearSet}):null}
+              onSwitch={switchExercise}
             >
               {isToday&&<SetTracker exercise={ex} readOnly={completed} onChange={log=>saveSets(i,log)}/>}
             </ExerciseCard>

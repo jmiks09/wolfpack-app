@@ -207,7 +207,10 @@ html, body, #root {
   font-size: 14px;
   letter-spacing: 1.5px;
   z-index: 9999;
-  white-space: nowrap;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  line-height: 1.25;
   box-shadow: 0 8px 32px rgba(124,92,191,0.4);
   animation: toastIn 0.2s ease;
 }

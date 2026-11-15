@@ -8,7 +8,7 @@ import { buildPriorPerformanceString, getTrainingLog } from "../lib/trainingLog"
 import { ExerciseCard } from "./ExerciseCard";
 import { BodyMap } from "../components/BodyMap";
 import { MUSCLES, QUICK_PICKS, availableGear, availableLoads, muscleKey, muscleKeyIcon, muscleKeyLabel, styleIds, styleLabelOf, styleWithin, stylesFor, targetsFromKey, toggleStyle } from "../lib/exerciseLibrary";
-import { INTENSITIES, buildPlan, estimateMinutes, exerciseFromLibrary, fitWorkout, intensityPrompt, loadSeen, loadsPrompt, mergeWithAI, musclesFor, pickSwap, recentLogged, rememberSeen, rulesSummary } from "../lib/coachPicker";
+import { INTENSITIES, altVersions, buildPlan, switchVersion, estimateMinutes, exerciseFromLibrary, fitWorkout, intensityPrompt, loadSeen, loadsPrompt, mergeWithAI, musclesFor, pickSwap, recentLogged, rememberSeen, rulesSummary } from "../lib/coachPicker";
 
 // ── AI TRAINER MODAL ────────────────────────────────────────────────────────
 
@@ -221,11 +221,14 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
       :`🔄 Swapped ${exercise.name} → ${pick.name}`);
   };
 
+  const handleSwitchVersion=(idx,altName)=>{
+    setWorkout(w=>({...w,exercises:w.exercises.map((e,i)=>i===idx?switchVersion(e,altName,{loads}):e)}));
+  };
   const handleUseWorkout=()=>{
     if(!workout)return;
     const mg=muscleGroup||"fullbody";
     const finalMinutes=customDuration!==null?Number(customDuration):workout.estimatedMinutes;
-    saveActiveWorkout(currentUser,{...workout,estimatedMinutes:finalMinutes},mg,"today");
+    saveActiveWorkout(currentUser,{...workout,estimatedMinutes:finalMinutes,gearList:[...gear],loads},mg,"today");
     showToast("🔥 Workout saved! Find it on the Pack tab.");
     onUseWorkout&&onUseWorkout();onClose();
   };
@@ -456,7 +459,7 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
               {planNote&&<div style={{fontSize:11,color:"var(--muted)",lineHeight:1.5}}>{planNote}</div>}
             </div>}
             {workout.exercises?.map((ex,i)=>(
-              <ExerciseCard key={i} exercise={ex} userName={currentUser} experience={experience} injuries={injuries} idx={i} onSwap={handleSwapExercise} swapping={swappingIdx===i}/>
+              <ExerciseCard key={i} exercise={ex} userName={currentUser} experience={experience} injuries={injuries} idx={i} onSwap={handleSwapExercise} swapping={swappingIdx===i} alts={altVersions(ex.name,{gear})} onSwitch={handleSwitchVersion}/>
             ))}
             <div style={{display:"flex",gap:8,marginTop:12}}>
               <button className="btn-primary" onClick={handleUseWorkout} style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>

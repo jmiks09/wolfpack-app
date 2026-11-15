@@ -6,7 +6,7 @@ import { findExercise } from "../lib/coachPicker";
 import { MUSCLES } from "../lib/exerciseLibrary";
 
 // ── AI TRAINER — exercise card (form cues + GIF) ─────────────────────────────
-export function ExerciseCard({exercise, userName, experience, injuries, idx, onSwap, swapping, children}){
+export function ExerciseCard({exercise, userName, experience, injuries, idx, onSwap, swapping, children, alts, onSwitch}){
   const [expanded,setExpanded]=useState(false);
   const [cues,setCues]=useState(null);
   const [cuesLoading,setCuesLoading]=useState(false);
@@ -58,6 +58,12 @@ export function ExerciseCard({exercise, userName, experience, injuries, idx, onS
               <span style={{padding:"1px 7px",borderRadius:10,fontSize:10,background:"rgba(255,107,53,0.12)",border:"1px solid rgba(255,107,53,0.25)",color:"#ff6b35"}}>{muscleLabel}</span>
             )}
           </div>
+          {onSwitch&&alts?.map(a=>(
+            <button key={a.name} onClick={e=>{e.stopPropagation();onSwitch(idx,a.name);}} aria-label={`Use ${a.label} instead`}
+              style={{marginTop:6,padding:"3px 10px",borderRadius:12,fontSize:11,cursor:"pointer",background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.35)",color:"#c084fc"}}>
+              {a.icon} Use {a.label} instead
+            </button>
+          ))}
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
           {/* Swap button — only show if onSwap provided and not a core lift */}

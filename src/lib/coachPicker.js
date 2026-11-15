@@ -233,6 +233,26 @@ export function loadsPrompt(loads = {}) {
   if (loads.bb) parts.push(`barbell loads ONLY ${loads.bb.join(", ")} lbs (total incl. bar)`);
   return parts.length ? ` Available weights: ${parts.join("; ")}. Only prescribe these exact weights — never in-between numbers like 17.5. If an exercise needs more than the heaviest, use the heaviest and add reps.` : "";
 }
+// Same move with the other implement ("Dumbbell Swing" ↔ "Kettlebell Swing"),
+// if this gym can do it. gear = Set, or null when unknown (allow all).
+const IMPL = { Dumbbell: { g: "db", icon: "💪", label: "dumbbell" }, Kettlebell: { g: "kb", icon: "🔔", label: "kettlebell" } };
+export function altVersions(name, { gear = null } = {}) {
+  const m = String(name || "").match(/^(Dumbbell|Kettlebell) (.+)$/);
+  if (!m) return [];
+  const lib = findExercise(name);
+  return Object.entries(IMPL).filter(([k]) => k !== m[1]).map(([k, v]) => {
+    const alt = EXERCISES.find(e => e.name === `${k} ${m[2]}` && (!lib || e.pattern === lib.pattern));
+    if (!alt) return null;
+    const ok = !gear || (gear.has(v.g) && !(v.g === "kb" && alt.pair && !gear.has("kb2")));
+    return ok ? { name: alt.name, icon: v.icon, label: v.label } : null;
+  }).filter(Boolean);
+}
+// Switch an exercise to its other version; weight re-fit to what you own.
+export function switchVersion(ex, altName, { loads = {} } = {}) {
+  const n = parseFloat(String(ex.weight || "").match(/\d+(?:\.\d+)?/)?.[0]);
+  const r = fitWeight(isNaN(n) ? "" : `${n} lbs`, ex.reps, implementOf(altName), loads);
+  return { ...ex, name: altName, weight: r.weight || ex.weight, reps: r.reps || ex.reps };
+}
 export const fitWorkout = (workout, ctx) => workout && { ...workout, exercises: (workout.exercises || []).map(e => applyFit(e, ctx)) };
 function applyFit(ex, ctx) {
   if (!ctx?.loads && !ctx?.gear) return ex;
