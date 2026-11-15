@@ -7,7 +7,17 @@ import { fmtDate } from "../lib/dates";
 
 // ── ADMIN PANEL ───────────────────────────────────────────────────────────────
 // Reset PIN = clears their PIN from Firestore. They can log in freely until they set a new one.
-export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteAccount,onAdminBackfill,onClose,garageEquipment,onSaveGarageEquipment,showToast,history,group,isOwner,onUpdateGroup,onNewInviteCode}){
+export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,onDeleteAccount,onAdminBackfill,onClose,garageEquipment,onSaveGarageEquipment,showToast,history,group,isOwner,onUpdateGroup,onNewInviteCode,onResetCoachLimit}){
+  const [limitBusy,setLimitBusy]=useState(null);
+  const [limitDone,setLimitDone]=useState({});
+  const resetLimit=async(names)=>{
+    setLimitBusy(names.length>1?"all":names[0]);
+    let ok=true;
+    for(const n of names){try{ok=(await onResetCoachLimit(n))&&ok;}catch{ok=false;}}
+    setLimitDone(d=>({...d,...Object.fromEntries(names.map(n=>[n,true]))}));
+    setLimitBusy(null);
+    showToast?.(ok?`🔄 Coach limit reset for ${names.length>1?"everyone":names[0]===currentUser?"you":names[0]}`:"⚠️ Reset partly failed — try again");
+  };
   const [groupName,setGroupName]=useState(group?.name||"");
   const [confirmDel,setConfirmDel]=useState(null);
   const [busy,setBusy]=useState(null);
@@ -289,12 +299,22 @@ export function AdminPanel({members,profiles,currentUser,adminName,onResetPin,on
         <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid var(--border)"}}>
           <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:14,letterSpacing:2,color:"var(--accent2)",marginBottom:10}}>🛠️ ADMIN TOOLS</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            <button className="btn-ghost" onClick={()=>{
-              Object.keys(localStorage).filter(k=>k.startsWith("wp_regen")).forEach(k=>localStorage.removeItem(k));
-              alert("✅ All regens reset for everyone!");
-            }} style={{justifyContent:"flex-start",fontSize:12,padding:"10px 12px"}}>
-              🔄 Reset all WOLFMODE regens
-            </button>
+            {/* Coach daily limit — per person, including you */}
+            <div style={{padding:"10px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12}}>
+              <div style={{fontSize:13,marginBottom:2}}>🔄 Reset coach daily limit</div>
+              <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>Gives someone their workouts and regens back for today. Takes effect next time they open the coach.</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {[currentUser,...members.filter(m=>m!==currentUser)].map(m=>(
+                  <button key={m} onClick={()=>resetLimit([m])} disabled={!!limitBusy} aria-label={`Reset coach limit for ${m}`}
+                    style={{padding:"6px 10px",borderRadius:16,fontSize:12,cursor:"pointer",background:limitDone[m]?"rgba(46,204,113,0.15)":"rgba(255,255,255,0.05)",border:`1px solid ${limitDone[m]?"rgba(46,204,113,0.4)":"var(--border)"}`,color:limitDone[m]?"var(--green)":"#fff"}}>
+                    {limitBusy===m?"…":limitDone[m]?"✓ ":""}{m}{m===currentUser?" (you)":""}
+                  </button>
+                ))}
+              </div>
+              <button className="btn-ghost" onClick={()=>resetLimit(members)} disabled={!!limitBusy} style={{width:"100%",marginTop:8,fontSize:12,padding:"8px"}}>
+                {limitBusy==="all"?"Resetting…":"Reset everyone"}
+              </button>
+            </div>
             <button className="btn-ghost" onClick={()=>{
               Object.keys(localStorage).filter(k=>k.startsWith("wp_active")).forEach(k=>localStorage.removeItem(k));
               alert("✅ All active workouts cleared!");

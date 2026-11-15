@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
-import { aiGenerateWorkout } from "../firebase";
+import { useEffect, useMemo, useState } from "react";
+import { aiGenerateWorkout, fsGet } from "../firebase";
 import { saveActiveWorkout } from "../lib/activeWorkout";
 import { AI_EQUIPMENT_PRESETS, AI_GOALS, AI_SECONDARY_GOALS, MAX_DAILY_REGENS } from "../lib/aiConfig";
-import { buildEquipmentString, bumpRegenCount, getLastWorkoutForMuscle, getRecentHistoryString, getRegenCount } from "../lib/aiHelpers";
+import { applyCoachReset, buildEquipmentString, bumpRegenCount, getLastWorkoutForMuscle, getRecentHistoryString, getRegenCount } from "../lib/aiHelpers";
 import { removeFavoriteFS } from "../lib/favorites";
 import { buildPriorPerformanceString, getTrainingLog } from "../lib/trainingLog";
 import { ExerciseCard } from "./ExerciseCard";
@@ -21,6 +21,8 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
   const [workout,setWorkout]=useState(initial?.workout||null);
   const [error,setError]=useState(null);
   const [regenCount,setRegenCount]=useState(getRegenCount(currentUser));
+  // Pick up an admin's reset of this person's daily limit
+  useEffect(()=>{fsGet("wolfpack/coach_resets").then(r=>{if(applyCoachReset(r,currentUser))setRegenCount(0);}).catch(()=>{});},[currentUser]);
   const [targets,setTargets]=useState(()=>initial?.muscleGroup?targetsFromKey(initial.muscleGroup):[]); // picker ids, several allowed
   const muscleGroup=muscleKey(targets);     // saved id, e.g. "upper" or "biceps+shoulders"
   const setMuscleGroup=key=>setTargets(targetsFromKey(key));

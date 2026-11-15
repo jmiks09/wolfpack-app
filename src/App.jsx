@@ -40,6 +40,7 @@ import { EditWorkoutModal } from "./workouts/EditWorkoutModal";
 import { EffortRatingModal } from "./workouts/EffortRatingModal";
 import { anySetDone, buildPrelogged, workoutSummary } from "./lib/setLog";
 import { workoutFromHistory } from "./lib/repeatWorkout";
+import { resetCoachLimit } from "./lib/aiHelpers";
 import { withWolfmodeMinutes } from "./lib/workoutEntry";
 import { getTrainingLog } from "./lib/trainingLog";
 import { TeammateProfile } from "./tabs/pack/TeammateProfile";
@@ -1001,7 +1002,7 @@ useEffect(()=>{
       {habitBuilder&&<HabitBuilder existing={habitBuilder==="new"?null:habitChallenges[habitBuilder]} members={members} profiles={profiles} currentUser={currentUser} today={todayStr()} onSave={handleSaveHabitChallenge} onDelete={handleDeleteHabitChallenge} onClose={()=>setHabitBuilder(null)}/>}
       {groupSheetOpen&&<GroupSheet currentUser={currentUser} group={group} myGroups={myGroups} onSwitch={gid=>openGroup(gid)} onJoinOrCreate={()=>{setGroupSheetOpen(false);setGroupGateMode("choose");}} onSignOut={handleSignOut} onClose={()=>setGroupSheetOpen(false)}/>}
       {groupGateMode&&<GroupGate user={currentUser} myGroups={myGroups} startMode={groupGateMode} onPick={gid=>openGroup(gid)} onJoin={handleJoinGroup} onCreate={handleCreateGroup} onSignOut={handleSignOut} onCancel={()=>setGroupGateMode(null)}/>}
-      {adminOpen&&<AdminPanel showToast={showToast} history={history} group={group} isOwner={groups[LEGACY_GROUP_ID]?.admin===currentUser} onUpdateGroup={handleUpdateGroup} onNewInviteCode={handleNewInviteCode} members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet(gp("settings"),{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
+      {adminOpen&&<AdminPanel showToast={showToast} history={history} group={group} isOwner={groups[LEGACY_GROUP_ID]?.admin===currentUser} onUpdateGroup={handleUpdateGroup} onNewInviteCode={handleNewInviteCode} onResetCoachLimit={n=>resetCoachLimit(fsSet,n)} members={members} profiles={profiles} currentUser={currentUser} adminName={adminName} onResetPin={handleResetPin} onDeleteAccount={handleDeleteAccount} onAdminBackfill={handleAdminBackfill} onClose={()=>setAdminOpen(false)} garageEquipment={garageEquipment} onSaveGarageEquipment={async(list)=>{await fsSet(gp("settings"),{garageEquipment:list});setGarageEquipment(list);showToast("🏠 Garage gym updated!");}}/>}
     </div>
   );
 }
