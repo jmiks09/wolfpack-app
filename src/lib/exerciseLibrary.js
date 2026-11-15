@@ -192,6 +192,16 @@ const RAW = [
   ["Nordic Curl", "hamstrings", "nordic", ["bw"], { avoid: ["knee"] }],
   ["Cable Pull-Through", "hamstrings", "hinge-cable", ["cable"], { avoid: ["back"] }],
   ["Kettlebell Deadlift", "hamstrings", "hinge-kb", ["kb", "db"], { avoid: ["back", "deadlift"] }],
+  // Back-friendly hamstring work (no hinging under load)
+  ["Heels-Elevated Hamstring Bridge", "hamstrings", "bridge-ham", ["bw", "db"], { needs: ["bench"] }],
+  ["Single-Leg Hamstring Bridge", "hamstrings", "bridge-ham-single", ["bw"], { needs: ["bench"] }],
+  ["Isometric Hamstring Bridge Hold", "hamstrings", "bridge-ham-iso", ["bw"], {}],
+  ["Hamstring Bridge Walkout", "hamstrings", "ham-walkout", ["bw"], {}],
+  ["Hamstring-Biased Hip Thrust", "hamstrings", "thrust-ham", ["bb", "db"], { needs: ["bench"] }],
+  ["Stability Ball Leg Curl", "hamstrings", "leg-curl-ball", ["bw"], { needs: ["ball"] }],
+  ["Glute-Ham Raise", "hamstrings", "ghr", ["machine"], { avoid: ["knee"] }],
+  ["Landmine Romanian Deadlift", "hamstrings", "hinge-landmine", ["bb"], { needs: ["landmine"], avoid: ["back", "deadlift"] }],
+  ["Single-Leg Dumbbell Leg Curl (Bench)", "hamstrings", "leg-curl-single", ["db"], { needs: ["bench"] }],
 
   // ── GLUTES ──
   ["Barbell Hip Thrust", "glutes", "hip-thrust", ["bb"], { needs: ["bench"], c: true }],
@@ -262,6 +272,7 @@ const RAW = [
 const FAMILIES = [
   [/^press-(flat|squeeze|decline)$/, "press-flat"], [/^press-incline$/, "press-incline"],
   [/^wrist-flexion/, "wrist-flexion"], [/^wrist-extension/, "wrist-extension"], [/^reverse-curl/, "reverse-curl"], [/^hang/, "hang"],
+  [/^bridge-ham/, "bridge-ham"], [/^ghr$/, "leg-curl"], [/^thrust-ham$/, "bridge"],
   [/^fly/, "fly"], [/^pushup/, "pushup"], [/^dip/, "dip"],
   [/^vertical-pull/, "vertical-pull"], [/^row-inverted-underhand$/, "row"], [/^row/, "row"],
   [/^upper-back/, "upper-back"], [/^(back-extension|reverse-hyper)/, "back-extension"],
@@ -328,7 +339,7 @@ export function injuryFlags(injuries) {
 }
 
 // ── EQUIPMENT ────────────────────────────────────────────────────────────────
-const ALL_GEAR = ["bw", "db", "bb", "kb", "kb2", "cable", "machine", "band", "bench", "rack", "pullupbar", "dip", "landmine", "box"];
+const ALL_GEAR = ["bw", "db", "bb", "kb", "kb2", "ball", "cable", "machine", "band", "bench", "rack", "pullupbar", "dip", "landmine", "box"];
 const GEAR_WORDS = [
   ["bb", ["barbell", "olympic bar", "ez bar", "ez-bar", "6ft bar", "trap bar"]],
   ["db", ["dumbbell", "dumbell", "db "]],
@@ -342,6 +353,7 @@ const GEAR_WORDS = [
   ["dip", ["dip"]],
   ["landmine", ["landmine"]],
   ["box", ["box", "step", "platform"]],
+  ["ball", ["stability ball", "swiss ball", "exercise ball", "physio ball"]],
 ];
 
 // What gear a location has. presetId: home | commercial | travel | bodyweight | custom | saved_N
