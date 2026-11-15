@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { fsSet } from "../firebase";
 import { AI_EQUIPMENT_PRESETS, AI_GOALS, AI_SECONDARY_GOALS } from "../lib/aiConfig";
 import { DAYS_PER_WEEK_OPTIONS } from "../lib/constants";
 
@@ -14,10 +15,16 @@ export function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfi
   const [saved,setSaved]=useState(false);
   const [daysPerWeek,setDaysPerWeek]=useState(cur.daysPerWeek||3);
 
+  const [saveError,setSaveError]=useState(false);
   const save=async()=>{
-    const updated={...profile,aiTrainer:{...cur,goal,secondaryGoal:secondaryGoal==="none"?null:secondaryGoal,experience,injuries,usualSetup,daysPerWeek}};
-    const newProfiles={...profiles,[currentUser]:updated};
-    await onSaveProfile(newProfiles);
+    const aiTrainer={...cur,goal,secondaryGoal:secondaryGoal==="none"?null:secondaryGoal,experience,injuries,usualSetup,daysPerWeek};
+    const newProfiles={...profiles,[currentUser]:{...profile,aiTrainer}};
+    setSaveError(false);
+    try{
+      // Write to the database (this used to only update the screen, so it was lost on restart)
+      await fsSet("wolfpack/profiles",{users:{[currentUser]:{aiTrainer}}});
+    }catch(e){console.warn("coach settings save failed",e);setSaveError(true);return;}
+    if(onSaveProfile)onSaveProfile(newProfiles);
     setSaved(true);setTimeout(()=>setSaved(false),2000);
   };
 
@@ -114,6 +121,7 @@ export function AITrainerProfileTab({currentUser, profile, profiles, onSaveProfi
       <button className="btn-primary" onClick={save} disabled={!goal||!experience} style={{width:"100%",marginBottom:8,background:saved?"var(--green)":undefined}}>
         {saved?"✓ SAVED":"SAVE AI TRAINER SETTINGS"}
       </button>
+      {saveError&&<div style={{fontSize:12,color:"var(--red)",textAlign:"center",marginBottom:8}}>Couldn't save — check your connection and try again.</div>}
     </div>
   );
 }
