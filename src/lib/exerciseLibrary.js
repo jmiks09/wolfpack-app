@@ -26,7 +26,7 @@ const RAW = [
   ["Dumbbell Bench Press", "chest", "press-flat", ["db"], { needs: ["bench"], avoid: ["wrist"], c: true }],
   ["Incline Dumbbell Press", "chest", "press-incline", ["db"], { needs: ["bench"], avoid: ["wrist"], c: true }],
   ["Decline Dumbbell Press", "chest", "press-decline", ["db"], { needs: ["bench"], avoid: ["wrist"], c: true }],
-  ["Dumbbell Floor Press", "chest", "press-flat", ["db", "kb"], { avoid: ["wrist"], c: true }],
+  ["Dumbbell Floor Press", "chest", "press-flat", ["db", "kb"], { avoid: ["wrist"], c: true, pair: true }],
   ["Dumbbell Squeeze Press", "chest", "press-squeeze", ["db"], { needs: ["bench"], avoid: ["wrist"] }],
   ["Dumbbell Fly", "chest", "fly", ["db"], { needs: ["bench"], avoid: ["shoulder", "elbow"] }],
   ["Incline Dumbbell Fly", "chest", "fly-incline", ["db"], { needs: ["bench"], avoid: ["shoulder", "elbow"] }],
@@ -56,7 +56,7 @@ const RAW = [
   ["One-Arm Dumbbell Row", "back", "row-unilateral", ["db", "kb"], { needs: ["bench"], c: true }],
   ["Chest-Supported Dumbbell Row", "back", "row-supported", ["db"], { needs: ["bench"], c: true }],
   ["Dumbbell Bent-Over Row", "back", "row-bent", ["db"], { avoid: ["back"], c: true }],
-  ["Renegade Row", "back", "row-plank", ["db", "kb"], { avoid: ["wrist", "shoulder"] }],
+  ["Renegade Row", "back", "row-plank", ["db", "kb"], { avoid: ["wrist", "shoulder"], pair: true }],
   ["Seated Cable Row", "back", "row-seated", ["cable"], { c: true }],
   ["Machine Row", "back", "row-supported", ["machine"], { c: true }],
   ["Inverted Row", "back", "row-inverted", ["bw"], { needs: ["rack"], c: true }],
@@ -65,12 +65,12 @@ const RAW = [
   ["Dumbbell Pullover", "back", "pullover", ["db"], { needs: ["bench"], avoid: ["shoulder"] }],
   ["Band Straight-Arm Pulldown", "back", "pullover", ["band"], {}],
   ["Barbell Shrug", "back", "shrug", ["bb"], { avoid: ["neck"] }],
-  ["Dumbbell Shrug", "back", "shrug", ["db", "kb"], { avoid: ["neck"] }],
+  ["Dumbbell Shrug", "back", "shrug", ["db", "kb"], { avoid: ["neck"], pair: true }],
   ["Rack Pull", "back", "hinge-rack", ["bb"], { needs: ["rack"], avoid: ["back", "deadlift", "hernia"], c: true }],
   ["Superman Hold", "back", "back-extension", ["bw"], { avoid: ["back"] }],
   ["Prone Y-T-W Raise", "back", "upper-back", ["bw", "db"], {}],
   ["Prone Snow Angel", "back", "upper-back-angel", ["bw"], {}],
-  ["Kettlebell Gorilla Row", "back", "row-alternating", ["kb", "db"], { avoid: ["back"], c: true }],
+  ["Kettlebell Gorilla Row", "back", "row-alternating", ["kb", "db"], { avoid: ["back"], c: true, pair: true }],
 
   // ── SHOULDERS ──
   ["Barbell Overhead Press", "shoulders", "overhead-press", ["bb"], { avoid: ["overhead", "shoulder", "back"], c: true }],
@@ -213,7 +213,7 @@ const RAW = [
   ["Calf Raise Isometric Hold", "calves", "calf-iso", ["bw", "db"], {}],
   ["Banded Calf Press", "calves", "calf-band", ["band"], {}],
   ["Tibialis Raise", "calves", "tib-raise", ["bw", "db"], {}],
-  ["Farmer's Walk on Toes", "calves", "carry-toes", ["db", "kb"], { avoid: ["ankle"] }],
+  ["Farmer's Walk on Toes", "calves", "carry-toes", ["db", "kb"], { avoid: ["ankle"], pair: true }],
 
   // ── CORE ──
   ["Plank", "core", "anti-extension", ["bw"], { avoid: ["wrist"] }],
@@ -235,7 +235,7 @@ const RAW = [
   ["Reverse Crunch", "core", "reverse-crunch", ["bw"], { avoid: ["hernia"] }],
   ["Side Plank", "core", "lateral", ["bw"], { avoid: ["shoulder"] }],
   ["Suitcase Carry", "core", "carry-single", ["db", "kb"], {}],
-  ["Farmer's Carry", "core", "carry", ["db", "kb", "bb"], {}],
+  ["Farmer's Carry", "core", "carry", ["db", "kb", "bb"], { pair: true }],
   ["Mountain Climber", "core", "mountain-climber", ["bw"], { avoid: ["wrist", "hip"] }],
   ["Plank Shoulder Tap", "core", "anti-rotation-plank", ["bw"], { avoid: ["wrist", "shoulder"] }],
   ["Dumbbell Side Bend", "core", "lateral-flexion", ["db", "kb"], { avoid: ["back"] }],
@@ -264,10 +264,19 @@ const FAMILIES = [
 ];
 export const familyOf = pattern => (FAMILIES.find(([re]) => re.test(pattern)) || [null, pattern])[1];
 
-export const EXERCISES = RAW.map(([name, muscle, pattern, equip, o]) => ({
+// "Kettlebell X" that also works with dumbbells becomes two entries — the
+// kettlebell one and "Dumbbell X" — so the name always matches what you hold.
+// Same pattern = same family, so a workout never gets both.
+// pair: needs two bells/dumbbells (a single kettlebell can't do it).
+const entry = (name, muscle, pattern, equip, o) => ({
   name, muscle, pattern, family: familyOf(pattern), equip,
-  needs: o.needs || [], avoid: o.avoid || [], compound: !!o.c,
-}));
+  needs: o.needs || [], avoid: o.avoid || [], compound: !!o.c, pair: !!o.pair,
+});
+export const EXERCISES = RAW.flatMap(([name, muscle, pattern, equip, o]) =>
+  /^Kettlebell /.test(name) && equip.includes("db")
+    ? [entry(name, muscle, pattern, equip.filter(g => g !== "db"), o),
+       entry(name.replace(/^Kettlebell /, "Dumbbell "), muscle, pattern, equip.filter(g => g !== "kb"), { ...o, pair: false })]
+    : [entry(name, muscle, pattern, equip, o)]);
 
 // ── INJURIES ─────────────────────────────────────────────────────────────────
 // Maps whatever people type (profile chips or their own words) to injury flags.
@@ -303,7 +312,7 @@ export function injuryFlags(injuries) {
 }
 
 // ── EQUIPMENT ────────────────────────────────────────────────────────────────
-const ALL_GEAR = ["bw", "db", "bb", "kb", "cable", "machine", "band", "bench", "rack", "pullupbar", "dip", "landmine", "box"];
+const ALL_GEAR = ["bw", "db", "bb", "kb", "kb2", "cable", "machine", "band", "bench", "rack", "pullupbar", "dip", "landmine", "box"];
 const GEAR_WORDS = [
   ["bb", ["barbell", "olympic bar", "ez bar", "ez-bar", "6ft bar", "trap bar"]],
   ["db", ["dumbbell", "dumbell", "db "]],
@@ -328,7 +337,76 @@ export function availableGear(presetId, equipmentText) {
   const gear = new Set(["bw"]);
   for (const [g, words] of GEAR_WORDS) if (words.some(w => text.includes(w))) gear.add(g);
   if (gear.has("machine")) gear.add("cable"); // a gym with machines nearly always has cables
+  // "Kettlebell: 25 lb" = one bell. Two or more: "kettlebells", "2×25", "pair", "set", "25 and 35"
+  const kb = segment(text, "kb");
+  if (kb && (/kettle\s?bells|pair|\bset\b|\b[2-9]\s*[×x]/.test(kb) || weightsIn(kb).length > 1)) gear.add("kb2");
   return gear;
+}
+
+// ── AVAILABLE WEIGHTS ────────────────────────────────────────────────────────
+// What each implement can actually load, read from the equipment list, so the
+// coach never asks for 17.5 lb dumbbells you don't own.
+const SEG_WORDS = {
+  db: ["dumbbell", "dumbell"], kb: ["kettlebell", "kettle bell"], plate: ["plate"],
+  other: ["bench", "rack", "landmine", "box", "barbell", "olympic bar", "band", "cable", "machine", "pull", "bar with", "trap bar"],
+};
+// The part of the text about one implement: from its word to the next implement's word.
+function segment(text, kind) {
+  const t = String(text || "").toLowerCase();
+  const starts = SEG_WORDS[kind].map(w => t.indexOf(w)).filter(i => i >= 0);
+  if (!starts.length) return "";
+  const start = Math.min(...starts);
+  const ends = Object.entries(SEG_WORDS).filter(([k]) => k !== kind).flatMap(([, ws]) => ws.map(w => t.indexOf(w, start + 1)))
+    .filter(i => i > start);
+  return t.slice(start, ends.length ? Math.min(...ends) : undefined);
+}
+// Weights mentioned (not counts like the "2" in "2×25", not inches/ft).
+function weightsIn(seg) {
+  return [...seg.replace(/\b\d+\s*[×x]\s*(?=\d)/g, " ").matchAll(/(\d+(?:\.\d+)?)(?!\s*(?:inch|in\b|"|ft|foot|feet))/g)]
+    .map(m => Number(m[1])).filter(n => n > 0 && n <= 300);
+}
+const range = (lo, hi, step) => { const out = []; for (let w = lo; w <= hi + 1e-9; w += step) out.push(+w.toFixed(1)); return out; };
+function listedLoads(seg) {
+  if (!seg) return null;
+  const span = seg.match(/(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)/);
+  if (span && Number(span[2]) > Number(span[1])) return range(Number(span[1]), Number(span[2]), 5);
+  const upTo = seg.match(/\b(?:up to|to|max(?:imum)?)\s*(\d+(?:\.\d+)?)/);
+  if (upTo) {
+    const hi = Number(upTo[1]);
+    const from = seg.match(/(?:from)\s*(\d+(?:\.\d+)?)/) || seg.match(/(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*\d/);
+    const lo = from ? Number(from[1]) : 5;
+    const r = range(lo, hi, 5);
+    return r.includes(hi) ? r : [...r, hi];
+  }
+  const ws = [...new Set(weightsIn(seg))].sort((a, b) => a - b);
+  return ws.length ? ws : null;
+}
+// Every total a barbell (or landmine sleeve) can be loaded to with these plates.
+function plateTotals(plates, perSide) {
+  let sums = new Set([0]);
+  for (const [count, w] of plates) {
+    const n = perSide ? Math.floor(count / 2) : count;
+    for (let k = 0; k < n; k++) sums = new Set([...sums, ...[...sums].map(s => s + w)]);
+  }
+  return [...sums].sort((a, b) => a - b);
+}
+
+// { db, kb, bb, landmine }: sorted lists of loads, or null = any 5 lb step.
+export function availableLoads(presetId, equipmentText) {
+  if (presetId === "commercial" || presetId === "bodyweight") return {};
+  if (presetId === "travel") return { db: range(5, 50, 5) };
+  const text = String(equipmentText || "").toLowerCase();
+  const out = {};
+  const db = listedLoads(segment(text, "db")); if (db) out.db = db;
+  const kb = listedLoads(segment(text, "kb")); if (kb) out.kb = kb;
+  const plates = [...segment(text, "plate").matchAll(/(\d+)\s*[×x]\s*(\d+(?:\.\d+)?)/g)].map(m => [Number(m[1]), Number(m[2])]);
+  if (plates.length) {
+    const bar = Number((text.match(/(\d+)\s*(?:lb|lbs)?\s*(?:olympic\s*)?barbell/) || [])[1]) || 45;
+    const cap = Number((text.match(/max(?:imum)?[^0-9]{0,25}(\d{2,3})/) || [])[1]) || Infinity;
+    out.bb = plateTotals(plates, true).map(s => bar + 2 * s).filter(w => w <= cap);
+    out.landmine = plateTotals(plates, false).filter(w => w > 0);
+  }
+  return out;
 }
 
 // Equipment styles people can pick for one workout.

@@ -7,8 +7,8 @@ import { removeFavoriteFS } from "../lib/favorites";
 import { buildPriorPerformanceString, getTrainingLog } from "../lib/trainingLog";
 import { ExerciseCard } from "./ExerciseCard";
 import { BodyMap } from "../components/BodyMap";
-import { MUSCLES, QUICK_PICKS, availableGear, muscleKey, muscleKeyIcon, muscleKeyLabel, styleIds, styleLabelOf, styleWithin, stylesFor, targetsFromKey, toggleStyle } from "../lib/exerciseLibrary";
-import { INTENSITIES, buildPlan, estimateMinutes, exerciseFromLibrary, intensityPrompt, loadSeen, mergeWithAI, musclesFor, pickSwap, recentLogged, rememberSeen, rulesSummary } from "../lib/coachPicker";
+import { MUSCLES, QUICK_PICKS, availableGear, availableLoads, muscleKey, muscleKeyIcon, muscleKeyLabel, styleIds, styleLabelOf, styleWithin, stylesFor, targetsFromKey, toggleStyle } from "../lib/exerciseLibrary";
+import { INTENSITIES, buildPlan, estimateMinutes, exerciseFromLibrary, fitWorkout, intensityPrompt, loadSeen, loadsPrompt, mergeWithAI, musclesFor, pickSwap, recentLogged, rememberSeen, rulesSummary } from "../lib/coachPicker";
 
 // ── AI TRAINER MODAL ────────────────────────────────────────────────────────
 
@@ -84,6 +84,7 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
   // Location → what gear exists; style → what to use today (e.g. dumbbells only).
   const equipmentText=buildEquipmentString(selectedPreset,customEquip,packHomeGym);
   const gear=availableGear(selectedPreset,equipmentText);
+  const loads=availableLoads(selectedPreset,equipmentText); // weights you actually own
   const styleOptions=stylesFor(gear);
   const activeStyle=styleWithin(equipStyle,styleOptions);
   const activeIds=styleIds(activeStyle);
@@ -103,7 +104,8 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
   const generate=async(isRegen=false,forceRepeat=false)=>{
     if(isRegen&&regenCount>=MAX_DAILY_REGENS){showToast("Daily limit reached.");return;}
     setStep("loading");setError(null);setPlanNote("");
-    const equipment=equipmentText;
+    const equipment=equipmentText+loadsPrompt(loads);
+    const fitCtx={loads,gear,style:activeStyle};
     const trainingLog=await getTrainingLog(currentUser);
     const muscleLabel=muscleGroup?muscleKeyLabel(muscleGroup):"AI choice";
     const priorPerf=buildPriorPerformanceString(trainingLog,muscleLabel);
@@ -134,7 +136,7 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
           setsPerExercise,
         });
         if(result.ok){
-          setWorkout(result.workout);
+          setWorkout(fitWorkout(result.workout,fitCtx));
           setCustomDuration(result.workout?.estimatedMinutes||45);
           setStep("result");
           if(isRegen)setRegenCount(bumpRegenCount(currentUser));
@@ -181,13 +183,13 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
     });
     let built;
     if(result.ok){
-      const merged=mergeWithAI(plan.exercises,result.workout,{sets:setsPerExercise,goal:fullGoal,intensity,trainingLog});
+      const merged=mergeWithAI(plan.exercises,result.workout,{sets:setsPerExercise,goal:fullGoal,intensity,trainingLog,...fitCtx});
       built={...result.workout,title:result.workout?.title||`${label} Workout`,exercises:merged.exercises,
         reasoning:merged.replaced>=2?`${label} session: ${plan.exercises.length} different movements chosen for your goal and equipment.`:result.workout?.reasoning,
         estimatedMinutes:Number(result.workout?.estimatedMinutes)||estimateMinutes(merged.exercises)};
     }else{
       // The AI couldn't be reached: still give a full workout, just without its weight suggestions.
-      const exercises=plan.exercises.map(e=>exerciseFromLibrary(e,{sets:setsPerExercise,goal:fullGoal,intensity,trainingLog}));
+      const exercises=plan.exercises.map(e=>exerciseFromLibrary(e,{sets:setsPerExercise,goal:fullGoal,intensity,trainingLog,...fitCtx}));
       built={title:`${label} Workout`,reasoning:"",exercises,estimatedMinutes:estimateMinutes(exercises)};
       notes.push(`The coach couldn't add weight suggestions right now (${result.error||"connection problem"}), so pick a weight you can do for the reps shown.`);
     }
@@ -208,7 +210,7 @@ export function AITrainerModal({currentUser, profile, history, packHomeGym, user
     const seen=new Set([...shown,...loadSeen(currentUser)]);
     const pick=pickSwap({workoutNames:workout.exercises.map(e=>e.name),replace:exercise,targets:targets.length?targets:targetsFromKey(muscleGroup),gear,style:activeStyle,injuries:profile?.aiTrainer?.injuries||[],seen});
     if(!pick){showToast(`No other ${String(exercise.primaryMuscle||"").toLowerCase()||"matching"} exercises fit your equipment and injuries.`);return;}
-    const replacement={...exerciseFromLibrary(pick,{sets:exercise.sets,goal:fullGoal,intensity:workout.intensity||intensity}),sets:exercise.sets};
+    const replacement={...exerciseFromLibrary(pick,{sets:exercise.sets,goal:fullGoal,intensity:workout.intensity||intensity,loads,gear,style:activeStyle}),sets:exercise.sets};
     const newExercises=[...workout.exercises];
     newExercises[idx]=replacement;
     setWorkout({...workout,exercises:newExercises});

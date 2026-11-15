@@ -22,7 +22,8 @@ export const findExercise = name => {
 
 export function isEligible(ex, { gear, style = "any", flags = new Set() }) {
   const styleGear = styleGearOf(style);
-  const usable = ex.equip.filter(g => gear.has(g) && (!styleGear || styleGear.includes(g)));
+  const usable = ex.equip.filter(g => gear.has(g) && (!styleGear || styleGear.includes(g))
+    && !(g === "kb" && ex.pair && !gear.has("kb2"))); // one kettlebell can't do two-bell moves
   if (!usable.length) return false;
   if (ex.needs.some(n => !gear.has(n))) return false;
   if (ex.avoid.some(f => flags.has(f))) return false;
@@ -179,7 +180,67 @@ export const defaultRest = compound => (compound ? 90 : 60);
  * choices. If the AI renamed or replaced an exercise, the app's exercise is
  * used and the AI's weight and notes for that slot are dropped.
  */
-export function mergeWithAI(plan, aiWorkout, { sets, goal, intensity, trainingLog = {} } = {}) {
+// ── WEIGHTS YOU OWN ──────────────────────────────────────────────────────────
+// Which implement an exercise is done with today.
+export function implementOf(ex, { gear, style = "any" } = {}) {
+  const lib = typeof ex === "string" ? findExercise(ex) : ex;
+  const name = String(lib?.name || ex?.name || ex || "");
+  if (/EZ|Trap Bar/i.test(name)) return null; // bar weight unknown → 5 lb steps
+  if (/Barbell/i.test(name)) return "bb";
+  if (/Landmine/i.test(name)) return "landmine";
+  if (/Kettlebell/i.test(name)) return "kb";
+  if (/Dumbbell/i.test(name)) return "db";
+  if (!lib) return null;
+  const styleGear = styleGearOf(style);
+  const ok = g => (!gear || gear.has(g)) && (!styleGear || styleGear.includes(g)) && !(g === "kb" && lib.pair && gear && !gear.has("kb2"));
+  return lib.equip.find(g => g !== "bw" && ok(g)) || (lib.equip.includes("bw") ? "bw" : lib.equip[0]);
+}
+const snap = (n, list) => list.reduce((best, w) => (Math.abs(w - n) < Math.abs(best - n) - 1e-9 ? w : best), list[0]);
+const fmt = n => `${Number.isInteger(n) ? n : n.toFixed(1)} lbs`;
+// Round any weight the coach gives to one you own. Above your heaviest: use the
+// heaviest and add reps. "lighter/heavier than X" becomes a real number.
+export function fitWeight(weight, reps, implement, loads = {}) {
+  const raw = String(weight || "").trim();
+  if (!raw || /body\s*weight/i.test(raw)) return { weight: raw, reps };
+  if (implement === "bw") return { weight: "bodyweight", reps }; // no weight to hold
+  const m = raw.match(/(\d+(?:\.\d+)?)/);
+  if (!m) return { weight: raw, reps };
+  const n = Number(m[1]);
+  const fixed = ["db", "kb", "bb", "landmine"].includes(implement) ? loads[implement] : null;
+  const list = fixed?.length ? fixed : null;
+  const annot = (raw.match(/\((each [^)]*|per [^)]*)\)/i) || [])[0];
+  const last = /last time/i.test(raw);
+  let w;
+  if (/lighter/i.test(raw)) w = list ? [...list].reverse().find(x => x < n) ?? list[0] : Math.max(5, Math.floor((n * 0.85) / 5) * 5);
+  else if (/heavier/i.test(raw)) w = list ? list.find(x => x > n) ?? list.at(-1) : Math.ceil((n * 1.05) / 5) * 5;
+  else w = list ? snap(n, list) : Math.max(5, Math.round(n / 5) * 5);
+  const max = list?.at(-1);
+  const tooLight = max != null && w === max && (n > max * 1.1 || (/heavier/i.test(raw) && n >= max));
+  const label = `${fmt(w)}${tooLight ? " (your heaviest)" : last && !/lighter|heavier/i.test(raw) ? " (last time)" : ""}${annot ? ` ${annot}` : ""}`;
+  if (!tooLight) return { weight: label, reps };
+  // Not heavy enough: more reps, slower lowering
+  const target = /heavier/i.test(raw) ? n * 1.1 : n;
+  const f = Math.min(2, target / max);
+  const [lo, hi] = String(reps || "10").split(/[-–]/).map(x => parseInt(x)).filter(x => !isNaN(x));
+  const nlo = Math.min(25, Math.round((lo || 10) * f)), nhi = Math.min(30, Math.round((hi || lo || 10) * f));
+  return { weight: label, reps: nhi > nlo ? `${nlo}-${nhi}` : String(nlo), note: `${fmt(max)} is your heaviest, so do more reps and lower it slowly (3 seconds).` };
+}
+// One line for the AI about which weights exist.
+export function loadsPrompt(loads = {}) {
+  const parts = [];
+  if (loads.db) parts.push(`dumbbells ONLY in ${loads.db.join(", ")} lbs`);
+  if (loads.kb) parts.push(loads.kb.length === 1 ? `ONE ${loads.kb[0]} lb kettlebell` : `kettlebells in ${loads.kb.join(", ")} lbs`);
+  if (loads.bb) parts.push(`barbell loads ONLY ${loads.bb.join(", ")} lbs (total incl. bar)`);
+  return parts.length ? ` Available weights: ${parts.join("; ")}. Only prescribe these exact weights — never in-between numbers like 17.5. If an exercise needs more than the heaviest, use the heaviest and add reps.` : "";
+}
+export const fitWorkout = (workout, ctx) => workout && { ...workout, exercises: (workout.exercises || []).map(e => applyFit(e, ctx)) };
+function applyFit(ex, ctx) {
+  if (!ctx?.loads && !ctx?.gear) return ex;
+  const r = fitWeight(ex.weight, ex.reps, implementOf(ex.name, ctx), ctx.loads || {});
+  return { ...ex, weight: r.weight, reps: r.reps, notes: r.note ? `${r.note}${ex.notes ? ` ${ex.notes}` : ""}` : ex.notes };
+}
+
+export function mergeWithAI(plan, aiWorkout, { sets, goal, intensity, trainingLog = {}, loads, gear, style } = {}) {
   const ai = Array.isArray(aiWorkout?.exercises) ? aiWorkout.exercises : [];
   const usedAi = new Set();
   let replaced = 0;
@@ -202,18 +263,18 @@ export function mergeWithAI(plan, aiWorkout, { sets, goal, intensity, trainingLo
       notes: matched ? a?.notes || "" : "",
       isCoreLift: false,
     };
-  });
+  }).map(e => applyFit(e, { loads, gear, style }));
   return { exercises, replaced };
 }
 
-export function exerciseFromLibrary(ex, { sets, goal, intensity, trainingLog = {} } = {}) {
+export function exerciseFromLibrary(ex, { sets, goal, intensity, trainingLog = {}, loads, gear, style } = {}) {
   const last = trainingLog[ex.name];
   const scheme = intensityScheme(intensity, ex.compound);
-  return {
+  return applyFit({
     name: ex.name, primaryMuscle: MUSCLES[ex.muscle], sets: sets || 3,
     reps: scheme?.reps || defaultReps(goal, ex.compound), weight: lastWeightHint(last, intensity),
     restSeconds: scheme?.restSeconds || defaultRest(ex.compound), notes: "", isCoreLift: false,
-  };
+  }, { loads, gear, style });
 }
 function lastWeightHint(last, intensity) {
   if (!last?.lastWeight) return "";
