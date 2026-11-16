@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { aiGenerateNutritionPlan, fsSet } from "../firebase";
+import { nutritionTargets, targetsPrompt } from "../lib/nutrition";
 import { AI_ACTIVITY_LEVELS, AI_BULK_CUT, AI_DIETS, AI_GENDERS, AI_GOALS } from "../lib/aiConfig";
 
 // ── AI COACH — nutrition plan modal (results) ───────────────────────────────
@@ -22,24 +23,35 @@ export function CoachPlanModal({currentUser, profile, coach, onPlanGenerated, on
   const [activity,setActivity]=useState(stats.activity||"");
   const [diet,setDiet]=useState(stats.diet||"No restrictions");
   const [showStats,setShowStats]=useState(false);
+  // Stats as last saved here, so the screen shows a change right away
+  const [savedStats,setSavedStats]=useState(coach.stats||null);
+  const shown=savedStats||{};
+  const [saveError,setSaveError]=useState(null);
 
   const canSave=age&&feet&&weight&&gender&&bulkCut&&activity;
 
   const saveStats=async()=>{
     const newStats={age:Number(age),feet:Number(feet),inches:Number(inches)||0,heightInches:Number(feet)*12+(Number(inches)||0),weight:Number(weight),gender,bulkCut,activity,diet};
-    const p=profile;
-    const updated={...p,aiTrainer:{...(p?.aiTrainer||{}),coach:{...(p?.aiTrainer?.coach||{}),stats:newStats,enabled:true}}};
-    await fsSet("wolfpack/profiles",{users:{...{[currentUser]:updated}}});
+    setSaveError(null);
+    // Save only the stats (the old code wrote a stale copy of the whole profile)
+    try{await fsSet("wolfpack/profiles",{users:{[currentUser]:{aiTrainer:{coach:{stats:newStats,enabled:true}}}}});}
+    catch(e){console.warn("stats save failed",e);setSaveError("Couldn't save — check your connection and try again.");return;}
+    setSavedStats(newStats);
     setShowStats(false);
     generate(newStats);
   };
 
   const generate=async(overrideStats)=>{
     setStep("loading");setError(null);
-    const s=overrideStats||coach.stats||{};
+    const s=overrideStats||savedStats||coach.stats||{};
+    const targets=nutritionTargets(s);
     const goalLabel=AI_GOALS.find(g=>g.id===profile?.aiTrainer?.goal)?.label||"General Fitness";
-    const result=await aiGenerateNutritionPlan({userName:currentUser,age:s.age,heightInches:s.heightInches,weightLbs:s.weight,gender:s.gender,bulkCut:s.bulkCut,activityLevel:s.activity,dietaryRestrictions:s.diet,goal:goalLabel});
-    if(result.ok){setPlan(result.plan);setStep("result");if(onPlanGenerated)await onPlanGenerated(result.plan);}
+    const result=await aiGenerateNutritionPlan({userName:currentUser,age:s.age,heightInches:s.heightInches,weightLbs:s.weight,gender:s.gender,bulkCut:s.bulkCut,activityLevel:s.activity,dietaryRestrictions:(s.diet||"none")+targetsPrompt(targets),goal:goalLabel});
+    if(result.ok){
+      // Calories and macros come from the formula, never the AI's arithmetic
+      const finalPlan=targets?{...result.plan,...targets,stats:s}:result.plan;
+      setPlan(finalPlan);setStep("result");if(onPlanGenerated)await onPlanGenerated(finalPlan);
+    }
     else{setError(result.error);setStep("error");}
   };
 
@@ -92,7 +104,7 @@ export function CoachPlanModal({currentUser, profile, coach, onPlanGenerated, on
               <div style={{flex:1}}>
                 <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:20,letterSpacing:2,lineHeight:1.1}}>YOUR NUTRITION PLAN</div>
                 <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>
-                  {coach.stats?.bulkCut?.toUpperCase()} mode · {coach.stats?.activity} · {coach.stats?.weight}lbs
+                  {shown.bulkCut?.toUpperCase()} mode · {shown.activity} · {shown.weight}lbs
                 </div>
               </div>
             </div>
@@ -100,7 +112,7 @@ export function CoachPlanModal({currentUser, profile, coach, onPlanGenerated, on
             {/* ── STATS SUMMARY — tap to edit ── */}
             <button onClick={()=>setShowStats(s=>!s)} style={{width:"100%",padding:"8px 12px",marginBottom:10,borderRadius:10,cursor:"pointer",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <div style={{fontSize:11,color:"var(--muted)"}}>
-                {coach.stats?.age}y · {coach.stats?.feet}'{coach.stats?.inches}" · {coach.stats?.weight}lbs · {coach.stats?.activity} · {coach.stats?.diet||"No restrictions"}
+                {shown.age}y · {shown.feet}'{shown.inches}" · {shown.weight}lbs · {shown.activity} · {shown.diet||"No restrictions"}
               </div>
               <span style={{fontSize:11,color:"var(--accent2)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1,flexShrink:0,marginLeft:8}}>{showStats?"CLOSE":"✏️ EDIT STATS"}</span>
             </button>
@@ -112,6 +124,7 @@ export function CoachPlanModal({currentUser, profile, coach, onPlanGenerated, on
                 <button className="btn-primary" onClick={saveStats} disabled={!canSave} style={{width:"100%",marginTop:4}}>
                   SAVE & REGENERATE
                 </button>
+                {saveError&&<div style={{fontSize:12,color:"var(--red)",textAlign:"center",marginTop:6}}>{saveError}</div>}
               </div>
             )}
 
