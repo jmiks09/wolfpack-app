@@ -39,6 +39,7 @@ import { EditWorkoutModal } from "./workouts/EditWorkoutModal";
 import { EffortRatingModal } from "./workouts/EffortRatingModal";
 import { anySetDone, buildPrelogged, workoutSummary } from "./lib/setLog";
 import { workoutFromHistory } from "./lib/repeatWorkout";
+import { streakPasses } from "./lib/habits";
 import { resetCoachLimit } from "./lib/aiHelpers";
 import { withWolfmodeMinutes } from "./lib/workoutEntry";
 import { getTrainingLog } from "./lib/trainingLog";
@@ -217,16 +218,20 @@ useEffect(()=>{
     const ids=myGroupIds.split(",");
     if(ids.some(gid=>!(gid in allHabits)))return; // wait until every group has loaded
     const want={};
+    const have=JSON.parse(myRestRulesKey);
     for(const gid of ids)for(const c of Object.values(allHabits[gid]||{})){
       const rule=restRuleFor(gid,c,currentUser);
-      if(rule)want[restRuleKey(gid,c.id)]=rule;
+      if(!rule)continue;
+      const key=restRuleKey(gid,c.id);
+      // Workout passes I've used, so a pass keeps my streak alive (only this group's logs are loaded)
+      const passes=gid===groupId&&habitLogs[c.id]?streakPasses(c,habitLogs[c.id]?.byUser?.[currentUser]):have[key]?.passes;
+      want[key]=passes&&(Object.keys(passes.weeks||{}).length||passes.days?.length)?{...rule,passes}:rule;
     }
-    const have=JSON.parse(myRestRulesKey);
     const changed=Object.fromEntries(Object.entries(want).filter(([k,v])=>JSON.stringify(have[k])!==JSON.stringify(v)));
     const stale=Object.keys(have).filter(k=>!(k in want));
     if(Object.keys(changed).length)fsSet("wolfpack/profiles",{users:{[currentUser]:{restRules:changed}}}).catch(()=>{});
     if(stale.length)fsDeleteFields("wolfpack/profiles",stale.map(k=>["users",currentUser,"restRules",k])).catch(()=>{});
-  },[currentUser,myGroupIds,allHabits,myRestRulesKey,profiles]);
+  },[currentUser,myGroupIds,allHabits,myRestRulesKey,profiles,groupId,habitLogs]);
 
   // Check-in logs: one document per habit challenge.
   const habitIds=Object.keys(habitChallenges).sort().join(",");

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AvatarDisplay } from "../../components/AvatarDisplay";
-import { DAY_NAMES, fmtDate, localDateStr, stepDayOn, todayStr } from "../../lib/dates";
+import { DAY_NAMES, fmtDate, isRestDay, localDateStr, stepDayOn, todayStr } from "../../lib/dates";
 import { canRepeat, pastExercises, timesTried } from "../../lib/repeatWorkout";
 import { getStreak, getTotalWorkouts } from "../../lib/stats";
 
@@ -37,7 +37,7 @@ export function TeammateProfile({ member, currentUser, profiles, history, since,
         <div style={{ fontFamily: "'Bebas Neue',cursive", fontSize: 12, letterSpacing: 2, color: "var(--accent2)", marginBottom: 6 }}>
           LAST 7 DAYS · {workoutsThisWeek} WORKOUT{workoutsThisWeek === 1 ? "" : "S"}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 6 }}>
           {days.map(d => {
             const e = history[d]?.[member];
             const steps = Number(e?.steps) || 0;
@@ -50,11 +50,13 @@ export function TeammateProfile({ member, currentUser, profiles, history, since,
                   border: `1px solid ${open === d ? "#ff6b35" : active ? "rgba(46,204,113,0.35)" : "var(--border)"}`,
                 }}>
                 <div style={{ fontSize: 9, color: "var(--muted)" }}>{DAY_NAMES[new Date(d + "T00:00:00").getDay()]}</div>
-                <div style={{ fontSize: 15, minHeight: 20 }}>{e?.done ? (e.workoutIcon || "💪").slice(0, 2) : steps ? "👟" : "·"}</div>
+                <div style={{ fontSize: 15, minHeight: 20 }}>{e?.done ? (e.workoutIcon || "💪").slice(0, 2) : active ? "👟" : isRestDay(d, profile) ? "🛌" : "·"}</div>
               </button>
             );
           })}
         </div>
+
+        <div style={{ fontSize: 10, color: "var(--muted)", textAlign: "center", marginBottom: 14 }}>👟 steps  ·  🛌 rest day  ·  blank = missed</div>
 
         {entries.length === 0 && (
           <div style={{ textAlign: "center", padding: "20px 10px", color: "var(--muted)", fontSize: 13 }}>

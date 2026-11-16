@@ -1,8 +1,19 @@
 import { QUOTES } from "./constants";
 import { getDateRange, getWeekStart, getWorkoutDays, isActiveDay, isRestDay, localDateStr, todayStr } from "./dates";
+import { mondayOf } from "./habits";
 
+// A challenge pass covering this missed day? (one missed day per workout pass that week)
+function passCovers(profile,k,used){
+  for(const [key,r] of Object.entries(profile?.restRules||{})){
+    if(!r?.passes||!(r.start<=k&&k<=r.end))continue;
+    if(r.passes.days?.includes(k))return true;
+    const mon=mondayOf(k), id=`${key}|${mon}`;
+    if((used[id]||0)<(Number(r.passes.weeks?.[mon])||0)){used[id]=(used[id]||0)+1;return true;}
+  }
+  return false;
+}
 export function getStreak(h,n,profile){
-  let s=0;const b=new Date();const today=localDateStr(b);
+  let s=0;const b=new Date();const today=localDateStr(b);const used={};
   for(let i=0;i<365;i++){
     const d=new Date(b);d.setDate(b.getDate()-i);
     const k=localDateStr(d);
@@ -14,7 +25,9 @@ export function getStreak(h,n,profile){
     if(k===today&&!active)continue;
     // Count logged days
     if(active){s++;}
-    // Any past workout day that's missing breaks the streak
+    // A challenge pass excuses a missed day (doesn't add, doesn't break)
+    else if(passCovers(profile,k,used))continue;
+    // Any other missed workout day breaks the streak
     else break;
   }
   return s;

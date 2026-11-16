@@ -128,6 +128,17 @@ export function passesUsedInWeek(ch, userLog, week) {
   if (!legacyPassMode(userLog, week)) return validPassesForWeek(ch, userLog, week).length;
   return dateRange(week.from, week.to).filter(d => userLog?.days?.[d]?.pass).length;
 }
+// For streaks: workout passes used per week ({weeks:{monday:n}}) and old day-style passes ({days:[...]}).
+export function streakPasses(ch, userLog) {
+  const workoutIds = new Set((ch?.habits || []).filter(h => h.type === "workout").map(h => h.id));
+  const weeks = {};
+  for (const monday of Object.keys(userLog?.passes || {})) {
+    const n = validPassesForWeek(ch, userLog, { monday }).filter(id => workoutIds.has(id)).length;
+    if (n) weeks[monday] = n;
+  }
+  const days = Object.entries(userLog?.days || {}).filter(([, d]) => d?.pass).map(([d]) => d).sort();
+  return { weeks, days };
+}
 export function passBonus(ch, habit, passes) {
   const isWorkoutHabit = id => ch.habits.find(h => h.id === id)?.type === "workout";
   const anyWorkout = habit.type === "workout" && (habit.filter || "any") === "any";
