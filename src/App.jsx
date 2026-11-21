@@ -404,8 +404,17 @@ useEffect(()=>{
     let updatedEntry={...existing};
     if(existing.wolfmodeSession?.exercises){
       updatedEntry={...existing,wolfmodeSession:{...existing.wolfmodeSession,exercises:editedExercises}};
-    }else if(existing.details?.lift?.exercises){
-      updatedEntry={...existing,details:{...existing.details,lift:{...existing.details.lift,exercises:editedExercises}}};
+    }else{
+      // Manually logged weight training (with or without exercises so far)
+      const liftKey=(existing.workouts||[]).filter(w=>w.id==="lift").at(-1)?.key||"lift";
+      const n=editedExercises.length;
+      const summary=Array.isArray(existing.summary)?existing.summary.map(l=>{
+        if(!/Weight Training|^🏋️/.test(l))return l;
+        if(/\d+ exercises?/.test(l))return n?l.replace(/\d+ exercises?/,`${n} exercise${n===1?"":"s"}`):l.replace(/ · \d+ exercises?/,"");
+        return n?(/ · \d+ min/.test(l)?l.replace(/( · \d+ min)/,` · ${n} exercise${n===1?"":"s"}$1`):`${l} · ${n} exercise${n===1?"":"s"}`):l;
+      }):existing.summary;
+      updatedEntry={...existing,...(Array.isArray(summary)?{summary,workoutLabel:summary.join(" | ")}:{}),
+        details:{...(existing.details||{}),[liftKey]:{...(existing.details?.[liftKey]||{}),exercises:editedExercises}}};
     }
     const newHistory={...history,[date]:{...(history[date]||{}),[currentUser]:updatedEntry}};
     await fsSet("wolfpack/workouts",{byDate:newHistory});
@@ -926,7 +935,7 @@ useEffect(()=>{
           <button className="btn-ghost" style={{width:"100%",padding:12}} onClick={()=>setHabitBuilder("new")}>+ New habit challenge (like Winter Arc)</button>
         </div>}
         {view==="challenges"&&<ChallengesTab currentUser={currentUser} adminName={adminName} members={members} profiles={profiles} challenges={challenges} history={history} onAdd={handleAddChallenge} onLogProgress={handleLogProgress} onDelete={handleDelChallenge} onEditChallenge={handleEditChallenge} onForfeit={handleForfeit} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onOpenProfile={()=>setProfileOpen(true)} onMarkPaid={handleMarkPaid} onLogPayment={handleLogPayment}/>}
-        {view==="stats"&&<StatsTab sinceFor={sinceFor} currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed} onEditExercises={(date,entry)=>setEditCompletedWorkout({date,entry})} onRepeatWorkout={(date,entry)=>setAiTrainerOpen(workoutFromHistory(entry,date))}/>}
+        {view==="stats"&&<StatsTab sinceFor={sinceFor} currentUser={currentUser} members={members} profiles={profiles} history={history} challenges={challenges} feed={feed} onEditExercises={(date,entry)=>setEditCompletedWorkout({date,entry})} onEditWorkout={(date,entry)=>setEditWorkout({date,entry})} onRepeatWorkout={(date,entry)=>setAiTrainerOpen(workoutFromHistory(entry,date))}/>}
       </div>
       <nav className="nav">
         {NAV.filter(n=>n.id!=="gym"||group.gym).map(n=>{

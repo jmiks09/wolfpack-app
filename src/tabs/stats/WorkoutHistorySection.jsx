@@ -4,7 +4,7 @@ import { stepDayOn } from "../../lib/dates";
 
 const fmtSteps=n=>Number(n).toLocaleString("en-US");
 
-export function WorkoutHistorySection({currentUser, history, onEditExercises, onRepeatWorkout, profile}){
+export function WorkoutHistorySection({currentUser, history, onEditExercises, onEditWorkout, onRepeatWorkout, profile}){
   const now=new Date();
   const [viewYear,setViewYear]=useState(now.getFullYear());
   const [viewMonth,setViewMonth]=useState(now.getMonth()); // 0-indexed
@@ -69,13 +69,15 @@ export function WorkoutHistorySection({currentUser, history, onEditExercises, on
             const exercises=entry.wolfmodeSession?.exercises||entry.details?.lift?.exercises||[];
             const doneExercises=exercises.filter(e=>!e.skipped||e.substitutedWith);
             const isExpanded=expandedDate===date;
+            const hasLift=!!entry.wolfmodeSession||(entry.workouts||[]).some(w=>w.id==="lift");
+            const canOpen=!!entry.done&&!!(onEditWorkout||onEditExercises);
 
             return(
               <div key={date} style={{background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)",overflow:"hidden"}}>
                 {/* Header row */}
                 <div
-                  onClick={()=>setExpandedDate(isExpanded?null:date)}
-                  style={{padding:"12px 14px",cursor:doneExercises.length>0?"pointer":"default",display:"flex",alignItems:"flex-start",gap:10}}
+                  onClick={()=>canOpen&&setExpandedDate(isExpanded?null:date)}
+                  style={{padding:"12px 14px",cursor:canOpen?"pointer":"default",display:"flex",alignItems:"flex-start",gap:10}}
                 >
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
@@ -86,17 +88,20 @@ export function WorkoutHistorySection({currentUser, history, onEditExercises, on
                     {steps>0&&<div style={{fontSize:12,lineHeight:1.6,color:steps>=stepGoal?"var(--green)":"var(--muted)"}}>👟 {fmtSteps(steps)} steps{steps>=stepGoal?"":` (under ${fmtSteps(stepGoal)})`}</div>}
                     {entry.note&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>"{entry.note}"</div>}
                   </div>
-                  {doneExercises.length>0&&(
+                  {canOpen&&(
                     <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,flexShrink:0,paddingTop:2}}>
-                      <span style={{fontSize:10,color:"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{doneExercises.length} ex</span>
+                      <span style={{fontSize:10,color:"var(--muted)",fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>{doneExercises.length>0?`${doneExercises.length} ex`:"edit"}</span>
                       <span style={{fontSize:14,color:"var(--muted)",transition:"transform .2s",transform:isExpanded?"rotate(180deg)":"rotate(0)"}}>▾</span>
                     </div>
                   )}
                 </div>
 
                 {/* Expanded exercise list */}
-                {isExpanded&&doneExercises.length>0&&(
+                {isExpanded&&canOpen&&(
                   <div style={{padding:"0 14px 12px",borderTop:"1px solid rgba(255,255,255,0.06)"}}>
+                    {doneExercises.length===0&&hasLift&&(
+                      <div style={{paddingTop:10,fontSize:12,color:"var(--muted)"}}>No exercises logged for this workout yet.</div>
+                    )}
                     <div style={{paddingTop:10,display:"flex",flexDirection:"column",gap:5}}>
                       {doneExercises.map((ex,idx)=>{
                         const isSubstitute=ex.skipped&&ex.substitutedWith;
@@ -123,16 +128,21 @@ export function WorkoutHistorySection({currentUser, history, onEditExercises, on
                         );
                       })}
                     </div>
-                    {onRepeatWorkout&&(
+                    {onRepeatWorkout&&doneExercises.length>0&&(
                       <button onClick={()=>onRepeatWorkout(date,entry)} style={{marginTop:10,width:"100%",padding:"10px",borderRadius:10,cursor:"pointer",background:"linear-gradient(135deg,rgba(255,107,53,0.18),rgba(155,89,182,0.18))",border:"1px solid rgba(255,107,53,0.45)",color:"#ff6b35",fontSize:13,fontFamily:"'Bebas Neue',cursive",letterSpacing:2}}>
                         🔁 DO IT AGAIN
                       </button>
                     )}
-                    {onEditExercises&&(
-                      <button onClick={()=>onEditExercises(date,entry)} style={{marginTop:10,width:"100%",padding:"7px",borderRadius:8,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",color:"var(--muted)",fontSize:11,fontFamily:"'Bebas Neue',cursive",letterSpacing:1}}>
-                        ✏️ EDIT TIME, EXERCISES & WEIGHTS
-                      </button>
-                    )}
+                    <div style={{display:"flex",gap:8,marginTop:10}}>
+                      {onEditWorkout&&(
+                        <button onClick={()=>onEditWorkout(date,entry)} style={editBtn}>✏️ EDIT TIME & TYPE</button>
+                      )}
+                      {onEditExercises&&hasLift&&(
+                        <button onClick={()=>onEditExercises(date,entry)} style={editBtn}>
+                          🏋️ {doneExercises.length>0?"EDIT EXERCISES":"ADD EXERCISES"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -143,3 +153,4 @@ export function WorkoutHistorySection({currentUser, history, onEditExercises, on
     </div>
   );
 }
+const editBtn={flex:1,padding:"8px 6px",borderRadius:8,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.12)",color:"rgba(255,255,255,0.8)",fontSize:12,fontFamily:"'Bebas Neue',cursive",letterSpacing:1};
