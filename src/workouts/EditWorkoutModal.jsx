@@ -59,7 +59,10 @@ export function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onD
       return parts.length>0?`${w.label}: ${parts.join(" · ")}`:w.label;
     });
     const wm=selected.some(w=>w.id==="lift")&&entry.wolfmodeSession&&Number(duration.lift)?{wolfmodeSession:{...entry.wolfmodeSession,estimatedMinutes:Number(duration.lift)}}:{};
-    onSave(date,{...entry,...wm,workouts:selected.map(w=>({id:w.id,icon:w.icon,label:w.label,...(keyOf(w)?{key:keyOf(w)}:{})})),workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:updatedDetails});
+    const edited={...entry,...wm,workouts:selected.map(w=>({id:w.id,icon:w.icon,label:w.label,...(keyOf(w)?{key:keyOf(w)}:{})})),workoutIcon:icons,workoutLabel:summaryLines.join(" | "),summary:summaryLines,note,duration:totalDur,details:updatedDetails};
+    // A day picked in "Move this workout" → Save also moves it there
+    if(moveTo&&onMove)onMove(moveTo,edited);
+    else onSave(date,edited);
     onClose();
   };
 
@@ -93,7 +96,7 @@ export function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onD
           </div>
         ))}
         <div style={{fontSize:11,color:"var(--muted)",marginBottom:12}}>duration per workout (optional)</div>
-        <button className="btn-primary" onClick={save} disabled={selected.length===0}>SAVE CHANGES</button>
+        <button className="btn-primary" onClick={save} disabled={selected.length===0}>{moveTo?`SAVE & MOVE TO ${fmtDate(moveTo).toUpperCase()}`:"SAVE CHANGES"}</button>
         {onMove&&(
           <div style={{marginTop:12,padding:"10px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12}}>
             <div style={{fontSize:12,color:"rgba(255,255,255,0.85)",marginBottom:6}}>📅 Wrong day? Move this workout</div>

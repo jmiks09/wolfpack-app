@@ -422,8 +422,8 @@ useEffect(()=>{
     showToast("✅ Workout updated!");
   };
   // Move a logged workout to another day (e.g. finished after midnight)
-  const handleMoveWorkout=async(from,to)=>{
-    const moved=history[from]?.[currentUser];
+  const handleMoveWorkout=async(from,to,edited)=>{
+    const moved=edited||history[from]?.[currentUser];
     if(!moved?.done||from===to)return;
     const merged=mergeMovedEntry(history[to]?.[currentUser],moved);
     await fsSet("wolfpack/workouts",{byDate:{[to]:{[currentUser]:merged}}});
@@ -1014,7 +1014,7 @@ useEffect(()=>{
           }
         }catch(err){console.warn(err);}}
       }} onClose={()=>setPendingEffortRating(null)}/>}
-      {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onMove={to=>handleMoveWorkout(editWorkout.date,to)} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
+      {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onMove={(to,edited)=>handleMoveWorkout(editWorkout.date,to,edited)} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {editCompletedWorkout&&<EditCompletedWorkoutModal date={editCompletedWorkout.date} entry={editCompletedWorkout.entry} currentUser={currentUser} onSave={handleSaveEditedExercises} onClose={()=>setEditCompletedWorkout(null)}/>}
       {release?<WhatsNewModal onClose={dismissRelease} whatsNewData={release}/>
         :whatsNewOpen&&<WhatsNewModal onClose={dismissWhatsNew} whatsNewData={whatsNewData||WHATS_NEW_FALLBACK}/>}
