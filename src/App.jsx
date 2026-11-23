@@ -41,7 +41,7 @@ import { anySetDone, buildPrelogged, workoutSummary } from "./lib/setLog";
 import { workoutFromHistory } from "./lib/repeatWorkout";
 import { streakPasses } from "./lib/habits";
 import { resetCoachLimit } from "./lib/aiHelpers";
-import { withWolfmodeMinutes } from "./lib/workoutEntry";
+import { mergeMovedEntry, withWolfmodeMinutes } from "./lib/workoutEntry";
 import { getTrainingLog } from "./lib/trainingLog";
 import { TeammateProfile } from "./tabs/pack/TeammateProfile";
 import { WorkoutModal } from "./workouts/WorkoutModal";
@@ -421,6 +421,23 @@ useEffect(()=>{
     setHistory(newHistory);setSharedData(newHistory);
     showToast("✅ Workout updated!");
   };
+  // Move a logged workout to another day (e.g. finished after midnight)
+  const handleMoveWorkout=async(from,to)=>{
+    const moved=history[from]?.[currentUser];
+    if(!moved?.done||from===to)return;
+    const merged=mergeMovedEntry(history[to]?.[currentUser],moved);
+    await fsSet("wolfpack/workouts",{byDate:{[to]:{[currentUser]:merged}}});
+    await fsDeleteFields("wolfpack/workouts",[["byDate",from,currentUser]]);
+    if(moved.steps)await fsSet("wolfpack/workouts",{byDate:{[from]:{[currentUser]:{steps:moved.steps}}}}); // steps stay on their day
+    const newHistory={...history,[to]:{...(history[to]||{}),[currentUser]:merged},[from]:{...(history[from]||{})}};
+    if(moved.steps)newHistory[from][currentUser]={steps:moved.steps};else delete newHistory[from][currentUser];
+    setHistory(newHistory);setSharedData(newHistory);
+    setEditWorkout(null);
+    myGroups.forEach(g=>removeMessage(g.id,from,workoutCardId(currentUser,from)));
+    const dayName=fmtDate(to);
+    await postLateCard(to,dayName,moved.workouts||[],moved.summary||[],null,null);
+    showToast(`📅 Moved to ${dayName}`);
+  };
   const handleDeleteWorkout=async(date)=>{
     const newDay={...(history[date]||{})};
     delete newDay[currentUser];
@@ -584,10 +601,10 @@ useEffect(()=>{
   };
 
   // ── AI Trainer: log the AI-generated workout as a lift entry ──────────────
-  const handleLogAIWorkout=async({summary,note,minutes,exercises,muscleGroup,copiedFrom})=>{
+  const handleLogAIWorkout=async({summary,note,minutes,exercises,muscleGroup,copiedFrom,date})=>{
     if(loggingWorkout)return;
     setLoggingWorkout(true);
-    const key=todayStr(),time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+    const key=date||todayStr(),time=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
     const existing=history[key]?.[currentUser]||{};
     const prevWorkouts=existing.workouts||[];
     const prevDetails=existing.details||{};
@@ -879,7 +896,7 @@ useEffect(()=>{
               injuries={(profiles[currentUser]?.aiTrainer?.injuries||[]).join(", ")}
               userFavorites={userFavorites}
               onFavoritesChange={setUserFavorites}
-              onComplete={(data)=>{
+              onComplete={(data,forDate)=>{
                 const logMinutes=data.workout?.estimatedMinutes||45;
                 // If sets were checked off during the workout, log exactly those
                 const tracked=anySetDone(data.workout.exercises);
@@ -891,8 +908,9 @@ useEffect(()=>{
                   exercises:prelogged||data.workout.exercises,
                   muscleGroup:data.muscleGroup,
                   copiedFrom:data.workout.copiedFrom,
+                  date:forDate,
                 });
-                setPendingEffortRating({exercises:data.workout.exercises,muscleGroup:data.muscleGroup,prelogged,minutes:logMinutes});
+                setPendingEffortRating({exercises:data.workout.exercises,muscleGroup:data.muscleGroup,prelogged,minutes:logMinutes,date:forDate});
                 dismissActiveWorkout(currentUser,"today");
                 setActiveWorkoutRefresh(r=>r+1);
               }}
@@ -985,7 +1003,7 @@ useEffect(()=>{
         showToast((effort?.emoji||"") + " Logged! " + (effort?.advice||"Keep it up") + "! 🐺");
         const minsChanged=Number(mins)&&Number(mins)!==Number(pendingEffortRating.minutes);
         if(logged?.length||minsChanged){try{
-          const key=todayStr();
+          const key=pendingEffortRating.date||todayStr();
           const raw=history[key]?.[currentUser];
           const existing=minsChanged?withWolfmodeMinutes(raw,mins):raw;
           if(existing?.wolfmodeSession&&!logged?.length){
@@ -996,7 +1014,7 @@ useEffect(()=>{
           }
         }catch(err){console.warn(err);}}
       }} onClose={()=>setPendingEffortRating(null)}/>}
-      {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
+      {editWorkout&&editWorkout.entry?.done&&<EditWorkoutModal entry={editWorkout.entry} date={editWorkout.date} currentUser={currentUser} onClose={()=>setEditWorkout(null)} onSave={handleSaveEditedWorkout} onMove={to=>handleMoveWorkout(editWorkout.date,to)} onDelete={()=>handleDeleteWorkout(editWorkout.date)}/>}
       {editCompletedWorkout&&<EditCompletedWorkoutModal date={editCompletedWorkout.date} entry={editCompletedWorkout.entry} currentUser={currentUser} onSave={handleSaveEditedExercises} onClose={()=>setEditCompletedWorkout(null)}/>}
       {release?<WhatsNewModal onClose={dismissRelease} whatsNewData={release}/>
         :whatsNewOpen&&<WhatsNewModal onClose={dismissWhatsNew} whatsNewData={whatsNewData||WHATS_NEW_FALLBACK}/>}

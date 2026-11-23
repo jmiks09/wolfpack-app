@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ExerciseCard } from "../ai/ExerciseCard";
 import { getActiveWorkout, updateActiveWorkout } from "../lib/activeWorkout";
+import { localDateStr, todayStr } from "../lib/dates";
 import { altVersions, switchVersion } from "../lib/coachPicker";
 import { parseWeight, setProgress, setsOf } from "../lib/setLog";
 import { SetTracker } from "./SetTracker";
@@ -48,6 +49,10 @@ export function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismis
     setData(updated);
   };
   const progress=setProgress(workout.exercises);
+  // Between midnight and 4 AM a workout probably belongs to the night before
+  const lateNight=new Date().getHours()<4;
+  const yesterday=(()=>{const d=new Date(todayStr()+"T00:00:00");d.setDate(d.getDate()-1);return localDateStr(d);})();
+  const dayWord=d=>new Date(d+"T00:00:00").toLocaleDateString("en-US",{weekday:"long"}).toUpperCase();
   // Kettlebell ↔ dumbbell version of the same move; sets not done yet take the new weight
   const gearSet=Array.isArray(workout.gearList)?new Set(workout.gearList):null;
   const switchExercise=(i,altName)=>{
@@ -186,7 +191,17 @@ export function ActiveWorkoutCard({currentUser, targetDate, onComplete, onDismis
             </div>
           )}
           {/* Mark complete button — only for today, only if not done */}
-          {isToday&&!completed&&(
+          {isToday&&!completed&&lateNight&&(
+            <div style={{marginTop:8}}>
+              <div style={{fontSize:12,color:"var(--muted)",textAlign:"center",marginBottom:6}}>🌙 It's after midnight — which day should this count for?</div>
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn-primary" onClick={()=>{onComplete(data,yesterday);setData({...data,completed:true});}}
+                  style={{flex:1,background:"linear-gradient(135deg,#ff6b35,#9b59b6)",border:"none"}}>✓ {dayWord(yesterday)}</button>
+                <button className="btn-ghost" onClick={()=>{onComplete(data);setData({...data,completed:true});}} style={{flex:1}}>✓ {dayWord(todayStr())}</button>
+              </div>
+            </div>
+          )}
+          {isToday&&!completed&&!lateNight&&(
             <button className="btn-primary" onClick={()=>{onComplete(data);setData({...data,completed:true});}}
               style={{
                 width:"100%",marginTop:8,

@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { muscleKeyLabel } from "../lib/exerciseLibrary";
 import { WORKOUT_TYPES } from "../lib/constants";
-import { fmtDate } from "../lib/dates";
+import { fmtDate, localDateStr, todayStr } from "../lib/dates";
 
 // ── EDIT WORKOUT MODAL ────────────────────────────────────────────────────────
-export function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete}){
+export function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onDelete, onMove}){
+  // Days this workout can move to: the 7 days before today (and today), except its own day
+  const moveOptions=Array.from({length:8},(_,i)=>{const d=new Date(todayStr()+"T00:00:00");d.setDate(d.getDate()-i);return localDateStr(d);}).filter(d=>d!==date);
+  const [moveTo,setMoveTo]=useState("");
   const ALL_TYPES=[
     {id:"lift",icon:"🏋️",label:"Weight Training"},
     {id:"run",icon:"🏃",label:"Running"},
@@ -91,6 +94,19 @@ export function EditWorkoutModal({entry, date, currentUser, onClose, onSave, onD
         ))}
         <div style={{fontSize:11,color:"var(--muted)",marginBottom:12}}>duration per workout (optional)</div>
         <button className="btn-primary" onClick={save} disabled={selected.length===0}>SAVE CHANGES</button>
+        {onMove&&(
+          <div style={{marginTop:12,padding:"10px 12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:12}}>
+            <div style={{fontSize:12,color:"rgba(255,255,255,0.85)",marginBottom:6}}>📅 Wrong day? Move this workout</div>
+            <div style={{display:"flex",gap:8}}>
+              <select aria-label="Move to day" value={moveTo} onChange={e=>setMoveTo(e.target.value)}
+                style={{flex:1,padding:"8px",borderRadius:8,background:"var(--bg2)",border:"1px solid var(--border)",color:"#fff",fontSize:13}}>
+                <option value="">Pick a day…</option>
+                {moveOptions.map(d=><option key={d} value={d}>{d===todayStr()?"Today":fmtDate(d)}</option>)}
+              </select>
+              <button className="btn-ghost" disabled={!moveTo} onClick={()=>onMove(moveTo)} style={{padding:"8px 14px",fontSize:12,opacity:moveTo?1:0.5}}>MOVE</button>
+            </div>
+          </div>
+        )}
         <button onClick={onDelete} style={{width:"100%",marginTop:8,padding:"10px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.25)",borderRadius:10,cursor:"pointer",color:"var(--red)",fontFamily:"'Bebas Neue',cursive",fontSize:13,letterSpacing:1}}>
           DELETE WORKOUT
         </button>

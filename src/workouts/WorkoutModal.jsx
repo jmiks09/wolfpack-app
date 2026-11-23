@@ -109,6 +109,11 @@ export function WorkoutModal({onClose,onSubmit,loading,today,initialDate}){
                 <button key={d} role="radio" aria-checked={on} onClick={()=>setDate(d)} style={{flexShrink:0,padding:"8px 12px",borderRadius:20,cursor:"pointer",fontSize:13,whiteSpace:"nowrap",
                   background:on?"rgba(124,92,191,0.25)":"var(--bg3)",border:on?"1px solid var(--accent)":"1px solid var(--border)",color:on?"var(--accent2)":"var(--muted)"}}>{shortDay(d,today)}</button>);})}
             </div>
+            {!late&&new Date().getHours()<4&&(
+              <button onClick={()=>setDate(addDays(today,-1))} style={{width:"100%",marginBottom:10,padding:"8px 10px",borderRadius:10,cursor:"pointer",fontSize:12,textAlign:"left",background:"rgba(124,92,191,0.1)",border:"1px solid rgba(124,92,191,0.35)",color:"rgba(255,255,255,0.85)"}}>
+                🌙 It's after midnight. Finished last night? Tap to log it for <b>yesterday</b>.
+              </button>
+            )}
             {late&&<div style={{padding:12,marginBottom:12,background:"rgba(255,107,53,0.08)",border:"1px solid rgba(255,107,53,0.3)",borderRadius:12,display:"flex",flexDirection:"column",gap:8}}>
               <div style={{fontSize:12,lineHeight:1.5}}>Adding a workout for <b>{shortDay(date,today)}</b>. Your pack will see it was added late, and it counts toward that day's streak and challenges.</div>
               <div style={{display:"flex",alignItems:"center",gap:10}}>

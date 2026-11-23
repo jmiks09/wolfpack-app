@@ -33,3 +33,40 @@ export function withWolfmodeMinutes(entry, mins) {
     wolfmodeSession: { ...entry.wolfmodeSession, estimatedMinutes: m },
   };
 }
+
+// ── MOVING A WORKOUT TO ANOTHER DAY ──────────────────────────────────────────
+// Combine a moved day's workouts into the target day's entry (which may already
+// have workouts). Steps stay with the day they were walked; keys that clash get
+// a fresh one so neither workout's details are overwritten.
+export function mergeMovedEntry(target, moved, stamp = Date.now()) {
+  const tw = target?.done ? target.workouts || [] : [];
+  const td = target?.done ? target.details || {} : {};
+  const details = { ...td };
+  const workouts = [...tw];
+  (moved.workouts || []).forEach((w, i) => {
+    const k = w.key || w.id;
+    let nk = k;
+    if (k in details) nk = `${w.id}_${stamp}_${i}`;
+    details[nk] = moved.details?.[k] || {};
+    workouts.push(nk === w.id && !w.key ? { ...w } : { ...w, key: nk });
+  });
+  const lines = e => (!e?.done ? [] : Array.isArray(e.summary) ? e.summary : e.workoutLabel ? [e.workoutLabel] : []);
+  const summary = [...lines(target), ...lines(moved)];
+  const out = {
+    ...(target || {}),
+    done: true,
+    workouts,
+    details,
+    summary,
+    workoutLabel: summary.join(" | "),
+    workoutIcon: workouts.map(w => w.icon).join(""),
+    duration: (Number(target?.done && target.duration) || 0) + (Number(moved.duration) || 0) || null,
+    note: [target?.done ? target.note : "", moved.note].filter(Boolean).join(" · "),
+    time: target?.done ? target.time : moved.time,
+    sessionCount: (target?.done ? target.sessionCount || 1 : 0) + (moved.sessionCount || 1),
+  };
+  const ws = moved.wolfmodeSession || (target?.done ? target.wolfmodeSession : null);
+  if (ws) out.wolfmodeSession = ws; else delete out.wolfmodeSession;
+  if (target?.steps) out.steps = target.steps; else delete out.steps;
+  return out;
+}
